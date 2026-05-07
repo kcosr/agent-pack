@@ -2,14 +2,31 @@ export type TaskStatus = "pending" | "in_progress" | "blocked" | "completed";
 export type PackStatus = "no_tasks" | "pending" | "in_progress" | "blocked" | "completed";
 export type GitRefresh = "auto" | "always" | "never";
 
-export interface SourceInfo {
-  kind: "file" | "directory" | "glob" | "git";
-  path?: string;
-  url?: string;
+export type SourceInfo = FileSourceInfo | DirectorySourceInfo | GlobSourceInfo | GitSourceInfo;
+
+export interface FileSourceInfo {
+  kind: "file";
+  path: string;
+}
+
+export interface DirectorySourceInfo {
+  kind: "directory";
+  path: string;
+}
+
+export interface GlobSourceInfo {
+  kind: "glob";
+  path: string;
+}
+
+export interface GitSourceInfo {
+  kind: "git";
+  url: string;
   requestedRef?: string;
-  resolvedRef?: string;
-  resolvedCommit?: string;
-  repoHash?: string;
+  resolvedRef: string;
+  resolvedCommit: string;
+  repoHash: string;
+  path?: string;
 }
 
 export interface PackTask {

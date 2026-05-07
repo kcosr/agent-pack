@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, symlink, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { initPack, status, updateTask } from "../../src/core/operations.js";
+import { brief, initPack, status, updateTask } from "../../src/core/operations.js";
 
 describe("pack workflow", () => {
   let cwd: string;
@@ -359,6 +359,68 @@ unknown: true`,
     );
   });
 
+  it("rejects malformed task source state before mutation", async () => {
+    await mkdir(".agent-pack/state/packs", { recursive: true });
+    await writeFile(
+      ".agent-pack/state/packs/bad-task-source-state.json",
+      JSON.stringify({
+        schemaVersion: 1,
+        id: "bad-task-source-state",
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        repoRoot: ".",
+        taskCounts: { total: 1, pending: 1, inProgress: 0, completed: 0, blocked: 0 },
+        tasks: [
+          {
+            id: "t001",
+            title: "Inspect",
+            status: "pending",
+            notes: [],
+            source: { kind: "git", url: "https://example.com/repo.git" },
+          },
+        ],
+        references: [],
+        skills: [],
+      }),
+    );
+
+    await expect(updateTask("t001", "completed", "Done.", "bad-task-source-state")).rejects.toThrow(
+      "tasks[0].source.resolvedRef",
+    );
+  });
+
+  it("rejects unknown nested pack state fields", async () => {
+    await mkdir(".agent-pack/state/packs", { recursive: true });
+    await writeFile(
+      ".agent-pack/state/packs/unknown-nested-state.json",
+      JSON.stringify({
+        schemaVersion: 1,
+        id: "unknown-nested-state",
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        repoRoot: ".",
+        taskCounts: { total: 1, pending: 1, inProgress: 0, completed: 0, blocked: 0 },
+        tasks: [
+          {
+            id: "t001",
+            title: "Inspect",
+            status: "pending",
+            notes: [],
+            unexpectedNested: true,
+          },
+        ],
+        references: [],
+        skills: [],
+      }),
+    );
+
+    await expect(status("unknown-nested-state", false)).rejects.toThrow(
+      "tasks[0].unexpectedNested",
+    );
+  });
+
   it("rejects invalid pack reference state", async () => {
     await mkdir(".agent-pack/state/packs", { recursive: true });
     await writeFile(
@@ -438,6 +500,87 @@ unknown: true`,
     const pack = await updateTask("t001", "completed", "Done.", "stale-lock");
 
     expect(pack.status).toBe("completed");
+  });
+
+  it("recovers stale pack locks with corrupt holder metadata", async () => {
+    await initPack({
+      id: "corrupt-lock",
+      includes: [{ type: "adHocTask", text: "Inspect" }],
+      gitRefresh: "auto",
+    });
+    const lockPath = ".agent-pack/locks/pack-corrupt-lock.lock";
+    await mkdir(lockPath, { recursive: true });
+    await writeFile(`${lockPath}/holder.json`, "{bad json");
+    const old = new Date(Date.now() - 10_000);
+    await utimes(lockPath, old, old);
+
+    const pack = await updateTask("t001", "completed", "Done.", "corrupt-lock");
+
+    expect(pack.status).toBe("completed");
+  });
+
+  it("does not follow symlinked directories in local globs", async () => {
+    await mkdir("docs/real", { recursive: true });
+    await mkdir("outside", { recursive: true });
+    await writeFile("docs/real/design.md", "# Design\n");
+    await writeFile("outside/secret.md", "# Secret\n");
+    await symlink(path.join(cwd, "outside"), "docs/link");
+
+    const pack = await initPack({
+      id: "no-symlink-globs",
+      includes: [{ type: "reference", ref: { ref: "./docs/**/*.md" } }],
+      gitRefresh: "auto",
+    });
+
+    expect(pack.references[0]?.files).toEqual(["./docs/real/design.md"]);
+  });
+
+  it("renders git reference paths from the current cache directory", async () => {
+    await mkdir(".agent-pack/state/packs", { recursive: true });
+    await mkdir("external-cache/snapshots/repohash/commit/docs", { recursive: true });
+    await writeFile("external-cache/snapshots/repohash/commit/docs/design.md", "# Design\n");
+    await writeFile(
+      ".agent-pack/state/packs/runtime-cache-path.json",
+      JSON.stringify({
+        schemaVersion: 1,
+        id: "runtime-cache-path",
+        status: "no_tasks",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        repoRoot: ".",
+        taskCounts: { total: 0, pending: 0, inProgress: 0, completed: 0, blocked: 0 },
+        tasks: [],
+        references: [
+          {
+            id: "r001",
+            name: "design",
+            source: {
+              kind: "git",
+              url: "file:///repo.git",
+              resolvedRef: "main",
+              resolvedCommit: "commit",
+              repoHash: "repohash",
+              path: "docs/design.md",
+            },
+            path: "./.agent-pack/cache/snapshots/repohash/commit/docs/design.md",
+          },
+        ],
+        skills: [],
+      }),
+    );
+    const originalCacheDir = process.env.AGENT_PACK_CACHE_DIR;
+    process.env.AGENT_PACK_CACHE_DIR = "external-cache";
+    try {
+      await expect(brief("runtime-cache-path")).resolves.toContain(
+        "Path: ./external-cache/snapshots/repohash/commit/docs/design.md",
+      );
+    } finally {
+      if (originalCacheDir === undefined) {
+        process.env.AGENT_PACK_CACHE_DIR = undefined;
+      } else {
+        process.env.AGENT_PACK_CACHE_DIR = originalCacheDir;
+      }
+    }
   });
 
   it("reports clear errors for missing local task inputs", async () => {

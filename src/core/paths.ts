@@ -20,7 +20,7 @@ export function resolveRuntimePaths(
     gitCacheDir,
     packDir: path.join(stateDir, "packs"),
     eventDir: path.join(stateDir, "events"),
-    lockDir: path.resolve(stateDir, "../locks"),
+    lockDir: path.join(path.dirname(cacheDir), "locks"),
     indexPath: path.join(stateDir, "index.json"),
   };
 }

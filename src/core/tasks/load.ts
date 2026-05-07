@@ -5,7 +5,7 @@ import { materializeGitRef } from "../git/cache.js";
 import { isGitRef } from "../git/ref.js";
 import { readTaskFile, taskTitleFromText } from "../manifest/parse.js";
 import { resolveInputPath, toDisplayPath } from "../paths.js";
-import { hasGlobMagic } from "../sources/glob.js";
+import { fileGlobOptions, hasGlobMagic } from "../sources/glob.js";
 import type {
   GitRefresh,
   InitInclude,
@@ -70,7 +70,7 @@ async function loadLocalTaskRef(
   paths: RuntimePaths,
 ): Promise<Array<{ task: ManifestTask; source?: SourceInfo }>> {
   const files = hasGlobMagic(ref)
-    ? await fg(ref, { cwd: paths.repoRoot, onlyFiles: true, dot: true, unique: true })
+    ? await fg(ref, { cwd: paths.repoRoot, ...fileGlobOptions })
     : [toDisplayPath(resolveInputPath(ref, paths.repoRoot), paths.repoRoot)];
   if (files.length === 0) {
     throw new AgentPackError(`task source matched no files: ${ref}`);
@@ -100,9 +100,7 @@ async function loadGitTaskRef(
   const files = hasGlobMagic(materialized.pathInRepo)
     ? await fg(materialized.pathInRepo, {
         cwd: materialized.snapshotRootAbs,
-        onlyFiles: true,
-        dot: true,
-        unique: true,
+        ...fileGlobOptions,
       })
     : [materialized.pathInRepo];
   if (files.length === 0) {

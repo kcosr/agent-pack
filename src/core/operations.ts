@@ -1,17 +1,25 @@
 import path from "node:path";
+import fg from "fast-glob";
 import { renderBrief, renderSummary } from "./brief/render.js";
 import { AgentPackError } from "./errors.js";
 import { errorMessage, pathExists } from "./fs.js";
-import { ensureGitSourceSnapshot, gitSourceTargetPath, materializeGitRef } from "./git/cache.js";
+import {
+  ensureGitSourceSnapshot,
+  gitSnapshotRoot,
+  gitSourceTargetPath,
+  materializeGitRef,
+} from "./git/cache.js";
 import { isGitRef, parseGitRef } from "./git/ref.js";
 import { readInstructions, readManifest } from "./manifest/parse.js";
 import { resolveInputPath, toDisplayPath } from "./paths.js";
+import { fileGlobOptions, hasGlobMagic } from "./sources/glob.js";
 import { resolveReferences, resolveSkills } from "./sources/resolve.js";
 import { StateStore, assertValidPackId } from "./state/store.js";
 import { loadTasks } from "./tasks/load.js";
 import type { TaskInput } from "./tasks/load.js";
 import type {
   GitRefresh,
+  GitSourceInfo,
   InitInput,
   ManifestReference,
   ManifestSkill,
@@ -142,6 +150,9 @@ async function readManifestRef(
   try {
     manifest = await readManifest(materialized.targetAbs);
   } catch (error) {
+    if (error instanceof AgentPackError) {
+      throw error;
+    }
     throw new AgentPackError(`failed to read git manifest ${ref}: ${errorMessage(error)}`);
   }
   return {
@@ -174,7 +185,7 @@ export async function brief(id?: string): Promise<string> {
   const store = new StateStore();
   const pack = await store.loadPack(id);
   await validateCachePaths(pack, store.paths);
-  return renderBrief(pack);
+  return renderBrief(await packWithRuntimeGitPaths(pack, store.paths));
 }
 
 export async function summary(id?: string): Promise<string> {
@@ -242,33 +253,28 @@ export async function report(id?: string): Promise<PackState> {
   return store.loadPack(id);
 }
 
-export async function validateCachePaths(
-  pack: PackState,
-  paths: StateStore["paths"],
-): Promise<void> {
+export async function validateCachePaths(pack: PackState, paths: RuntimePaths): Promise<void> {
   const targets = new Set<string>();
   for (const reference of pack.references) {
-    for (const target of [reference.path, reference.rootPath, ...(reference.files ?? [])].filter(
-      Boolean,
-    )) {
-      if (reference.source.kind === "git") {
-        targets.add(String(target));
-      }
+    if (reference.source.kind === "git") {
+      targets.add(gitCacheValidationPath(reference.source, paths));
     }
   }
   for (const skill of pack.skills) {
     if (skill.source.kind === "git") {
-      targets.add(skill.path);
+      targets.add(gitCacheValidationPath(skill.source, paths));
     }
   }
   for (const task of pack.tasks) {
-    const target = gitSourceTargetPath(task.source, paths)?.displayPath;
-    if (target) {
-      targets.add(target);
+    if (task.source?.kind === "git") {
+      targets.add(gitCacheValidationPath(task.source, paths));
     }
   }
   const results = await Promise.all(
-    [...targets].map(async (target) => ({ target, exists: await existsDisplayPath(target) })),
+    [...targets].map(async (target) => ({
+      target,
+      exists: await existsDisplayPath(target, paths),
+    })),
   );
   const missing = results.filter((result) => !result.exists).map((result) => result.target);
   if (missing.length) {
@@ -278,9 +284,62 @@ export async function validateCachePaths(
   }
 }
 
-async function existsDisplayPath(displayPath: string): Promise<boolean> {
-  const abs = resolveInputPath(displayPath, process.cwd());
+function gitCacheValidationPath(source: GitSourceInfo, paths: RuntimePaths): string {
+  if (source.path && !hasGlobMagic(source.path)) {
+    return gitSourceTargetPath(source, paths).displayPath;
+  }
+  return toDisplayPath(gitSnapshotRoot(source, paths), paths.repoRoot);
+}
+
+async function existsDisplayPath(displayPath: string, paths: RuntimePaths): Promise<boolean> {
+  const abs = resolveInputPath(displayPath, paths.repoRoot);
   return pathExists(path.normalize(abs));
+}
+
+async function packWithRuntimeGitPaths(pack: PackState, paths: RuntimePaths): Promise<PackState> {
+  return {
+    ...pack,
+    references: await Promise.all(
+      pack.references.map(async (reference) => {
+        if (reference.source.kind !== "git") {
+          return reference;
+        }
+        const rootDisplay = toDisplayPath(gitSnapshotRoot(reference.source, paths), paths.repoRoot);
+        if (reference.files) {
+          const pattern = reference.source.path;
+          if (pattern && hasGlobMagic(pattern)) {
+            const matches = await fg(pattern, {
+              cwd: gitSnapshotRoot(reference.source, paths),
+              ...fileGlobOptions,
+            });
+            return {
+              ...reference,
+              files: matches.map((match) => path.posix.join(rootDisplay, match)),
+            };
+          }
+          return reference;
+        }
+        if (reference.rootPath) {
+          return {
+            ...reference,
+            rootPath: gitSourceTargetPath(reference.source, paths).displayPath,
+          };
+        }
+        if (reference.path) {
+          return {
+            ...reference,
+            path: gitSourceTargetPath(reference.source, paths).displayPath,
+          };
+        }
+        return reference;
+      }),
+    ),
+    skills: pack.skills.map((skill) =>
+      skill.source.kind === "git"
+        ? { ...skill, path: gitSourceTargetPath(skill.source, paths).displayPath }
+        : skill,
+    ),
+  };
 }
 
 function getTask(pack: PackState, taskId: string): PackTask {

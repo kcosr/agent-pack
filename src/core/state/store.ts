@@ -1,3 +1,4 @@
+import { readFileSync, readlinkSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { AgentPackError } from "../errors.js";
@@ -17,6 +18,42 @@ import { derivePackStatus, taskCounts } from "./status.js";
 
 const packStatuses = new Set(["no_tasks", "pending", "in_progress", "blocked", "completed"]);
 const taskStatuses = new Set<TaskStatus>(["pending", "in_progress", "blocked", "completed"]);
+const lockStaleMs = 5000;
+const taskFields = new Set([
+  "id",
+  "sourceId",
+  "title",
+  "category",
+  "body",
+  "doneWhen",
+  "status",
+  "notes",
+  "source",
+  "startedAt",
+  "completedAt",
+  "blockedAt",
+]);
+const referenceFields = new Set([
+  "id",
+  "name",
+  "description",
+  "source",
+  "path",
+  "rootPath",
+  "files",
+]);
+const skillFields = new Set(["id", "name", "description", "source", "path"]);
+const fileSourceFields = new Set(["kind", "path"]);
+const taskCountFields = new Set(["total", "pending", "inProgress", "completed", "blocked"]);
+const gitSourceFields = new Set([
+  "kind",
+  "url",
+  "requestedRef",
+  "resolvedRef",
+  "resolvedCommit",
+  "repoHash",
+  "path",
+]);
 
 export interface PackIndexEntry {
   id: string;
@@ -98,6 +135,9 @@ export class StateStore {
     } catch (error) {
       if (isNotFound(error)) {
         throw new AgentPackError(`pack not found: ${packId}`);
+      }
+      if (error instanceof AgentPackError) {
+        throw error;
       }
       throw new AgentPackError(`failed to read pack ${packId}: ${errorMessage(error)}`);
     }
@@ -187,7 +227,12 @@ export class StateStore {
         await mkdir(lockPath);
         await writeFile(
           path.join(lockPath, "holder.json"),
-          `${JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() })}\n`,
+          `${JSON.stringify({
+            pid: process.pid,
+            command: process.argv.join(" "),
+            cwd: process.cwd(),
+            createdAt: new Date().toISOString(),
+          })}\n`,
         );
         return;
       } catch (error) {
@@ -207,20 +252,30 @@ export class StateStore {
 
 async function removeStaleLock(lockPath: string): Promise<boolean> {
   const holderPath = path.join(lockPath, "holder.json");
+  const lockStats = await stat(lockPath).catch(() => undefined);
+  const isOld = Boolean(lockStats && Date.now() - lockStats.mtimeMs > lockStaleMs);
   try {
-    const holder = JSON.parse(await readFile(holderPath, "utf8")) as { pid?: unknown };
-    if (typeof holder.pid !== "number" || holder.pid <= 0 || !isProcessAlive(holder.pid)) {
+    const holder = JSON.parse(await readFile(holderPath, "utf8")) as {
+      pid?: unknown;
+      command?: unknown;
+      cwd?: unknown;
+    };
+    if (
+      typeof holder.pid !== "number" ||
+      holder.pid <= 0 ||
+      !isProcessAlive(holder.pid) ||
+      (isOld && !isKnownLockHolder(holder.pid, holder))
+    ) {
       await rm(lockPath, { recursive: true, force: true });
       return true;
     }
   } catch (error) {
-    if (!isNotFound(error)) {
-      return false;
-    }
-    const lockStats = await stat(lockPath).catch(() => undefined);
-    if (lockStats && Date.now() - lockStats.mtimeMs > 5000) {
+    if (isOld) {
       await rm(lockPath, { recursive: true, force: true });
       return true;
+    }
+    if (!isNotFound(error)) {
+      return false;
     }
   }
   return false;
@@ -230,8 +285,21 @@ function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
-  } catch (error) {
+  } catch {
     return false;
+  }
+}
+
+function isKnownLockHolder(pid: number, holder: { command?: unknown; cwd?: unknown }): boolean {
+  try {
+    const liveCommand = readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(/\0/g, " ").trim();
+    const liveCwd = readlinkSync(`/proc/${pid}/cwd`);
+    if (typeof holder.command === "string" && typeof holder.cwd === "string") {
+      return liveCommand === holder.command && liveCwd === holder.cwd;
+    }
+    return liveCommand.includes("agent-pack");
+  } catch {
+    return true;
   }
 }
 
@@ -351,6 +419,7 @@ function validateTaskCounts(value: unknown, filePath: string): TaskCounts {
   if (!isObject(value)) {
     throw new AgentPackError(`invalid pack state field 'taskCounts': ${filePath}`);
   }
+  validateKnownFields(value, taskCountFields, "taskCounts", filePath);
   for (const field of ["total", "pending", "inProgress", "completed", "blocked"]) {
     if (!Number.isInteger(value[field]) || Number(value[field]) < 0) {
       throw new AgentPackError(`invalid pack taskCounts field '${field}': ${filePath}`);
@@ -370,6 +439,7 @@ function validatePackTasks(value: unknown[], filePath: string): void {
     if (!isObject(task)) {
       throw new AgentPackError(`invalid pack task at index ${index}: ${filePath}`);
     }
+    validateKnownFields(task, taskFields, `tasks[${index}]`, filePath);
     validateRequiredString(task.id, `tasks[${index}].id`, filePath);
     validateRequiredString(task.title, `tasks[${index}].title`, filePath);
     if (typeof task.status !== "string" || !taskStatuses.has(task.status as TaskStatus)) {
@@ -387,6 +457,9 @@ function validatePackTasks(value: unknown[], filePath: string): void {
     ) {
       throw new AgentPackError(`invalid pack task field 'tasks[${index}].doneWhen': ${filePath}`);
     }
+    if (task.source !== undefined) {
+      validateSource(task.source, `tasks[${index}].source`, filePath);
+    }
   }
 }
 
@@ -395,6 +468,7 @@ function validatePackReferences(value: unknown[], filePath: string): void {
     if (!isObject(reference)) {
       throw new AgentPackError(`invalid pack reference at index ${index}: ${filePath}`);
     }
+    validateKnownFields(reference, referenceFields, `references[${index}]`, filePath);
     validateRequiredString(reference.id, `references[${index}].id`, filePath);
     validateRequiredString(reference.name, `references[${index}].name`, filePath);
     validateOptionalString(reference.description, `references[${index}].description`, filePath);
@@ -425,6 +499,7 @@ function validatePackSkills(value: unknown[], filePath: string): void {
     if (!isObject(skill)) {
       throw new AgentPackError(`invalid pack skill at index ${index}: ${filePath}`);
     }
+    validateKnownFields(skill, skillFields, `skills[${index}]`, filePath);
     validateRequiredString(skill.id, `skills[${index}].id`, filePath);
     validateRequiredString(skill.name, `skills[${index}].name`, filePath);
     validateOptionalString(skill.description, `skills[${index}].description`, filePath);
@@ -446,6 +521,7 @@ function validateSource(value: unknown, label: string, filePath: string): void {
     throw new AgentPackError(`invalid pack source field '${label}.kind': ${filePath}`);
   }
   if (value.kind === "git") {
+    validateKnownFields(value, gitSourceFields, label, filePath);
     validateRequiredString(value.url, `${label}.url`, filePath);
     validateRequiredString(value.resolvedRef, `${label}.resolvedRef`, filePath);
     validateRequiredString(value.resolvedCommit, `${label}.resolvedCommit`, filePath);
@@ -454,18 +530,32 @@ function validateSource(value: unknown, label: string, filePath: string): void {
     validateOptionalString(value.path, `${label}.path`, filePath);
     return;
   }
+  validateKnownFields(value, fileSourceFields, label, filePath);
   validateRequiredString(value.path, `${label}.path`, filePath);
 }
 
 function validateRequiredString(value: unknown, label: string, filePath: string): void {
   if (typeof value !== "string" || !value.trim()) {
-    throw new AgentPackError(`invalid pack task field '${label}': ${filePath}`);
+    throw new AgentPackError(`invalid pack state field '${label}': ${filePath}`);
   }
 }
 
 function validateOptionalString(value: unknown, label: string, filePath: string): void {
   if (value !== undefined && (typeof value !== "string" || !value.trim())) {
-    throw new AgentPackError(`invalid pack task field '${label}': ${filePath}`);
+    throw new AgentPackError(`invalid pack state field '${label}': ${filePath}`);
+  }
+}
+
+function validateKnownFields(
+  value: Record<string, unknown>,
+  allowed: Set<string>,
+  label: string,
+  filePath: string,
+): void {
+  for (const field of Object.keys(value)) {
+    if (!allowed.has(field)) {
+      throw new AgentPackError(`unsupported pack state field '${label}.${field}': ${filePath}`);
+    }
   }
 }
 

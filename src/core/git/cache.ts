@@ -4,11 +4,11 @@ import { rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { AgentPackError } from "../errors.js";
 import { ensureDir, errorMessage, isAlreadyExists, pathExists } from "../fs.js";
-import type { GitRefresh, RuntimePaths, SourceInfo } from "../types.js";
+import type { GitRefresh, GitSourceInfo, RuntimePaths, SourceInfo } from "../types.js";
 import { parseGitRef, repoHash, sanitizeGitUrl } from "./ref.js";
 
 export interface MaterializedGitRef {
-  source: SourceInfo;
+  source: GitSourceInfo;
   snapshotRootAbs: string;
   snapshotRootDisplay: string;
   targetAbs: string;
@@ -56,42 +56,23 @@ export async function ensureGitSourceSnapshot(
   paths: RuntimePaths,
   refresh: GitRefresh,
 ): Promise<void> {
-  if (source.kind !== "git" || !source.url || !source.resolvedCommit) {
+  if (source.kind !== "git") {
     return;
   }
-  const hash = source.repoHash ?? repoHash(source.url);
-  const mirrorPath = path.join(paths.gitCacheDir, hash, "mirror.git");
+  const mirrorPath = path.join(paths.gitCacheDir, source.repoHash, "mirror.git");
   await ensureMirror(source.url, mirrorPath, refresh);
-  const snapshotRootAbs = gitSnapshotRoot(source, paths);
-  if (!snapshotRootAbs) {
-    return;
-  }
-  await ensureSnapshot(mirrorPath, source.resolvedCommit, snapshotRootAbs);
+  await ensureSnapshot(mirrorPath, source.resolvedCommit, gitSnapshotRoot(source, paths));
 }
 
-export function gitSnapshotRoot(source: SourceInfo, paths: RuntimePaths): string | undefined {
-  if (source.kind !== "git" || !source.url || !source.resolvedCommit) {
-    return undefined;
-  }
-  return path.join(
-    paths.cacheDir,
-    "snapshots",
-    source.repoHash ?? repoHash(source.url),
-    source.resolvedCommit,
-  );
+export function gitSnapshotRoot(source: GitSourceInfo, paths: RuntimePaths): string {
+  return path.join(paths.cacheDir, "snapshots", source.repoHash, source.resolvedCommit);
 }
 
 export function gitSourceTargetPath(
-  source: SourceInfo | undefined,
+  source: GitSourceInfo,
   paths: RuntimePaths,
-): { absPath: string; displayPath: string } | undefined {
-  if (!source) {
-    return undefined;
-  }
+): { absPath: string; displayPath: string } {
   const root = gitSnapshotRoot(source, paths);
-  if (!root) {
-    return undefined;
-  }
   const absPath = source.path ? path.join(root, source.path) : root;
   return { absPath, displayPath: relativeFromRoot(absPath, paths.repoRoot) };
 }
@@ -161,7 +142,11 @@ async function ensureSnapshot(
     validateArchiveTree(mirrorPath, commit);
     runGit(["--git-dir", mirrorPath, "archive", "--format=tar", "--output", tarPath, "--", commit]);
     validateTarEntries(tarPath);
-    execFileSync("tar", ["-xf", tarPath, "-C", tempDir, "--no-same-owner"], { stdio: "pipe" });
+    try {
+      execFileSync("tar", ["-xf", tarPath, "-C", tempDir, "--no-same-owner"], { stdio: "pipe" });
+    } catch (error) {
+      throw new AgentPackError(`failed to extract git archive: ${errorMessage(error)}`);
+    }
     await stat(tempDir);
     try {
       await rename(tempDir, snapshotRootAbs);

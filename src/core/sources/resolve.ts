@@ -16,7 +16,7 @@ import type {
   PackSkill,
   RuntimePaths,
 } from "../types.js";
-import { hasGlobMagic } from "./glob.js";
+import { displayGlobMatch, fileGlobOptions, hasGlobMagic } from "./glob.js";
 
 export async function resolveReferences(
   refs: ManifestReference[],
@@ -68,15 +68,13 @@ async function resolveLocalReference(
   if (hasGlobMagic(entry.ref)) {
     const matches = await fg(entry.ref, {
       cwd: paths.repoRoot,
-      onlyFiles: true,
-      dot: true,
-      unique: true,
+      ...fileGlobOptions,
     });
     return {
       name,
       description: entry.description,
       source: { kind: "glob", path: entry.ref },
-      files: matches.map((match) => `./${match}`),
+      files: matches.map(displayGlobMatch),
     };
   }
 
@@ -119,9 +117,7 @@ async function resolveGitReference(
   if (hasGlobMagic(materialized.pathInRepo)) {
     const matches = await fg(materialized.pathInRepo, {
       cwd: materialized.snapshotRootAbs,
-      onlyFiles: true,
-      dot: true,
-      unique: true,
+      ...fileGlobOptions,
     });
     return {
       name,
@@ -154,7 +150,7 @@ async function resolveLocalSkillFiles(
   paths: RuntimePaths,
 ): Promise<Array<{ absPath: string; displayPath: string; source: PackSkill["source"] }>> {
   const refs = hasGlobMagic(ref)
-    ? await fg(ref, { cwd: paths.repoRoot, onlyFiles: true, dot: true, unique: true })
+    ? await fg(ref, { cwd: paths.repoRoot, ...fileGlobOptions })
     : [toDisplayPath(resolveInputPath(ref, paths.repoRoot), paths.repoRoot)];
   const files = refs.filter((entry) => path.basename(entry) === "SKILL.md");
   if (!hasGlobMagic(ref) && path.basename(ref) !== "SKILL.md") {
@@ -176,6 +172,9 @@ async function readSkillMetadata(filePath: string, ref: string) {
   try {
     return await extractSkillMetadata(filePath);
   } catch (error) {
+    if (error instanceof AgentPackError) {
+      throw error;
+    }
     throw new AgentPackError(`skill file not found or unreadable: ${ref}: ${errorMessage(error)}`);
   }
 }
@@ -189,9 +188,7 @@ async function resolveGitSkillFiles(
   if (!materialized.pathInRepo) {
     const matches = await fg("**/SKILL.md", {
       cwd: materialized.snapshotRootAbs,
-      onlyFiles: true,
-      dot: true,
-      unique: true,
+      ...fileGlobOptions,
     });
     return matches.map((match) => ({
       absPath: path.join(materialized.snapshotRootAbs, match),
@@ -202,9 +199,7 @@ async function resolveGitSkillFiles(
   const matches = hasGlobMagic(materialized.pathInRepo)
     ? await fg(materialized.pathInRepo, {
         cwd: materialized.snapshotRootAbs,
-        onlyFiles: true,
-        dot: true,
-        unique: true,
+        ...fileGlobOptions,
       })
     : [materialized.pathInRepo];
   return matches
