@@ -12,6 +12,7 @@ agent-pack init \
   --name "Design review" \
   --manifest ./pack.yaml \
   --reference ./docs/usage.md \
+  --reference git+https://github.com/example/product.git#main \
   --skill ./skills/fresh-eyes/SKILL.md \
   "Review the design and record concrete findings."
 
