@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -26,6 +26,10 @@ describe("agent-pack CLI git smoke", () => {
       "id: inspect-git\ntitle: Inspect git material\n",
     );
     await writeFile(
+      path.join(repo, "tasks/extra.yaml"),
+      "id: inspect-extra\ntitle: Inspect plural task source\n",
+    );
+    await writeFile(
       path.join(repo, "skills/review/SKILL.md"),
       "---\nname: review-skill\ndescription: Review with evidence.\n---\n",
     );
@@ -47,18 +51,29 @@ skills:
     git(["add", "."], repo);
     git(["commit", "-m", "Initial fixture"], repo);
     git(["clone", "--bare", repo, remote], root);
+    await writeFile(
+      path.join(workspace, "local-pack.yaml"),
+      `tasks:
+  - id: inspect-local-manifest
+    title: Inspect local manifest material
+`,
+    );
 
     const init = await runCli(
       [
         "init",
         "--id",
         "git-pack",
-        "--manifests",
+        "--manifest",
         `git+${remoteUrl}//pack.yaml#main`,
+        "--manifests",
+        "./local-pack.yaml",
         "--reference",
         `git+${remoteUrl}//docs/reference.md#main`,
         "--task",
-        `git+${remoteUrl}//tasks/*.yaml#main`,
+        `git+${remoteUrl}//tasks/review.yaml#main`,
+        "--tasks",
+        `git+${remoteUrl}//tasks/extra.yaml#main`,
         "--skills",
         `git+${remoteUrl}//skills/**#main`,
         "--add-task",
@@ -72,7 +87,17 @@ skills:
     const brief = await runCli(["brief", "--id", "git-pack"], { cwd: workspace });
     expect(brief.stdout).toContain(".agent-pack/cache/snapshots/");
     expect(brief.stdout).toContain("Inspect manifest material");
+    expect(brief.stdout).toContain("Inspect local manifest material");
     expect(brief.stdout).toContain("review-skill");
+    const state = JSON.parse(
+      await readFile(path.join(workspace, ".agent-pack/state/packs/git-pack.json"), "utf8"),
+    );
+    const manifestTask = state.tasks.find(
+      (task: { sourceId?: string }) => task.sourceId === "inspect-manifest",
+    );
+    expect(manifestTask.source.kind).toBe("git");
+    expect(manifestTask.source.path).toBe("pack.yaml");
+    expect(manifestTask.source.resolvedCommit).toMatch(/^[a-f0-9]{40}$/);
 
     await rm(path.join(workspace, ".agent-pack/cache"), { recursive: true, force: true });
     const missing = await runCli(["brief", "--id", "git-pack"], { cwd: workspace, reject: false });
@@ -91,6 +116,7 @@ skills:
 
     const restored = await runCli(["brief", "--id", "git-pack"], { cwd: workspace });
     expect(restored.stdout).toContain("Inspect git material");
+    expect(restored.stdout).toContain("Inspect plural task source");
     expect(restored.stdout).toContain("Inspect ad hoc material");
   });
 

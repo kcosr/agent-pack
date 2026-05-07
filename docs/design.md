@@ -632,9 +632,12 @@ Reference-only packs should be allowed without warning. A pack can be useful as 
 
 Support repeatable `--manifest pack.yaml` and `--manifests git+repo//pack.yaml#ref` in v1. YAML is the cleanest way to attach names and descriptions to references and skills, define instructions, and keep larger pack definitions reviewable.
 
+Remote manifests are trusted inputs. They can include local reference paths and skill refs, and those paths are resolved in the working repo just like paths from local manifests.
+
 ```bash
 agent-pack init --manifest ./pack.yaml --id design-worker
-agent-pack init --manifests git+https://github.com/org/packs.git//pack.yaml#main --id design-worker
+agent-pack init --manifest git+https://github.com/org/packs.git//pack.yaml#main --id design-worker
+agent-pack init --manifests ./pack.yaml --manifests git+https://github.com/org/packs.git//extra.yaml#main --id design-worker
 ```
 
 CLI flags can still be used for quick one-off packs. If both manifests and explicit flags are provided, merge deterministically: load manifests first in flag order, then append instruction files, CLI-provided task source refs, ad hoc tasks, references, and skills in category order.

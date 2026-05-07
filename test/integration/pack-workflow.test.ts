@@ -121,6 +121,21 @@ references:
     ).rejects.toThrow("tasks[0].unknownNested");
   });
 
+  it("rejects git manifest refs without a file path", async () => {
+    await expect(
+      initPack({
+        id: "git-manifest-no-path",
+        manifests: ["git+file:///no/such/repo.git#main"],
+        instructionFiles: [],
+        taskRefs: [],
+        adHocTasks: [],
+        referenceRefs: [],
+        skillRefs: [],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow("git manifest source requires a file path inside the repo");
+  });
+
   it("rejects invalid pack IDs before resolving state paths", async () => {
     await expect(
       initPack({

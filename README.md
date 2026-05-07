@@ -312,6 +312,8 @@ agent-pack init --manifest ./pack.yaml
 agent-pack init --manifests git+https://github.com/org/packs.git//review.yaml#main
 ```
 
+Treat remote manifests as trusted inputs. Like local manifests, they can name local reference paths and skills that the agent brief will ask the agent to read.
+
 ```yaml
 schemaVersion: 1
 name: implementation-review

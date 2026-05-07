@@ -1,9 +1,9 @@
 import path from "node:path";
 import { renderBrief, renderSummary } from "./brief/render.js";
 import { AgentPackError } from "./errors.js";
-import { pathExists } from "./fs.js";
+import { errorMessage, pathExists } from "./fs.js";
 import { ensureGitSourceSnapshot, gitSourceTargetPath, materializeGitRef } from "./git/cache.js";
-import { isGitRef } from "./git/ref.js";
+import { isGitRef, parseGitRef } from "./git/ref.js";
 import { readInstructions, readManifest } from "./manifest/parse.js";
 import { resolveInputPath, toDisplayPath } from "./paths.js";
 import { resolveReferences, resolveSkills } from "./sources/resolve.js";
@@ -19,6 +19,7 @@ import type {
   PackState,
   PackTask,
   RuntimePaths,
+  SourceInfo,
   TaskStatus,
 } from "./types.js";
 
@@ -104,7 +105,7 @@ async function readManifestRef(
   paths: RuntimePaths,
   refresh: GitRefresh,
   strict?: boolean,
-): Promise<{ manifest: PackManifest; source: PackTask["source"] }> {
+): Promise<{ manifest: PackManifest; source: SourceInfo }> {
   if (!isGitRef(ref)) {
     const absPath = resolveInputPath(ref, paths.repoRoot);
     return {
@@ -112,12 +113,18 @@ async function readManifestRef(
       source: { kind: "file" as const, path: toDisplayPath(absPath, paths.repoRoot) },
     };
   }
-  const materialized = await materializeGitRef(ref, paths, refresh);
-  if (!materialized.pathInRepo) {
+  if (!parseGitRef(ref).pathInRepo) {
     throw new AgentPackError(`git manifest source requires a file path inside the repo: ${ref}`);
   }
+  const materialized = await materializeGitRef(ref, paths, refresh);
+  let manifest: PackManifest;
+  try {
+    manifest = await readManifest(materialized.targetAbs, strict);
+  } catch (error) {
+    throw new AgentPackError(`failed to read git manifest ${ref}: ${errorMessage(error)}`);
+  }
   return {
-    manifest: await readManifest(materialized.targetAbs, strict),
+    manifest,
     source: materialized.source,
   };
 }
