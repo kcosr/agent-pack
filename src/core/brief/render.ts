@@ -90,6 +90,13 @@ export function renderBrief(
   lines.push(`  ${commandName} note <task-id> --id ${pack.id} "evidence"`);
   lines.push(`  ${commandName} done <task-id> --id ${pack.id} --note "completion evidence"`);
   lines.push(`  ${commandName} block <task-id> --id ${pack.id} --note "blocker"`);
+  lines.push(
+    "For multi-line notes, pass one shell argument with command substitution or a heredoc:",
+  );
+  lines.push(`  ${commandName} note <task-id> --id ${pack.id} "$(cat <<'EOF'`);
+  lines.push("multi-line evidence");
+  lines.push("EOF");
+  lines.push(')"');
   return `${lines.join("\n")}\n`;
 }
 

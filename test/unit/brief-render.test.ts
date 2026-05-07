@@ -35,6 +35,11 @@ describe("brief rendering", () => {
     expect(brief).toContain('  ap note <task-id> --id review-pack "evidence"');
     expect(brief).toContain('  ap done <task-id> --id review-pack --note "completion evidence"');
     expect(brief).toContain('  ap block <task-id> --id review-pack --note "blocker"');
+    expect(brief).toContain(
+      "For multi-line notes, pass one shell argument with command substitution or a heredoc:",
+    );
+    expect(brief).toContain("  ap note <task-id> --id review-pack \"$(cat <<'EOF'");
+    expect(brief).toContain("multi-line evidence\nEOF\n)");
   });
 
   it("renders empty task packs and blocked summary entries", () => {
