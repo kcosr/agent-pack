@@ -1,3 +1,4 @@
+import path from "node:path";
 import fg from "fast-glob";
 import { AgentPackError } from "../errors.js";
 import { materializeGitRef } from "../git/cache.js";
@@ -56,7 +57,7 @@ async function loadLocalTaskRef(
   const loaded: Array<{ task: ManifestTask; source?: SourceInfo }> = [];
   for (const file of files) {
     const absPath = resolveInputPath(file, paths.repoRoot);
-    const tasks = await readTaskSourceFile(absPath, ref);
+    const tasks = await readTaskFile(absPath);
     loaded.push(
       ...tasks.map((task) => ({
         task,
@@ -89,8 +90,8 @@ async function loadGitTaskRef(
   }
   const loaded: Array<{ task: ManifestTask; source?: SourceInfo }> = [];
   for (const file of files) {
-    const absPath = resolveInputPath(`${materialized.snapshotRootDisplay}/${file}`, paths.repoRoot);
-    const tasks = await readTaskSourceFile(absPath, ref);
+    const absPath = path.join(materialized.snapshotRootAbs, file);
+    const tasks = await readTaskFile(absPath);
     loaded.push(
       ...tasks.map((task) => ({
         task,
@@ -99,15 +100,4 @@ async function loadGitTaskRef(
     );
   }
   return loaded;
-}
-
-async function readTaskSourceFile(absPath: string, ref: string): Promise<ManifestTask[]> {
-  try {
-    return await readTaskFile(absPath);
-  } catch (error) {
-    if (error instanceof AgentPackError) {
-      throw error;
-    }
-    throw new AgentPackError(`task source not found or unreadable: ${ref}`);
-  }
 }

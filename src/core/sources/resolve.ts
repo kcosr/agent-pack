@@ -2,7 +2,6 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import fg from "fast-glob";
 import { AgentPackError } from "../errors.js";
-import { pathExists } from "../fs.js";
 import { materializeGitRef } from "../git/cache.js";
 import { isGitRef } from "../git/ref.js";
 import { nameFromRef } from "../manifest/parse.js";
@@ -47,7 +46,7 @@ export async function resolveSkills(
       throw new AgentPackError(`skill source resolved no SKILL.md files: ${entry.ref}`);
     }
     for (const file of files) {
-      const metadata = await extractSkillMetadata(file.absPath);
+      const metadata = await readSkillMetadata(file.absPath, entry.ref);
       skills.push({
         id: `s${String(skills.length + 1).padStart(3, "0")}`,
         name: entry.name ?? metadata.name,
@@ -163,9 +162,6 @@ async function resolveLocalSkillFiles(
   const resolved: Array<{ absPath: string; displayPath: string; source: PackSkill["source"] }> = [];
   for (const displayPath of files) {
     const absPath = resolveInputPath(displayPath, paths.repoRoot);
-    if (!(await pathExists(absPath))) {
-      throw new AgentPackError(`skill file not found: ${ref}`);
-    }
     resolved.push({
       absPath,
       displayPath: toDisplayPath(absPath, paths.repoRoot),
@@ -173,6 +169,14 @@ async function resolveLocalSkillFiles(
     });
   }
   return resolved;
+}
+
+async function readSkillMetadata(filePath: string, ref: string) {
+  try {
+    return await extractSkillMetadata(filePath);
+  } catch (error) {
+    throw new AgentPackError(`skill file not found or unreadable: ${ref}`);
+  }
 }
 
 async function resolveGitSkillFiles(

@@ -1,9 +1,7 @@
 import path from "node:path";
-import fg from "fast-glob";
 import { renderBrief, renderSummary } from "./brief/render.js";
 import { AgentPackError } from "./errors.js";
-import { ensureGitSourceSnapshot } from "./git/cache.js";
-import { repoHash } from "./git/ref.js";
+import { ensureGitSourceSnapshot, gitSourceTargetPath } from "./git/cache.js";
 import { readInstructions, readManifest } from "./manifest/parse.js";
 import { resolveInputPath, toDisplayPath } from "./paths.js";
 import { resolveReferences, resolveSkills } from "./sources/resolve.js";
@@ -119,7 +117,7 @@ export async function syncAll(refresh: GitRefresh): Promise<PackState[]> {
 export async function brief(id?: string): Promise<string> {
   const store = new StateStore();
   const pack = await store.loadPack(id);
-  await validateCachePaths(pack);
+  await validateCachePaths(pack, store.paths);
   return renderBrief(pack);
 }
 
@@ -180,28 +178,35 @@ export async function report(id?: string): Promise<PackState> {
   return store.loadPack(id);
 }
 
-export async function validateCachePaths(pack: PackState): Promise<void> {
-  const missing: string[] = [];
+export async function validateCachePaths(
+  pack: PackState,
+  paths: StateStore["paths"],
+): Promise<void> {
+  const targets = new Set<string>();
   for (const reference of pack.references) {
     for (const target of [reference.path, reference.rootPath, ...(reference.files ?? [])].filter(
       Boolean,
     )) {
-      if (reference.source.kind === "git" && !(await existsDisplayPath(String(target)))) {
-        missing.push(String(target));
+      if (reference.source.kind === "git") {
+        targets.add(String(target));
       }
     }
   }
   for (const skill of pack.skills) {
-    if (skill.source.kind === "git" && !(await existsDisplayPath(skill.path))) {
-      missing.push(skill.path);
+    if (skill.source.kind === "git") {
+      targets.add(skill.path);
     }
   }
   for (const task of pack.tasks) {
-    const target = gitSourceDisplayPath(task.source);
-    if (target && !(await existsDisplayPath(target))) {
-      missing.push(target);
+    const target = gitSourceTargetPath(task.source, paths)?.displayPath;
+    if (target) {
+      targets.add(target);
     }
   }
+  const results = await Promise.all(
+    [...targets].map(async (target) => ({ target, exists: await existsDisplayPath(target) })),
+  );
+  const missing = results.filter((result) => !result.exists).map((result) => result.target);
   if (missing.length) {
     throw new AgentPackError(
       `cache material missing; run agent-pack sync --id ${pack.id}: ${missing.join(", ")}`,
@@ -209,35 +214,10 @@ export async function validateCachePaths(pack: PackState): Promise<void> {
   }
 }
 
-function gitSourceDisplayPath(source: PackTask["source"]): string | undefined {
-  if (source?.kind !== "git" || !source.url || !source.resolvedCommit) {
-    return undefined;
-  }
-  const hash = source.repoHash ?? repoHash(source.url);
-  return path.posix.join(
-    ".agent-pack/cache/snapshots",
-    hash,
-    source.resolvedCommit,
-    source.path ?? "",
-  );
-}
-
 async function existsDisplayPath(displayPath: string): Promise<boolean> {
   const { pathExists } = await import("./fs.js");
   const abs = resolveInputPath(displayPath, process.cwd());
   return pathExists(path.normalize(abs));
-}
-
-export async function expandTaskRefs(refs: string[]): Promise<string[]> {
-  const expanded: string[] = [];
-  for (const ref of refs) {
-    if (/[!*?[\]{}()@+]/.test(ref)) {
-      expanded.push(...(await fg(ref, { onlyFiles: true, dot: true, unique: true })));
-    } else {
-      expanded.push(ref);
-    }
-  }
-  return expanded;
 }
 
 function getTask(pack: PackState, taskId: string): PackTask {

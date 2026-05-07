@@ -94,7 +94,7 @@ tasks:
     ).rejects.toThrow("unsupported manifest field");
   });
 
-  it("reports clear errors for missing local task and skill inputs", async () => {
+  it("reports clear errors for missing local task inputs", async () => {
     await expect(
       initPack({
         id: "missing-task",
@@ -106,8 +106,10 @@ tasks:
         skillRefs: [],
         gitRefresh: "auto",
       }),
-    ).rejects.toThrow("task source not found or unreadable");
+    ).rejects.toThrow("task file not found or unreadable");
+  });
 
+  it("reports clear errors for missing local skill inputs", async () => {
     await expect(
       initPack({
         id: "missing-skill",
@@ -119,6 +121,23 @@ tasks:
         skillRefs: [{ ref: "./skills/fresh-eyes/SKILL.md" }],
         gitRefresh: "auto",
       }),
-    ).rejects.toThrow("skill file not found");
+    ).rejects.toThrow("skill file not found or unreadable");
+  });
+
+  it("reports malformed task YAML as an agent-pack error", async () => {
+    await writeFile("bad-task.yaml", "title: [unterminated\n");
+
+    await expect(
+      initPack({
+        id: "bad-task",
+        manifests: [],
+        instructionFiles: [],
+        taskRefs: ["./bad-task.yaml"],
+        adHocTasks: [],
+        referenceRefs: [],
+        skillRefs: [],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow("malformed YAML");
   });
 });

@@ -62,12 +62,12 @@ export class StateStore {
       throw new AgentPackError("pack id is required; pass --id or set AGENT_PACK_ID");
     }
     const filePath = this.packPath(packId);
-    if (!(await pathExists(filePath))) {
-      throw new AgentPackError(`pack not found: ${packId}`);
-    }
     try {
       return JSON.parse(await readFile(filePath, "utf8")) as PackState;
     } catch (error) {
+      if (isNotFound(error)) {
+        throw new AgentPackError(`pack not found: ${packId}`);
+      }
       throw new AgentPackError(`failed to read pack ${packId}: ${errorMessage(error)}`);
     }
   }
@@ -109,4 +109,8 @@ export class StateStore {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isNotFound(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
 }

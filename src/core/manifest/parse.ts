@@ -17,8 +17,8 @@ const manifestKeys = new Set([
 ]);
 
 export async function readManifest(filePath: string, strict = false): Promise<PackManifest> {
-  const content = await readFile(filePath, "utf8");
-  const parsed = YAML.parse(content);
+  const content = await readText(filePath, "manifest");
+  const parsed = parseYaml(content, filePath);
   if (!parsed || typeof parsed !== "object") {
     throw new AgentPackError(`manifest must be a YAML object: ${filePath}`);
   }
@@ -33,24 +33,30 @@ export async function readManifest(filePath: string, strict = false): Promise<Pa
 }
 
 export async function readInstructions(filePath: string): Promise<string> {
-  const content = await readFile(filePath, "utf8");
+  const content = await readText(filePath, "instructions");
   if (/\.(ya?ml)$/i.test(filePath)) {
-    const parsed = YAML.parse(content);
-    if (parsed && typeof parsed === "object" && typeof parsed.instructions === "string") {
-      return parsed.instructions;
+    const parsed = parseYaml(content, filePath);
+    if (parsed && typeof parsed === "object") {
+      const raw = parsed as Record<string, unknown>;
+      if (typeof raw.instructions === "string") {
+        return raw.instructions;
+      }
     }
   }
   return content;
 }
 
 export async function readTaskFile(filePath: string): Promise<ManifestTask[]> {
-  const content = await readFile(filePath, "utf8");
-  const parsed = YAML.parse(content);
+  const content = await readText(filePath, "task file");
+  const parsed = parseYaml(content, filePath);
   if (Array.isArray(parsed)) {
     return parsed.map(normalizeTask);
   }
-  if (parsed && typeof parsed === "object" && Array.isArray(parsed.tasks)) {
-    return parsed.tasks.map(normalizeTask);
+  if (parsed && typeof parsed === "object") {
+    const raw = parsed as Record<string, unknown>;
+    if (Array.isArray(raw.tasks)) {
+      return raw.tasks.map(normalizeTask);
+    }
   }
   if (parsed && typeof parsed === "object") {
     return [normalizeTask(parsed)];
@@ -90,4 +96,21 @@ export function nameFromRef(ref: string): string {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+async function readText(filePath: string, label: string): Promise<string> {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch (error) {
+    throw new AgentPackError(`${label} not found or unreadable: ${filePath}`);
+  }
+}
+
+function parseYaml(content: string, filePath: string): unknown {
+  try {
+    return YAML.parse(content);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new AgentPackError(`malformed YAML in ${filePath}: ${detail}`);
+  }
 }

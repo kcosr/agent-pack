@@ -60,8 +60,38 @@ export async function ensureGitSourceSnapshot(
   const hash = source.repoHash ?? repoHash(source.url);
   const mirrorPath = path.join(paths.gitCacheDir, hash, "mirror.git");
   await ensureMirror(source.url, mirrorPath, refresh);
-  const snapshotRootAbs = path.join(paths.cacheDir, "snapshots", hash, source.resolvedCommit);
+  const snapshotRootAbs = gitSnapshotRoot(source, paths);
+  if (!snapshotRootAbs) {
+    return;
+  }
   await ensureSnapshot(mirrorPath, source.resolvedCommit, snapshotRootAbs);
+}
+
+export function gitSnapshotRoot(source: SourceInfo, paths: RuntimePaths): string | undefined {
+  if (source.kind !== "git" || !source.url || !source.resolvedCommit) {
+    return undefined;
+  }
+  return path.join(
+    paths.cacheDir,
+    "snapshots",
+    source.repoHash ?? repoHash(source.url),
+    source.resolvedCommit,
+  );
+}
+
+export function gitSourceTargetPath(
+  source: SourceInfo | undefined,
+  paths: RuntimePaths,
+): { absPath: string; displayPath: string } | undefined {
+  if (!source) {
+    return undefined;
+  }
+  const root = gitSnapshotRoot(source, paths);
+  if (!root) {
+    return undefined;
+  }
+  const absPath = source.path ? path.join(root, source.path) : root;
+  return { absPath, displayPath: relativeFromRoot(absPath, paths.repoRoot) };
 }
 
 async function ensureMirror(url: string, mirrorPath: string, refresh: GitRefresh): Promise<void> {
