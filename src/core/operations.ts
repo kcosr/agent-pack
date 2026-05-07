@@ -9,12 +9,12 @@ import { resolveInputPath, toDisplayPath } from "./paths.js";
 import { resolveReferences, resolveSkills } from "./sources/resolve.js";
 import { StateStore, assertValidPackId } from "./state/store.js";
 import { loadTasks } from "./tasks/load.js";
+import type { TaskInput } from "./tasks/load.js";
 import type {
   GitRefresh,
   InitInput,
   ManifestReference,
   ManifestSkill,
-  ManifestTask,
   PackContract,
   PackManifest,
   PackState,
@@ -27,47 +27,52 @@ import type {
 export async function initPack(input: InitInput): Promise<PackState> {
   const store = new StateStore({ stateDir: input.stateDir });
   const paths = store.paths;
-  const manifestTasks: ManifestTask[] = [];
+  const taskInputs: TaskInput[] = [];
   const referenceRefs: ManifestReference[] = [];
   const skillRefs: ManifestSkill[] = [];
   const instructions: string[] = [];
   let name = input.name;
   let contract: PackContract | undefined;
 
-  for (const manifestRef of input.manifests) {
-    const { manifest, source: manifestSource } = await readManifestRef(
-      manifestRef,
-      paths,
-      input.gitRefresh,
-      input.strict,
-    );
-    name ??= manifest.name;
-    if (manifest.instructions) {
-      instructions.push(manifest.instructions);
+  for (const include of input.includes) {
+    if (include.type === "manifest") {
+      const { manifest, source: manifestSource } = await readManifestRef(
+        include.ref,
+        paths,
+        input.gitRefresh,
+        input.strict,
+      );
+      name ??= manifest.name;
+      if (manifest.instructions) {
+        instructions.push(manifest.instructions);
+      }
+      taskInputs.push(
+        ...(manifest.tasks ?? []).map((task) => ({
+          type: "manifestTask" as const,
+          task,
+          source: manifestSource,
+        })),
+      );
+      referenceRefs.push(...(manifest.references ?? []));
+      skillRefs.push(...(manifest.skills ?? []));
+      contract = mergeContract(contract, manifest.contract);
     }
-    manifestTasks.push(
-      ...(manifest.tasks ?? []).map((task) => ({ ...task, source: manifestSource })),
-    );
-    referenceRefs.push(...(manifest.references ?? []));
-    skillRefs.push(...(manifest.skills ?? []));
-    contract = mergeContract(contract, manifest.contract);
+    if (include.type === "instructions") {
+      instructions.push(await readInstructions(include.path));
+    }
+    if (include.type === "taskRef" || include.type === "adHocTask") {
+      taskInputs.push(include);
+    }
+    if (include.type === "reference") {
+      referenceRefs.push(include.ref);
+    }
+    if (include.type === "skill") {
+      skillRefs.push(include.ref);
+    }
   }
-
-  for (const instructionFile of input.instructionFiles) {
-    instructions.push(await readInstructions(instructionFile));
-  }
-
-  referenceRefs.push(...input.referenceRefs);
-  skillRefs.push(...input.skillRefs);
 
   const packId = assertValidPackId(input.id ?? slug(name ?? "pack"));
-  const tasks = await loadTasks(
-    input.taskRefs,
-    input.adHocTasks,
-    manifestTasks,
-    paths,
-    input.gitRefresh,
-  );
+  const tasks = await loadTasks(taskInputs, paths, input.gitRefresh);
   const references = await resolveReferences(referenceRefs, paths, input.gitRefresh);
   const skills = await resolveSkills(skillRefs, paths, input.gitRefresh);
   const now = new Date().toISOString();

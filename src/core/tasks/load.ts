@@ -8,21 +8,28 @@ import { resolveInputPath, toDisplayPath } from "../paths.js";
 import { hasGlobMagic } from "../sources/glob.js";
 import type { GitRefresh, ManifestTask, PackTask, RuntimePaths, SourceInfo } from "../types.js";
 
+export type TaskInput =
+  | { type: "manifestTask"; task: ManifestTask; source: SourceInfo }
+  | { type: "taskRef"; ref: string }
+  | { type: "adHocTask"; text: string };
+
 export async function loadTasks(
-  taskRefs: string[],
-  adHocTasks: string[],
-  manifestTasks: ManifestTask[],
+  inputs: TaskInput[],
   paths: RuntimePaths,
   refresh: GitRefresh,
 ): Promise<PackTask[]> {
-  const tasks: Array<{ task: ManifestTask; source?: SourceInfo }> = manifestTasks.map((task) => ({
-    task,
-    source: task.source,
-  }));
-  for (const ref of taskRefs) {
-    tasks.push(...(await loadTaskRef(ref, paths, refresh)));
+  const tasks: Array<{ task: ManifestTask; source?: SourceInfo }> = [];
+  for (const input of inputs) {
+    if (input.type === "taskRef") {
+      tasks.push(...(await loadTaskRef(input.ref, paths, refresh)));
+    }
+    if (input.type === "adHocTask") {
+      tasks.push({ task: taskTitleFromText(input.text) });
+    }
+    if (input.type === "manifestTask") {
+      tasks.push({ task: input.task, source: input.source });
+    }
   }
-  tasks.push(...adHocTasks.map((task) => ({ task: taskTitleFromText(task) })));
   return tasks.map(({ task, source }, index) => ({
     id: `t${String(index + 1).padStart(3, "0")}`,
     sourceId: task.id,

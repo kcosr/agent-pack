@@ -14,7 +14,7 @@ import {
   syncPack,
   updateTask,
 } from "../core/operations.js";
-import type { GitRefresh, ManifestReference, ManifestSkill, PackState } from "../core/types.js";
+import type { GitRefresh, InitInclude, PackState } from "../core/types.js";
 
 const program = new Command();
 let startupError: AgentPackError | undefined;
@@ -24,21 +24,73 @@ program
   .description("Prepare durable work packets for coding agents.")
   .version("0.1.0");
 
+const initIncludes: InitInclude[] = [];
+
 program
   .command("init")
   .description("Create a pack.")
   .option("--id <id>", "use a specific pack ID")
   .option("--name <name>", "set a display name")
-  .option("--manifest <ref>", "load a pack manifest YAML file or git ref", collect, [])
-  .option("--manifests <ref>", "load a pack manifest YAML file or git ref", collect, [])
-  .option("--instructions <path>", "load instructions from Markdown or YAML", collect, [])
-  .option("--add-task <text>", "add one ad hoc task", collect, [])
-  .option("--task <ref>", "add task YAML file, glob, or git ref", collect, [])
-  .option("--tasks <ref>", "add task YAML file, glob, or git ref", collect, [])
-  .option("--reference <ref>", "add one reference", collect, [])
-  .option("--references <ref>", "add a reference file, directory, glob, or repo", collect, [])
-  .option("--skill <ref>", "add one SKILL.md file", collect, [])
-  .option("--skills <ref>", "add skill file or glob", collect, [])
+  .option(
+    "--manifest <ref>",
+    "load a pack manifest YAML file or git ref",
+    collectInclude((ref) => ({ type: "manifest", ref })),
+    [],
+  )
+  .option(
+    "--manifests <ref>",
+    "load a pack manifest YAML file or git ref",
+    collectInclude((ref) => ({ type: "manifest", ref })),
+    [],
+  )
+  .option(
+    "--instructions <path>",
+    "load instructions from Markdown or YAML",
+    collectInclude((path) => ({ type: "instructions", path })),
+    [],
+  )
+  .option(
+    "--add-task <text>",
+    "add one ad hoc task",
+    collectInclude((text) => ({ type: "adHocTask", text })),
+    [],
+  )
+  .option(
+    "--task <ref>",
+    "add task YAML file, glob, or git ref",
+    collectInclude((ref) => ({ type: "taskRef", ref })),
+    [],
+  )
+  .option(
+    "--tasks <ref>",
+    "add task YAML file, glob, or git ref",
+    collectInclude((ref) => ({ type: "taskRef", ref })),
+    [],
+  )
+  .option(
+    "--reference <ref>",
+    "add one reference",
+    collectInclude((ref) => ({ type: "reference", ref: { ref } })),
+    [],
+  )
+  .option(
+    "--references <ref>",
+    "add a reference file, directory, glob, or repo",
+    collectInclude((ref) => ({ type: "reference", ref: { ref } })),
+    [],
+  )
+  .option(
+    "--skill <ref>",
+    "add one SKILL.md file",
+    collectInclude((ref) => ({ type: "skill", ref: { ref } })),
+    [],
+  )
+  .option(
+    "--skills <ref>",
+    "add skill file or glob",
+    collectInclude((ref) => ({ type: "skill", ref: { ref } })),
+    [],
+  )
   .addOption(gitRefreshOption())
   .option("--state-dir <path>", "override the state directory")
   .option("--json", "emit machine-readable output")
@@ -49,12 +101,7 @@ program
       const pack = await initPack({
         id: options.id,
         name: options.name,
-        manifests: [...options.manifest, ...options.manifests],
-        instructionFiles: options.instructions,
-        taskRefs: [...options.task, ...options.tasks],
-        adHocTasks: options.addTask,
-        referenceRefs: toRefs([...options.reference, ...options.references]),
-        skillRefs: toSkills([...options.skill, ...options.skills]),
+        includes: initIncludes,
         prompt,
         stateDir: options.stateDir,
         gitRefresh: options.gitRefresh,
@@ -238,6 +285,14 @@ function collect(value: string, previous: string[]): string[] {
   return previous;
 }
 
+function collectInclude(toInclude: (value: string) => InitInclude) {
+  return (value: string, previous: string[]): string[] => {
+    previous.push(value);
+    initIncludes.push(toInclude(value));
+    return previous;
+  };
+}
+
 function gitRefreshOption(): Option {
   return new Option("--git-refresh <policy>", "git fetch policy")
     .choices(["auto", "always", "never"])
@@ -254,14 +309,6 @@ function defaultGitRefresh(): GitRefresh {
   }
   startupError = new AgentPackError(`invalid AGENT_PACK_GIT_REFRESH value: ${value}`);
   return "auto";
-}
-
-function toRefs(refs: string[]): ManifestReference[] {
-  return refs.map((ref) => ({ ref }));
-}
-
-function toSkills(refs: string[]): ManifestSkill[] {
-  return refs.map((ref) => ({ ref }));
 }
 
 function statusJson(pack: PackState) {

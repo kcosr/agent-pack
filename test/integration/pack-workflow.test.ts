@@ -48,12 +48,7 @@ contract:
 
     const pack = await initPack({
       id: "design-review",
-      manifests: ["pack.yaml"],
-      instructionFiles: [],
-      taskRefs: [],
-      adHocTasks: [],
-      referenceRefs: [],
-      skillRefs: [],
+      includes: [{ type: "manifest", ref: "pack.yaml" }],
       prompt: "Focus on concrete findings.",
       gitRefresh: "auto",
     });
@@ -74,6 +69,61 @@ contract:
     expect((loaded as typeof updated).taskCounts.completed).toBe(1);
   });
 
+  it("preserves source order within each brief section", async () => {
+    await mkdir("docs", { recursive: true });
+    await mkdir("skills/first", { recursive: true });
+    await mkdir("skills/second", { recursive: true });
+    await writeFile("docs/before.md", "# Before\n");
+    await writeFile("docs/manifest.md", "# Manifest\n");
+    await writeFile("docs/after.md", "# After\n");
+    await writeFile("skills/first/SKILL.md", "---\nname: first\ndescription: First skill.\n---\n");
+    await writeFile(
+      "skills/second/SKILL.md",
+      "---\nname: second\ndescription: Second skill.\n---\n",
+    );
+    await writeFile("after-task.yaml", "id: after\ntitle: After manifest task\n");
+    await writeFile(
+      "pack.yaml",
+      `schemaVersion: 1
+instructions: Manifest instructions.
+tasks:
+  - id: manifest
+    title: Manifest task
+references:
+  - name: manifest
+    ref: ./docs/manifest.md
+skills:
+  - ref: ./skills/second/SKILL.md
+`,
+    );
+
+    const pack = await initPack({
+      id: "ordered-pack",
+      includes: [
+        { type: "adHocTask", text: "Before manifest task" },
+        { type: "reference", ref: { name: "before", ref: "./docs/before.md" } },
+        { type: "skill", ref: { ref: "./skills/first/SKILL.md" } },
+        { type: "manifest", ref: "pack.yaml" },
+        { type: "taskRef", ref: "./after-task.yaml" },
+        { type: "reference", ref: { name: "after", ref: "./docs/after.md" } },
+      ],
+      gitRefresh: "auto",
+    });
+
+    expect(pack.instructions).toBe("Manifest instructions.");
+    expect(pack.tasks.map((task) => task.title)).toEqual([
+      "Before manifest task",
+      "Manifest task",
+      "After manifest task",
+    ]);
+    expect(pack.references.map((reference) => reference.name)).toEqual([
+      "before",
+      "manifest",
+      "after",
+    ]);
+    expect(pack.skills.map((skill) => skill.name)).toEqual(["first", "second"]);
+  });
+
   it("rejects unsupported manifest fields in strict mode", async () => {
     await writeFile(
       "pack.yaml",
@@ -86,12 +136,7 @@ tasks:
     await expect(
       initPack({
         id: "strict-pack",
-        manifests: ["pack.yaml"],
-        instructionFiles: [],
-        taskRefs: [],
-        adHocTasks: [],
-        referenceRefs: [],
-        skillRefs: [],
+        includes: [{ type: "manifest", ref: "pack.yaml" }],
         gitRefresh: "auto",
         strict: true,
       }),
@@ -113,12 +158,7 @@ references:
     await expect(
       initPack({
         id: "strict-nested-pack",
-        manifests: ["pack.yaml"],
-        instructionFiles: [],
-        taskRefs: [],
-        adHocTasks: [],
-        referenceRefs: [],
-        skillRefs: [],
+        includes: [{ type: "manifest", ref: "pack.yaml" }],
         gitRefresh: "auto",
         strict: true,
       }),
@@ -136,12 +176,7 @@ contract:
     await expect(
       initPack({
         id: "bad-contract",
-        manifests: ["pack.yaml"],
-        instructionFiles: [],
-        taskRefs: [],
-        adHocTasks: [],
-        referenceRefs: [],
-        skillRefs: [],
+        includes: [{ type: "manifest", ref: "pack.yaml" }],
         gitRefresh: "auto",
       }),
     ).rejects.toThrow("contract.do must be an array of strings");
@@ -151,12 +186,7 @@ contract:
     await expect(
       initPack({
         id: "git-manifest-no-path",
-        manifests: ["git+file:///no/such/repo.git#main"],
-        instructionFiles: [],
-        taskRefs: [],
-        adHocTasks: [],
-        referenceRefs: [],
-        skillRefs: [],
+        includes: [{ type: "manifest", ref: "git+file:///no/such/repo.git#main" }],
         gitRefresh: "auto",
       }),
     ).rejects.toThrow("git manifest source requires a file path inside the repo");
@@ -166,12 +196,7 @@ contract:
     await expect(
       initPack({
         id: "../outside",
-        manifests: [],
-        instructionFiles: [],
-        taskRefs: [],
-        adHocTasks: ["Inspect"],
-        referenceRefs: [],
-        skillRefs: [],
+        includes: [{ type: "adHocTask", text: "Inspect" }],
         gitRefresh: "auto",
       }),
     ).rejects.toThrow("invalid pack id");
@@ -218,12 +243,7 @@ contract:
   it("preserves concurrent task notes through locked updates", async () => {
     await initPack({
       id: "locked-notes",
-      manifests: [],
-      instructionFiles: [],
-      taskRefs: [],
-      adHocTasks: ["Inspect"],
-      referenceRefs: [],
-      skillRefs: [],
+      includes: [{ type: "adHocTask", text: "Inspect" }],
       gitRefresh: "auto",
     });
 
@@ -241,12 +261,7 @@ contract:
     await expect(
       initPack({
         id: "missing-task",
-        manifests: [],
-        instructionFiles: [],
-        taskRefs: ["./missing-task.yaml"],
-        adHocTasks: [],
-        referenceRefs: [],
-        skillRefs: [],
+        includes: [{ type: "taskRef", ref: "./missing-task.yaml" }],
         gitRefresh: "auto",
       }),
     ).rejects.toThrow("task file not found or unreadable");
@@ -256,12 +271,7 @@ contract:
     await expect(
       initPack({
         id: "missing-skill",
-        manifests: [],
-        instructionFiles: [],
-        taskRefs: [],
-        adHocTasks: [],
-        referenceRefs: [],
-        skillRefs: [{ ref: "./skills/fresh-eyes/SKILL.md" }],
+        includes: [{ type: "skill", ref: { ref: "./skills/fresh-eyes/SKILL.md" } }],
         gitRefresh: "auto",
       }),
     ).rejects.toThrow("skill file not found or unreadable");
@@ -273,12 +283,7 @@ contract:
     await expect(
       initPack({
         id: "bad-task",
-        manifests: [],
-        instructionFiles: [],
-        taskRefs: ["./bad-task.yaml"],
-        adHocTasks: [],
-        referenceRefs: [],
-        skillRefs: [],
+        includes: [{ type: "taskRef", ref: "./bad-task.yaml" }],
         gitRefresh: "auto",
       }),
     ).rejects.toThrow("malformed YAML");

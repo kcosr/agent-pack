@@ -250,11 +250,11 @@ Example:
 ```bash
 agent-pack init \
   --id reviewer-001 \
+  --add-task "Check local unstaged changes" \
   --manifest git+https://github.com/org/packs.git//base-pack.yaml#main \
   --task ./tasks/*.yaml \
   --references './docs/**/*.md' \
   --skills './skills/**' \
-  --add-task "Check local unstaged changes" \
   "Use the included docs and skills to complete the review."
 ```
 
@@ -363,18 +363,25 @@ skills:
   - ref: ./skills/fresh-eyes/SKILL.md
 ```
 
-CLI flags and manifests can be combined. Merge order is deterministic:
+CLI flags and manifests can be combined. Merge order is deterministic and source-order based:
 
-1. Manifest refs are read first in flag order. `--manifest` entries are processed before `--manifests` entries.
-2. Each manifest contributes its `instructions`, `tasks`, `references`, `skills`, and pack metadata. Manifest-defined task sources point back to the manifest file, including remote manifest snapshots.
-3. `--instructions` files append after manifest instructions, in flag order.
-4. CLI task source refs append after manifest tasks. `--task` entries are processed before `--tasks` entries.
-5. Inline ad hoc tasks from `--add-task` append after task source refs.
-6. CLI reference refs append after manifest references. `--reference` entries are processed before `--references` entries.
-7. CLI skill refs append after manifest skills. `--skill` entries are processed before `--skills` entries.
-8. The positional prompt is stored as the pack-level prompt and rendered at the top of the brief.
+1. `agent-pack init` reads include flags from left to right.
+2. Each include contributes content to one or more typed brief sections: instructions, tasks, references, skills, or contract.
+3. The final brief still renders one section per type. Inside each section, entries keep the relative order of the sources that contributed them.
+4. The positional prompt is stored as the pack-level prompt and rendered at the top of the brief. It is not part of section ordering.
 
-The merge is deterministic, but it is category-based rather than raw command-line order based. Interleaving different flag categories on the shell command line does not change this order.
+For example, this command places the ad hoc task before manifest tasks, while references and skills still render in their own sections:
+
+```bash
+agent-pack init \
+  --id ordered-review \
+  --add-task "Check local unstaged changes first" \
+  --manifest ./pack.yaml \
+  --task ./tasks/follow-up.yaml \
+  --reference ./notes.md
+```
+
+The task section renders the ad hoc task, then tasks from `./pack.yaml`, then tasks from `./tasks/follow-up.yaml`. The reference section renders references from `./pack.yaml` before `./notes.md` because the manifest appeared first among reference-contributing sources.
 
 ## Git Sources
 

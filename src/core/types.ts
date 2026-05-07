@@ -106,15 +106,18 @@ export interface PackManifest {
   contract?: PackContract;
 }
 
+export type InitInclude =
+  | { type: "manifest"; ref: string }
+  | { type: "instructions"; path: string }
+  | { type: "taskRef"; ref: string }
+  | { type: "adHocTask"; text: string }
+  | { type: "reference"; ref: ManifestReference }
+  | { type: "skill"; ref: ManifestSkill };
+
 export interface InitInput {
   id?: string;
   name?: string;
-  manifests: string[];
-  instructionFiles: string[];
-  taskRefs: string[];
-  adHocTasks: string[];
-  referenceRefs: ManifestReference[];
-  skillRefs: ManifestSkill[];
+  includes: InitInclude[];
   prompt?: string;
   stateDir?: string;
   gitRefresh: GitRefresh;

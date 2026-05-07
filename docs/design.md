@@ -439,15 +439,14 @@ contract:
     - Leave task state updates until the end.
 ```
 
-CLI flags and YAML can be combined. Merge order should be deterministic:
+CLI flags and YAML can be combined. Merge order is source-order based:
 
-1. YAML pack sources from `--manifest` / `--manifests`, in flag order within each option
-2. `--instructions`, in flag order
-3. `--task` / `--tasks` source refs, in flag order within each option
-4. `--add-task` ad hoc entries, in flag order
-5. `--reference` / `--references`, in flag order within each option
-6. `--skill` / `--skills`, in flag order within each option
-7. positional prompt, stored as pack-level `prompt`
+1. Read include flags from left to right as one source stream.
+2. Expand each source into typed contributions.
+3. Build each final brief section by collecting contributions of that type in source order.
+4. Store the positional prompt as pack-level `prompt`; it always renders above typed sections.
+
+This keeps the brief shape stable while letting the user intentionally put a task, reference, skill, or manifest before another source of the same type.
 
 ## State Layout
 
@@ -633,7 +632,7 @@ agent-pack init --manifest git+https://github.com/org/packs.git//pack.yaml#main 
 agent-pack init --manifests ./pack.yaml --manifests git+https://github.com/org/packs.git//extra.yaml#main --id design-worker
 ```
 
-CLI flags can still be used for quick one-off packs. If both manifests and explicit flags are provided, merge deterministically: load manifests first in flag order, then append instruction files, CLI-provided task source refs, ad hoc tasks, references, and skills in category order.
+CLI flags can still be used for quick one-off packs. If both manifests and explicit flags are provided, merge deterministically by the order in which sources appear on the command line. The final brief remains sectioned by type; each section preserves the relative order of sources that contributed entries to that section.
 
 ### Local Files
 

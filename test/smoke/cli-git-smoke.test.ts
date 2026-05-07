@@ -6,6 +6,57 @@ import { describe, expect, it } from "vitest";
 import { runCli } from "../helpers/cli.js";
 
 describe("agent-pack CLI git smoke", () => {
+  it("preserves command line source order within each section", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-order-smoke-"));
+    await mkdir(path.join(workspace, "docs"), { recursive: true });
+    await writeFile(path.join(workspace, "docs/manifest.md"), "# Manifest\n");
+    await writeFile(path.join(workspace, "docs/after.md"), "# After\n");
+    await writeFile(
+      path.join(workspace, "after-task.yaml"),
+      "id: after\ntitle: After manifest task\n",
+    );
+    await writeFile(
+      path.join(workspace, "pack.yaml"),
+      `tasks:
+  - id: manifest
+    title: Manifest task
+references:
+  - name: manifest
+    ref: ./docs/manifest.md
+`,
+    );
+
+    await runCli(
+      [
+        "init",
+        "--id",
+        "ordered-cli",
+        "--add-task",
+        "Before manifest task",
+        "--manifest",
+        "./pack.yaml",
+        "--task",
+        "./after-task.yaml",
+        "--reference",
+        "./docs/after.md",
+      ],
+      { cwd: workspace },
+    );
+
+    const state = JSON.parse(
+      await readFile(path.join(workspace, ".agent-pack/state/packs/ordered-cli.json"), "utf8"),
+    );
+    expect(state.tasks.map((task: { title: string }) => task.title)).toEqual([
+      "Before manifest task",
+      "Manifest task",
+      "After manifest task",
+    ]);
+    expect(state.references.map((reference: { name: string }) => reference.name)).toEqual([
+      "manifest",
+      "after",
+    ]);
+  });
+
   it("clones git sources, materializes snapshots, syncs missing cache, and renders brief", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "agent-pack-smoke-"));
     const repo = path.join(root, "fixture");
