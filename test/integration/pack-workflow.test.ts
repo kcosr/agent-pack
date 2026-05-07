@@ -93,4 +93,32 @@ tasks:
       }),
     ).rejects.toThrow("unsupported manifest field");
   });
+
+  it("reports clear errors for missing local task and skill inputs", async () => {
+    await expect(
+      initPack({
+        id: "missing-task",
+        manifests: [],
+        instructionFiles: [],
+        taskRefs: ["./missing-task.yaml"],
+        adHocTasks: [],
+        referenceRefs: [],
+        skillRefs: [],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow("task source not found or unreadable");
+
+    await expect(
+      initPack({
+        id: "missing-skill",
+        manifests: [],
+        instructionFiles: [],
+        taskRefs: [],
+        adHocTasks: [],
+        referenceRefs: [],
+        skillRefs: [{ ref: "./skills/fresh-eyes/SKILL.md" }],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow("skill file not found");
+  });
 });

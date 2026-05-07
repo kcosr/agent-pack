@@ -2,6 +2,7 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import fg from "fast-glob";
 import { AgentPackError } from "../errors.js";
+import { pathExists } from "../fs.js";
 import { materializeGitRef } from "../git/cache.js";
 import { isGitRef } from "../git/ref.js";
 import { nameFromRef } from "../manifest/parse.js";
@@ -159,14 +160,19 @@ async function resolveLocalSkillFiles(
   if (!hasGlobMagic(ref) && path.basename(ref) !== "SKILL.md") {
     throw new AgentPackError(`--skill requires a SKILL.md file: ${ref}`);
   }
-  return files.map((displayPath) => {
+  const resolved: Array<{ absPath: string; displayPath: string; source: PackSkill["source"] }> = [];
+  for (const displayPath of files) {
     const absPath = resolveInputPath(displayPath, paths.repoRoot);
-    return {
+    if (!(await pathExists(absPath))) {
+      throw new AgentPackError(`skill file not found: ${ref}`);
+    }
+    resolved.push({
       absPath,
       displayPath: toDisplayPath(absPath, paths.repoRoot),
-      source: { kind: "file", path: toDisplayPath(absPath, paths.repoRoot) },
-    };
-  });
+      source: { kind: "file" as const, path: toDisplayPath(absPath, paths.repoRoot) },
+    });
+  }
+  return resolved;
 }
 
 async function resolveGitSkillFiles(

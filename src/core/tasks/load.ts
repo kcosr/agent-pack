@@ -56,7 +56,7 @@ async function loadLocalTaskRef(
   const loaded: Array<{ task: ManifestTask; source?: SourceInfo }> = [];
   for (const file of files) {
     const absPath = resolveInputPath(file, paths.repoRoot);
-    const tasks = await readTaskFile(absPath);
+    const tasks = await readTaskSourceFile(absPath, ref);
     loaded.push(
       ...tasks.map((task) => ({
         task,
@@ -90,7 +90,7 @@ async function loadGitTaskRef(
   const loaded: Array<{ task: ManifestTask; source?: SourceInfo }> = [];
   for (const file of files) {
     const absPath = resolveInputPath(`${materialized.snapshotRootDisplay}/${file}`, paths.repoRoot);
-    const tasks = await readTaskFile(absPath);
+    const tasks = await readTaskSourceFile(absPath, ref);
     loaded.push(
       ...tasks.map((task) => ({
         task,
@@ -99,4 +99,15 @@ async function loadGitTaskRef(
     );
   }
   return loaded;
+}
+
+async function readTaskSourceFile(absPath: string, ref: string): Promise<ManifestTask[]> {
+  try {
+    return await readTaskFile(absPath);
+  } catch (error) {
+    if (error instanceof AgentPackError) {
+      throw error;
+    }
+    throw new AgentPackError(`task source not found or unreadable: ${ref}`);
+  }
 }

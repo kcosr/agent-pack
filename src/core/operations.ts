@@ -3,6 +3,7 @@ import fg from "fast-glob";
 import { renderBrief, renderSummary } from "./brief/render.js";
 import { AgentPackError } from "./errors.js";
 import { ensureGitSourceSnapshot } from "./git/cache.js";
+import { repoHash } from "./git/ref.js";
 import { readInstructions, readManifest } from "./manifest/parse.js";
 import { resolveInputPath, toDisplayPath } from "./paths.js";
 import { resolveReferences, resolveSkills } from "./sources/resolve.js";
@@ -195,11 +196,30 @@ export async function validateCachePaths(pack: PackState): Promise<void> {
       missing.push(skill.path);
     }
   }
+  for (const task of pack.tasks) {
+    const target = gitSourceDisplayPath(task.source);
+    if (target && !(await existsDisplayPath(target))) {
+      missing.push(target);
+    }
+  }
   if (missing.length) {
     throw new AgentPackError(
       `cache material missing; run agent-pack sync --id ${pack.id}: ${missing.join(", ")}`,
     );
   }
+}
+
+function gitSourceDisplayPath(source: PackTask["source"]): string | undefined {
+  if (source?.kind !== "git" || !source.url || !source.resolvedCommit) {
+    return undefined;
+  }
+  const hash = source.repoHash ?? repoHash(source.url);
+  return path.posix.join(
+    ".agent-pack/cache/snapshots",
+    hash,
+    source.resolvedCommit,
+    source.path ?? "",
+  );
 }
 
 async function existsDisplayPath(displayPath: string): Promise<boolean> {

@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { AgentPackError } from "../errors.js";
 import { appendJsonLine, ensureDir, pathExists, readJson, writeJson } from "../fs.js";
@@ -64,7 +65,11 @@ export class StateStore {
     if (!(await pathExists(filePath))) {
       throw new AgentPackError(`pack not found: ${packId}`);
     }
-    return readJson<PackState>(filePath, undefined as never);
+    try {
+      return JSON.parse(await readFile(filePath, "utf8")) as PackState;
+    } catch (error) {
+      throw new AgentPackError(`failed to read pack ${packId}: ${errorMessage(error)}`);
+    }
   }
 
   async createPack(pack: PackState): Promise<void> {
@@ -100,4 +105,8 @@ export class StateStore {
       });
     }
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
