@@ -60,24 +60,37 @@ Requirements:
 
 A pack is the durable unit of work. It has an ID, optional display name, prompt, instructions, tasks, references, skills, provenance, status, and event history.
 
-Pack state is stored in:
+By default, pack state is stored in the repository working tree:
 
 ```text
 .agent-pack/state/
 ```
 
-Git-backed source material is cached in:
+That state contains pack definitions, task status, notes, and event history. Commit it when you want a pack to travel with the repo so another checkout, host, or agent can resume it.
+
+Git-backed source material is cached separately:
 
 ```text
 .agent-pack/cache/
 ```
 
-Commit `.agent-pack/state` when you want the pack to move with the repository. Ignore `.agent-pack/cache`, `locks`, and `tmp`.
+The cache can always be rebuilt with `agent-pack sync`. Keep cache, locks, and temp files out of git:
 
 ```gitignore
 .agent-pack/cache/
 .agent-pack/locks/
 .agent-pack/tmp/
+```
+
+If you do not want pack instances committed to the repo, either ignore all of `.agent-pack/` or point state and cache at an external directory:
+
+```gitignore
+.agent-pack/
+```
+
+```bash
+export AGENT_PACK_STATE_DIR="$HOME/.local/state/agent-pack/my-repo"
+export AGENT_PACK_CACHE_DIR="$HOME/.cache/agent-pack/my-repo"
 ```
 
 ### Prompt
@@ -418,7 +431,11 @@ Default layout:
   tmp/
 ```
 
-Commit state when you want to resume from another checkout:
+Choose one of two common state policies.
+
+### Commit Pack State
+
+Use this when pack instances are part of the repo workflow and should be resumable by another checkout or agent:
 
 ```bash
 git add .agent-pack/state
@@ -430,6 +447,38 @@ On the new host:
 ```bash
 agent-pack sync --id reviewer-001
 agent-pack brief --id reviewer-001
+```
+
+Recommended `.gitignore`:
+
+```gitignore
+.agent-pack/cache/
+.agent-pack/locks/
+.agent-pack/tmp/
+```
+
+### Keep Pack State Local
+
+Use this when pack instances are personal scratch state and should not appear in repo history.
+
+Option 1: ignore the whole default directory:
+
+```gitignore
+.agent-pack/
+```
+
+Option 2: store state and cache outside the repo:
+
+```bash
+export AGENT_PACK_STATE_DIR="$HOME/.local/state/agent-pack/reviewer-001"
+export AGENT_PACK_CACHE_DIR="$HOME/.cache/agent-pack/reviewer-001"
+```
+
+With external state, set `AGENT_PACK_ID` or pass `--id` so commands target the intended pack:
+
+```bash
+export AGENT_PACK_ID=reviewer-001
+agent-pack brief
 ```
 
 Local paths are intentionally live. If a local reference or skill changes after pack creation, the agent reads the current file at that path. Git references resolve to a commit and read from exported snapshots. Git snapshots reject symlinks instead of extracting them into the cache.
