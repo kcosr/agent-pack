@@ -35,39 +35,45 @@ export async function initPack(input: InitInput): Promise<PackState> {
   let contract: PackContract | undefined;
 
   for (const include of input.includes) {
-    if (include.type === "manifest") {
-      const { manifest, source: manifestSource } = await readManifestRef(
-        include.ref,
-        paths,
-        input.gitRefresh,
-        input.strict,
-      );
-      name ??= manifest.name;
-      if (manifest.instructions) {
-        instructions.push(manifest.instructions);
+    switch (include.type) {
+      case "manifest": {
+        const { manifest, source: manifestSource } = await readManifestRef(
+          include.ref,
+          paths,
+          input.gitRefresh,
+          input.strict,
+        );
+        name ??= manifest.name;
+        if (manifest.instructions) {
+          instructions.push(manifest.instructions);
+        }
+        taskInputs.push(
+          ...(manifest.tasks ?? []).map((task) => ({
+            type: "manifestTask" as const,
+            task,
+            source: manifestSource,
+          })),
+        );
+        referenceRefs.push(...(manifest.references ?? []));
+        skillRefs.push(...(manifest.skills ?? []));
+        contract = mergeContract(contract, manifest.contract);
+        break;
       }
-      taskInputs.push(
-        ...(manifest.tasks ?? []).map((task) => ({
-          type: "manifestTask" as const,
-          task,
-          source: manifestSource,
-        })),
-      );
-      referenceRefs.push(...(manifest.references ?? []));
-      skillRefs.push(...(manifest.skills ?? []));
-      contract = mergeContract(contract, manifest.contract);
-    }
-    if (include.type === "instructions") {
-      instructions.push(await readInstructions(include.path));
-    }
-    if (include.type === "taskRef" || include.type === "adHocTask") {
-      taskInputs.push(include);
-    }
-    if (include.type === "reference") {
-      referenceRefs.push(include.ref);
-    }
-    if (include.type === "skill") {
-      skillRefs.push(include.ref);
+      case "instructions":
+        instructions.push(await readInstructions(include.path));
+        break;
+      case "taskRef":
+      case "adHocTask":
+        taskInputs.push(include);
+        break;
+      case "reference":
+        referenceRefs.push(include.ref);
+        break;
+      case "skill":
+        skillRefs.push(include.ref);
+        break;
+      default:
+        assertNever(include);
     }
   }
 
@@ -111,6 +117,10 @@ function mergeContract(
     do: [...(current?.do ?? []), ...(next.do ?? [])],
     dont: [...(current?.dont ?? []), ...(next.dont ?? [])],
   };
+}
+
+function assertNever(value: never): never {
+  throw new AgentPackError(`unsupported init include: ${JSON.stringify(value)}`);
 }
 
 async function readManifestRef(

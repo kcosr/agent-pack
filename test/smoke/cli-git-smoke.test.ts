@@ -53,7 +53,7 @@ references:
     ]);
     expect(state.references.map((reference: { name: string }) => reference.name)).toEqual([
       "manifest",
-      "after",
+      "after.md",
     ]);
   });
 

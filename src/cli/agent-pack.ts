@@ -24,98 +24,7 @@ program
   .description("Prepare durable work packets for coding agents.")
   .version("0.1.0");
 
-const initIncludes: InitInclude[] = [];
-
-program
-  .command("init")
-  .description("Create a pack.")
-  .option("--id <id>", "use a specific pack ID")
-  .option("--name <name>", "set a display name")
-  .option(
-    "--manifest <ref>",
-    "load a pack manifest YAML file or git ref",
-    collectInclude((ref) => ({ type: "manifest", ref })),
-    [],
-  )
-  .option(
-    "--manifests <ref>",
-    "load a pack manifest YAML file or git ref",
-    collectInclude((ref) => ({ type: "manifest", ref })),
-    [],
-  )
-  .option(
-    "--instructions <path>",
-    "load instructions from Markdown or YAML",
-    collectInclude((path) => ({ type: "instructions", path })),
-    [],
-  )
-  .option(
-    "--add-task <text>",
-    "add one ad hoc task",
-    collectInclude((text) => ({ type: "adHocTask", text })),
-    [],
-  )
-  .option(
-    "--task <ref>",
-    "add task YAML file, glob, or git ref",
-    collectInclude((ref) => ({ type: "taskRef", ref })),
-    [],
-  )
-  .option(
-    "--tasks <ref>",
-    "add task YAML file, glob, or git ref",
-    collectInclude((ref) => ({ type: "taskRef", ref })),
-    [],
-  )
-  .option(
-    "--reference <ref>",
-    "add one reference",
-    collectInclude((ref) => ({ type: "reference", ref: { ref } })),
-    [],
-  )
-  .option(
-    "--references <ref>",
-    "add a reference file, directory, glob, or repo",
-    collectInclude((ref) => ({ type: "reference", ref: { ref } })),
-    [],
-  )
-  .option(
-    "--skill <ref>",
-    "add one SKILL.md file",
-    collectInclude((ref) => ({ type: "skill", ref: { ref } })),
-    [],
-  )
-  .option(
-    "--skills <ref>",
-    "add skill file or glob",
-    collectInclude((ref) => ({ type: "skill", ref: { ref } })),
-    [],
-  )
-  .addOption(gitRefreshOption())
-  .option("--state-dir <path>", "override the state directory")
-  .option("--json", "emit machine-readable output")
-  .option("--strict", "reject ambiguous or unsupported metadata")
-  .argument("[prompt]", "one-off prompt rendered at the top of the brief")
-  .action(async (prompt, options) => {
-    await run(async () => {
-      const pack = await initPack({
-        id: options.id,
-        name: options.name,
-        includes: initIncludes,
-        prompt,
-        stateDir: options.stateDir,
-        gitRefresh: options.gitRefresh,
-        json: options.json,
-        strict: options.strict,
-      });
-      if (options.json) {
-        printJson({ id: pack.id, briefCommand: `agent-pack brief --id ${pack.id}`, pack });
-      } else {
-        process.stdout.write(`Created pack ${pack.id}\n`);
-        process.stdout.write(`Run: agent-pack brief --id ${pack.id}\n`);
-      }
-    });
-  });
+configureInitCommand(program);
 
 program
   .command("brief")
@@ -280,15 +189,104 @@ program.parseAsync(process.argv).catch((error) => {
   throw error;
 });
 
-function collect(value: string, previous: string[]): string[] {
-  previous.push(value);
-  return previous;
+function configureInitCommand(root: Command): void {
+  const includes: InitInclude[] = [];
+  root
+    .command("init")
+    .description("Create a pack.")
+    .option("--id <id>", "use a specific pack ID")
+    .option("--name <name>", "set a display name")
+    .option(
+      "--manifest <ref>",
+      "load a pack manifest YAML file or git ref",
+      collectInclude(includes, (ref) => ({ type: "manifest", ref })),
+      [],
+    )
+    .option(
+      "--manifests <ref>",
+      "load a pack manifest YAML file or git ref",
+      collectInclude(includes, (ref) => ({ type: "manifest", ref })),
+      [],
+    )
+    .option(
+      "--instructions <path>",
+      "load instructions from Markdown or YAML",
+      collectInclude(includes, (path) => ({ type: "instructions", path })),
+      [],
+    )
+    .option(
+      "--add-task <text>",
+      "add one ad hoc task",
+      collectInclude(includes, (text) => ({ type: "adHocTask", text })),
+      [],
+    )
+    .option(
+      "--task <ref>",
+      "add task YAML file, glob, or git ref",
+      collectInclude(includes, (ref) => ({ type: "taskRef", ref })),
+      [],
+    )
+    .option(
+      "--tasks <ref>",
+      "add task YAML file, glob, or git ref",
+      collectInclude(includes, (ref) => ({ type: "taskRef", ref })),
+      [],
+    )
+    .option(
+      "--reference <ref>",
+      "add one reference",
+      collectInclude(includes, (ref) => ({ type: "reference", ref: { ref } })),
+      [],
+    )
+    .option(
+      "--references <ref>",
+      "add a reference file, directory, glob, or repo",
+      collectInclude(includes, (ref) => ({ type: "reference", ref: { ref } })),
+      [],
+    )
+    .option(
+      "--skill <ref>",
+      "add one SKILL.md file",
+      collectInclude(includes, (ref) => ({ type: "skill", ref: { ref } })),
+      [],
+    )
+    .option(
+      "--skills <ref>",
+      "add skill file or glob",
+      collectInclude(includes, (ref) => ({ type: "skill", ref: { ref } })),
+      [],
+    )
+    .addOption(gitRefreshOption())
+    .option("--state-dir <path>", "override the state directory")
+    .option("--json", "emit machine-readable output")
+    .option("--strict", "reject ambiguous or unsupported metadata")
+    .argument("[prompt]", "one-off prompt rendered at the top of the brief")
+    .action(async (prompt, options) => {
+      await run(async () => {
+        const pack = await initPack({
+          id: options.id,
+          name: options.name,
+          includes,
+          prompt,
+          stateDir: options.stateDir,
+          gitRefresh: options.gitRefresh,
+          json: options.json,
+          strict: options.strict,
+        });
+        if (options.json) {
+          printJson({ id: pack.id, briefCommand: `agent-pack brief --id ${pack.id}`, pack });
+        } else {
+          process.stdout.write(`Created pack ${pack.id}\n`);
+          process.stdout.write(`Run: agent-pack brief --id ${pack.id}\n`);
+        }
+      });
+    });
 }
 
-function collectInclude(toInclude: (value: string) => InitInclude) {
+function collectInclude(includes: InitInclude[], toInclude: (value: string) => InitInclude) {
   return (value: string, previous: string[]): string[] => {
     previous.push(value);
-    initIncludes.push(toInclude(value));
+    includes.push(toInclude(value));
     return previous;
   };
 }

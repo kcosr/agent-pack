@@ -6,12 +6,18 @@ import { isGitRef } from "../git/ref.js";
 import { readTaskFile, taskTitleFromText } from "../manifest/parse.js";
 import { resolveInputPath, toDisplayPath } from "../paths.js";
 import { hasGlobMagic } from "../sources/glob.js";
-import type { GitRefresh, ManifestTask, PackTask, RuntimePaths, SourceInfo } from "../types.js";
+import type {
+  GitRefresh,
+  InitInclude,
+  ManifestTask,
+  PackTask,
+  RuntimePaths,
+  SourceInfo,
+} from "../types.js";
 
 export type TaskInput =
   | { type: "manifestTask"; task: ManifestTask; source: SourceInfo }
-  | { type: "taskRef"; ref: string }
-  | { type: "adHocTask"; text: string };
+  | Extract<InitInclude, { type: "taskRef" | "adHocTask" }>;
 
 export async function loadTasks(
   inputs: TaskInput[],
@@ -20,14 +26,18 @@ export async function loadTasks(
 ): Promise<PackTask[]> {
   const tasks: Array<{ task: ManifestTask; source?: SourceInfo }> = [];
   for (const input of inputs) {
-    if (input.type === "taskRef") {
-      tasks.push(...(await loadTaskRef(input.ref, paths, refresh)));
-    }
-    if (input.type === "adHocTask") {
-      tasks.push({ task: taskTitleFromText(input.text) });
-    }
-    if (input.type === "manifestTask") {
-      tasks.push({ task: input.task, source: input.source });
+    switch (input.type) {
+      case "taskRef":
+        tasks.push(...(await loadTaskRef(input.ref, paths, refresh)));
+        break;
+      case "adHocTask":
+        tasks.push({ task: taskTitleFromText(input.text) });
+        break;
+      case "manifestTask":
+        tasks.push({ task: input.task, source: input.source });
+        break;
+      default:
+        assertNever(input);
     }
   }
   return tasks.map(({ task, source }, index) => ({
@@ -41,6 +51,10 @@ export async function loadTasks(
     notes: [],
     source,
   }));
+}
+
+function assertNever(value: never): never {
+  throw new AgentPackError(`unsupported task input: ${JSON.stringify(value)}`);
 }
 
 async function loadTaskRef(
@@ -61,18 +75,17 @@ async function loadLocalTaskRef(
   if (files.length === 0) {
     throw new AgentPackError(`task source matched no files: ${ref}`);
   }
-  const loaded: Array<{ task: ManifestTask; source?: SourceInfo }> = [];
-  for (const file of files) {
-    const absPath = resolveInputPath(file, paths.repoRoot);
-    const tasks = await readTaskFile(absPath);
-    loaded.push(
-      ...tasks.map((task) => ({
+  const loaded = await Promise.all(
+    files.map(async (file) => {
+      const absPath = resolveInputPath(file, paths.repoRoot);
+      const tasks = await readTaskFile(absPath);
+      return tasks.map((task) => ({
         task,
         source: { kind: "file" as const, path: toDisplayPath(absPath, paths.repoRoot) },
-      })),
-    );
-  }
-  return loaded;
+      }));
+    }),
+  );
+  return loaded.flat();
 }
 
 async function loadGitTaskRef(
@@ -95,16 +108,15 @@ async function loadGitTaskRef(
   if (files.length === 0) {
     throw new AgentPackError(`task source matched no files: ${ref}`);
   }
-  const loaded: Array<{ task: ManifestTask; source?: SourceInfo }> = [];
-  for (const file of files) {
-    const absPath = path.join(materialized.snapshotRootAbs, file);
-    const tasks = await readTaskFile(absPath);
-    loaded.push(
-      ...tasks.map((task) => ({
+  const loaded = await Promise.all(
+    files.map(async (file) => {
+      const absPath = path.join(materialized.snapshotRootAbs, file);
+      const tasks = await readTaskFile(absPath);
+      return tasks.map((task) => ({
         task,
         source: { ...materialized.source, path: file },
-      })),
-    );
-  }
-  return loaded;
+      }));
+    }),
+  );
+  return loaded.flat();
 }
