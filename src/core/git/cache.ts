@@ -1,10 +1,11 @@
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { AgentPackError } from "../errors.js";
 import { ensureDir, errorMessage, isAlreadyExists, pathExists } from "../fs.js";
 import type { GitRefresh, RuntimePaths, SourceInfo } from "../types.js";
-import { parseGitRef, repoHash } from "./ref.js";
+import { parseGitRef, repoHash, sanitizeGitUrl } from "./ref.js";
 
 export interface MaterializedGitRef {
   source: SourceInfo;
@@ -22,6 +23,7 @@ export async function materializeGitRef(
 ): Promise<MaterializedGitRef> {
   const parsed = parseGitRef(ref);
   const hash = repoHash(parsed.url);
+  const sourceUrl = sanitizeGitUrl(parsed.url);
   const mirrorPath = path.join(paths.gitCacheDir, hash, "mirror.git");
   await ensureMirror(parsed.url, mirrorPath, refresh);
   const resolved = resolveCommit(mirrorPath, parsed.requestedRef);
@@ -34,7 +36,7 @@ export async function materializeGitRef(
   return {
     source: {
       kind: "git",
-      url: parsed.url,
+      url: sourceUrl,
       requestedRef: parsed.requestedRef,
       resolvedRef: resolved.ref,
       resolvedCommit: resolved.commit,
@@ -150,7 +152,7 @@ async function ensureSnapshot(
     return;
   }
   await ensureDir(path.dirname(snapshotRootAbs));
-  const tempDir = `${snapshotRootAbs}.tmp-${process.pid}-${Date.now()}`;
+  const tempDir = `${snapshotRootAbs}.tmp-${process.pid}-${Date.now()}-${randomUUID()}`;
   const tarPath = `${tempDir}.tar`;
   await rm(tempDir, { recursive: true, force: true });
   await rm(tarPath, { force: true });

@@ -81,6 +81,9 @@ export function normalizeTask(task: unknown, label = "task"): ManifestTask {
 }
 
 export function taskTitleFromText(text: string): ManifestTask {
+  if (!text.trim()) {
+    throw new AgentPackError("ad hoc task text must not be empty");
+  }
   return { title: text };
 }
 

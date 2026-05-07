@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { AgentPackError } from "../errors.js";
 import {
@@ -12,7 +12,7 @@ import {
   writeJson,
 } from "../fs.js";
 import { resolveRuntimePaths } from "../paths.js";
-import type { PackState, RuntimePaths, TaskStatus } from "../types.js";
+import type { PackState, RuntimePaths, TaskCounts, TaskStatus } from "../types.js";
 import { derivePackStatus, taskCounts } from "./status.js";
 
 const packStatuses = new Set(["no_tasks", "pending", "in_progress", "blocked", "completed"]);
@@ -66,10 +66,28 @@ export class StateStore {
   async listPacks(): Promise<PackState[]> {
     const index = await this.loadIndex();
     const packs: PackState[] = [];
-    for (const id of Object.keys(index.packs).sort()) {
+    for (const id of await this.packIds(index)) {
       packs.push(await this.loadPack(id));
     }
     return packs;
+  }
+
+  private async packIds(index: PackIndex): Promise<string[]> {
+    const ids = new Set(Object.keys(index.packs));
+    const entries = await readdir(this.paths.packDir).catch((error) => {
+      if (isNotFound(error)) {
+        return [];
+      }
+      throw new AgentPackError(
+        `failed to list pack directory ${this.paths.packDir}: ${errorMessage(error)}`,
+      );
+    });
+    for (const entry of entries) {
+      if (entry.endsWith(".json")) {
+        ids.add(entry.slice(0, -".json".length));
+      }
+    }
+    return [...ids].sort();
   }
 
   async loadPack(id?: string): Promise<PackState> {
@@ -167,14 +185,53 @@ export class StateStore {
     while (true) {
       try {
         await mkdir(lockPath);
+        await writeFile(
+          path.join(lockPath, "holder.json"),
+          `${JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() })}\n`,
+        );
         return;
       } catch (error) {
+        if (isAlreadyExists(error) && (await removeStaleLock(lockPath))) {
+          continue;
+        }
         if (!isAlreadyExists(error) || Date.now() > deadline) {
-          throw new AgentPackError(`failed to acquire pack lock: ${lockPath}`);
+          throw new AgentPackError(
+            `failed to acquire pack lock: ${lockPath}: ${errorMessage(error)}; if no agent-pack process is running, remove this lock directory`,
+          );
         }
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
     }
+  }
+}
+
+async function removeStaleLock(lockPath: string): Promise<boolean> {
+  const holderPath = path.join(lockPath, "holder.json");
+  try {
+    const holder = JSON.parse(await readFile(holderPath, "utf8")) as { pid?: unknown };
+    if (typeof holder.pid !== "number" || holder.pid <= 0 || !isProcessAlive(holder.pid)) {
+      await rm(lockPath, { recursive: true, force: true });
+      return true;
+    }
+  } catch (error) {
+    if (!isNotFound(error)) {
+      return false;
+    }
+    const lockStats = await stat(lockPath).catch(() => undefined);
+    if (lockStats && Date.now() - lockStats.mtimeMs > 5000) {
+      await rm(lockPath, { recursive: true, force: true });
+      return true;
+    }
+  }
+  return false;
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return false;
   }
 }
 
@@ -216,18 +273,30 @@ function validatePack(value: unknown, filePath: string): PackState {
   if (!Array.isArray(tasks)) {
     throw new AgentPackError(`invalid pack state field 'tasks': ${filePath}`);
   }
-  for (const field of ["references", "skills"]) {
-    if (!Array.isArray(value[field])) {
-      throw new AgentPackError(`invalid pack state field '${field}': ${filePath}`);
-    }
+  const references = value.references;
+  if (!Array.isArray(references)) {
+    throw new AgentPackError(`invalid pack state field 'references': ${filePath}`);
+  }
+  const skills = value.skills;
+  if (!Array.isArray(skills)) {
+    throw new AgentPackError(`invalid pack state field 'skills': ${filePath}`);
   }
   if (typeof value.status !== "string" || !packStatuses.has(value.status)) {
     throw new AgentPackError(`invalid pack state field 'status': ${filePath}`);
   }
   validateKnownPackFields(value, filePath);
   validatePackContract(value.contract, filePath);
-  validateTaskCounts(value.taskCounts, filePath);
+  const counts = validateTaskCounts(value.taskCounts, filePath);
   validatePackTasks(tasks, filePath);
+  validatePackReferences(references, filePath);
+  validatePackSkills(skills, filePath);
+  const expectedCounts = taskCounts(value.tasks as PackState["tasks"]);
+  if (JSON.stringify(counts) !== JSON.stringify(expectedCounts)) {
+    throw new AgentPackError(`invalid pack state field 'taskCounts': ${filePath}`);
+  }
+  if (value.status !== derivePackStatus(value.tasks as PackState["tasks"])) {
+    throw new AgentPackError(`invalid pack state field 'status': ${filePath}`);
+  }
   return value as unknown as PackState;
 }
 
@@ -278,7 +347,7 @@ function validatePackContract(value: unknown, filePath: string): void {
   }
 }
 
-function validateTaskCounts(value: unknown, filePath: string): void {
+function validateTaskCounts(value: unknown, filePath: string): TaskCounts {
   if (!isObject(value)) {
     throw new AgentPackError(`invalid pack state field 'taskCounts': ${filePath}`);
   }
@@ -287,6 +356,7 @@ function validateTaskCounts(value: unknown, filePath: string): void {
       throw new AgentPackError(`invalid pack taskCounts field '${field}': ${filePath}`);
     }
   }
+  return value as unknown as TaskCounts;
 }
 
 function validateOptionalPackString(value: unknown, field: string, filePath: string): void {
@@ -318,6 +388,73 @@ function validatePackTasks(value: unknown[], filePath: string): void {
       throw new AgentPackError(`invalid pack task field 'tasks[${index}].doneWhen': ${filePath}`);
     }
   }
+}
+
+function validatePackReferences(value: unknown[], filePath: string): void {
+  for (const [index, reference] of value.entries()) {
+    if (!isObject(reference)) {
+      throw new AgentPackError(`invalid pack reference at index ${index}: ${filePath}`);
+    }
+    validateRequiredString(reference.id, `references[${index}].id`, filePath);
+    validateRequiredString(reference.name, `references[${index}].name`, filePath);
+    validateOptionalString(reference.description, `references[${index}].description`, filePath);
+    validateSource(reference.source, `references[${index}].source`, filePath);
+    const locationCount =
+      Number(reference.path !== undefined) +
+      Number(reference.rootPath !== undefined) +
+      Number(reference.files !== undefined);
+    if (locationCount !== 1) {
+      throw new AgentPackError(`invalid pack reference location at index ${index}: ${filePath}`);
+    }
+    validateOptionalString(reference.path, `references[${index}].path`, filePath);
+    validateOptionalString(reference.rootPath, `references[${index}].rootPath`, filePath);
+    if (
+      reference.files !== undefined &&
+      (!Array.isArray(reference.files) ||
+        reference.files.some((entry) => typeof entry !== "string"))
+    ) {
+      throw new AgentPackError(
+        `invalid pack reference field 'references[${index}].files': ${filePath}`,
+      );
+    }
+  }
+}
+
+function validatePackSkills(value: unknown[], filePath: string): void {
+  for (const [index, skill] of value.entries()) {
+    if (!isObject(skill)) {
+      throw new AgentPackError(`invalid pack skill at index ${index}: ${filePath}`);
+    }
+    validateRequiredString(skill.id, `skills[${index}].id`, filePath);
+    validateRequiredString(skill.name, `skills[${index}].name`, filePath);
+    validateOptionalString(skill.description, `skills[${index}].description`, filePath);
+    validateRequiredString(skill.path, `skills[${index}].path`, filePath);
+    validateSource(skill.source, `skills[${index}].source`, filePath);
+  }
+}
+
+function validateSource(value: unknown, label: string, filePath: string): void {
+  if (!isObject(value)) {
+    throw new AgentPackError(`invalid pack source field '${label}': ${filePath}`);
+  }
+  if (
+    value.kind !== "file" &&
+    value.kind !== "directory" &&
+    value.kind !== "glob" &&
+    value.kind !== "git"
+  ) {
+    throw new AgentPackError(`invalid pack source field '${label}.kind': ${filePath}`);
+  }
+  if (value.kind === "git") {
+    validateRequiredString(value.url, `${label}.url`, filePath);
+    validateRequiredString(value.resolvedRef, `${label}.resolvedRef`, filePath);
+    validateRequiredString(value.resolvedCommit, `${label}.resolvedCommit`, filePath);
+    validateRequiredString(value.repoHash, `${label}.repoHash`, filePath);
+    validateOptionalString(value.requestedRef, `${label}.requestedRef`, filePath);
+    validateOptionalString(value.path, `${label}.path`, filePath);
+    return;
+  }
+  validateRequiredString(value.path, `${label}.path`, filePath);
 }
 
 function validateRequiredString(value: unknown, label: string, filePath: string): void {

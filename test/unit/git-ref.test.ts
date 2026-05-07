@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseGitRef } from "../../src/core/git/ref.js";
+import { parseGitRef, sanitizeGitUrl } from "../../src/core/git/ref.js";
 
 describe("parseGitRef", () => {
   it("parses https refs with repo paths and branches", () => {
@@ -36,5 +36,12 @@ describe("parseGitRef", () => {
     expect(() => parseGitRef("git+https://github.com/org/repo.git//../secret#main")).toThrow(
       "escapes repository",
     );
+  });
+
+  it("removes credentials from persisted git URLs", () => {
+    expect(sanitizeGitUrl("https://user:token@example.com/org/repo.git")).toBe(
+      "https://example.com/org/repo.git",
+    );
+    expect(sanitizeGitUrl("git@github.com:org/repo.git")).toBe("git@github.com:org/repo.git");
   });
 });

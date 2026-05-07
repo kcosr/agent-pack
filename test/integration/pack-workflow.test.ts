@@ -279,6 +279,18 @@ unknown: true`,
     ).rejects.toThrow("invalid pack id");
   });
 
+  it("rejects empty ad hoc tasks before writing state", async () => {
+    await expect(
+      initPack({
+        id: "empty-task",
+        includes: [{ type: "adHocTask", text: "   " }],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow("ad hoc task text must not be empty");
+
+    await expect(status("empty-task", false)).rejects.toThrow("pack not found");
+  });
+
   it("rejects corrupt index JSON instead of treating it as empty", async () => {
     await mkdir(".agent-pack/state", { recursive: true });
     await writeFile(".agent-pack/state/index.json", "{bad json");
@@ -347,6 +359,53 @@ unknown: true`,
     );
   });
 
+  it("rejects invalid pack reference state", async () => {
+    await mkdir(".agent-pack/state/packs", { recursive: true });
+    await writeFile(
+      ".agent-pack/state/packs/bad-reference-state.json",
+      JSON.stringify({
+        schemaVersion: 1,
+        id: "bad-reference-state",
+        status: "no_tasks",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        repoRoot: ".",
+        taskCounts: { total: 0, pending: 0, inProgress: 0, completed: 0, blocked: 0 },
+        tasks: [],
+        references: [{ id: "r001", name: "bad", source: { kind: "file" } }],
+        skills: [],
+      }),
+    );
+
+    await expect(status("bad-reference-state", false)).rejects.toThrow("source.path");
+  });
+
+  it("lists valid orphan pack files missing from the index", async () => {
+    await mkdir(".agent-pack/state/packs", { recursive: true });
+    await writeFile(
+      ".agent-pack/state/packs/orphan.json",
+      JSON.stringify({
+        schemaVersion: 1,
+        id: "orphan",
+        status: "no_tasks",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        repoRoot: ".",
+        taskCounts: { total: 0, pending: 0, inProgress: 0, completed: 0, blocked: 0 },
+        tasks: [],
+        references: [],
+        skills: [],
+      }),
+    );
+
+    const packs = await status(undefined, true);
+
+    if (!Array.isArray(packs)) {
+      throw new Error("expected pack list");
+    }
+    expect(packs.map((pack) => pack.id)).toContain("orphan");
+  });
+
   it("preserves concurrent task notes through locked updates", async () => {
     await initPack({
       id: "locked-notes",
@@ -362,6 +421,23 @@ unknown: true`,
     const pack = await status("locked-notes", false);
     expect(Array.isArray(pack)).toBe(false);
     expect((pack as Awaited<ReturnType<typeof updateTask>>).tasks[0]?.notes).toHaveLength(2);
+  });
+
+  it("recovers stale pack locks left by dead processes", async () => {
+    await initPack({
+      id: "stale-lock",
+      includes: [{ type: "adHocTask", text: "Inspect" }],
+      gitRefresh: "auto",
+    });
+    await mkdir(".agent-pack/locks/pack-stale-lock.lock", { recursive: true });
+    await writeFile(
+      ".agent-pack/locks/pack-stale-lock.lock/holder.json",
+      JSON.stringify({ pid: 99999999, createdAt: new Date().toISOString() }),
+    );
+
+    const pack = await updateTask("t001", "completed", "Done.", "stale-lock");
+
+    expect(pack.status).toBe("completed");
   });
 
   it("reports clear errors for missing local task inputs", async () => {

@@ -16,6 +16,16 @@ export function repoHash(url: string): string {
   return createHash("sha256").update(url).digest("hex").slice(0, 16);
 }
 
+export function sanitizeGitUrl(url: string): string {
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(url)) {
+    const parsed = new URL(url);
+    parsed.username = "";
+    parsed.password = "";
+    return parsed.toString();
+  }
+  return url;
+}
+
 export function parseGitRef(ref: string): GitRef {
   if (!isGitRef(ref)) {
     throw new AgentPackError(`not a git reference: ${ref}`);
