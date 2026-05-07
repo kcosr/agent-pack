@@ -12,8 +12,11 @@ import {
   writeJson,
 } from "../fs.js";
 import { resolveRuntimePaths } from "../paths.js";
-import type { PackState, RuntimePaths } from "../types.js";
+import type { PackState, RuntimePaths, TaskStatus } from "../types.js";
 import { derivePackStatus, taskCounts } from "./status.js";
+
+const packStatuses = new Set(["no_tasks", "pending", "in_progress", "blocked", "completed"]);
+const taskStatuses = new Set<TaskStatus>(["pending", "in_progress", "blocked", "completed"]);
 
 export interface PackIndexEntry {
   id: string;
@@ -206,16 +209,25 @@ function validatePack(value: unknown, filePath: string): PackState {
       throw new AgentPackError(`invalid pack state field '${field}': ${filePath}`);
     }
   }
-  for (const field of ["tasks", "references", "skills"]) {
+  for (const field of ["name", "prompt", "instructions"]) {
+    validateOptionalPackString(value[field], field, filePath);
+  }
+  const tasks = value.tasks;
+  if (!Array.isArray(tasks)) {
+    throw new AgentPackError(`invalid pack state field 'tasks': ${filePath}`);
+  }
+  for (const field of ["references", "skills"]) {
     if (!Array.isArray(value[field])) {
       throw new AgentPackError(`invalid pack state field '${field}': ${filePath}`);
     }
   }
+  if (typeof value.status !== "string" || !packStatuses.has(value.status)) {
+    throw new AgentPackError(`invalid pack state field 'status': ${filePath}`);
+  }
   validateKnownPackFields(value, filePath);
   validatePackContract(value.contract, filePath);
-  if (!isObject(value.taskCounts)) {
-    throw new AgentPackError(`invalid pack state field 'taskCounts': ${filePath}`);
-  }
+  validateTaskCounts(value.taskCounts, filePath);
+  validatePackTasks(tasks, filePath);
   return value as unknown as PackState;
 }
 
@@ -263,6 +275,60 @@ function validatePackContract(value: unknown, filePath: string): void {
     ) {
       throw new AgentPackError(`invalid pack contract field '${field}': ${filePath}`);
     }
+  }
+}
+
+function validateTaskCounts(value: unknown, filePath: string): void {
+  if (!isObject(value)) {
+    throw new AgentPackError(`invalid pack state field 'taskCounts': ${filePath}`);
+  }
+  for (const field of ["total", "pending", "inProgress", "completed", "blocked"]) {
+    if (!Number.isInteger(value[field]) || Number(value[field]) < 0) {
+      throw new AgentPackError(`invalid pack taskCounts field '${field}': ${filePath}`);
+    }
+  }
+}
+
+function validateOptionalPackString(value: unknown, field: string, filePath: string): void {
+  if (value !== undefined && typeof value !== "string") {
+    throw new AgentPackError(`invalid pack state field '${field}': ${filePath}`);
+  }
+}
+
+function validatePackTasks(value: unknown[], filePath: string): void {
+  for (const [index, task] of value.entries()) {
+    if (!isObject(task)) {
+      throw new AgentPackError(`invalid pack task at index ${index}: ${filePath}`);
+    }
+    validateRequiredString(task.id, `tasks[${index}].id`, filePath);
+    validateRequiredString(task.title, `tasks[${index}].title`, filePath);
+    if (typeof task.status !== "string" || !taskStatuses.has(task.status as TaskStatus)) {
+      throw new AgentPackError(`invalid pack task field 'tasks[${index}].status': ${filePath}`);
+    }
+    if (!Array.isArray(task.notes) || task.notes.some((note) => typeof note !== "string")) {
+      throw new AgentPackError(`invalid pack task field 'tasks[${index}].notes': ${filePath}`);
+    }
+    for (const field of ["sourceId", "category", "body", "startedAt", "completedAt", "blockedAt"]) {
+      validateOptionalString(task[field], `tasks[${index}].${field}`, filePath);
+    }
+    if (
+      task.doneWhen !== undefined &&
+      (!Array.isArray(task.doneWhen) || task.doneWhen.some((entry) => typeof entry !== "string"))
+    ) {
+      throw new AgentPackError(`invalid pack task field 'tasks[${index}].doneWhen': ${filePath}`);
+    }
+  }
+}
+
+function validateRequiredString(value: unknown, label: string, filePath: string): void {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new AgentPackError(`invalid pack task field '${label}': ${filePath}`);
+  }
+}
+
+function validateOptionalString(value: unknown, label: string, filePath: string): void {
+  if (value !== undefined && (typeof value !== "string" || !value.trim())) {
+    throw new AgentPackError(`invalid pack task field '${label}': ${filePath}`);
   }
 }
 

@@ -13,7 +13,7 @@ const manifestKeys = new Set([
   "skills",
   "contract",
 ]);
-const taskKeys = new Set(["id", "title", "name", "category", "body", "description", "doneWhen"]);
+const taskKeys = new Set(["id", "title", "category", "body", "doneWhen"]);
 const includeKeys = new Set(["name", "description", "ref"]);
 const contractKeys = new Set(["do", "dont"]);
 
@@ -132,8 +132,13 @@ function validateTasks(value: unknown, filePath: string, strict: boolean): void 
     if (strict) {
       assertKnownKeys(task, taskKeys, `tasks[${index}]`);
     }
-    if (task.doneWhen !== undefined && !Array.isArray(task.doneWhen)) {
-      throw new AgentPackError(`manifest tasks[${index}].doneWhen must be an array: ${filePath}`);
+    validateTaskString(task.id, `tasks[${index}].id`, filePath);
+    validateTaskString(task.title, `tasks[${index}].title`, filePath);
+    validateTaskString(task.category, `tasks[${index}].category`, filePath);
+    validateTaskString(task.body, `tasks[${index}].body`, filePath);
+    validateStringList(task.doneWhen, `tasks[${index}].doneWhen`, filePath);
+    if (task.id === undefined && task.title === undefined) {
+      throw new AgentPackError(`manifest tasks[${index}] requires id or title: ${filePath}`);
     }
   }
 }
@@ -185,6 +190,12 @@ function validateStringList(value: unknown, label: string, filePath: string): vo
   }
   if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string" || !entry.trim())) {
     throw new AgentPackError(`manifest ${label} must be an array of strings: ${filePath}`);
+  }
+}
+
+function validateTaskString(value: unknown, label: string, filePath: string): void {
+  if (value !== undefined && (typeof value !== "string" || !value.trim())) {
+    throw new AgentPackError(`manifest ${label} must be a string: ${filePath}`);
   }
 }
 

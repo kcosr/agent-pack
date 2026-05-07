@@ -182,6 +182,45 @@ contract:
     ).rejects.toThrow("contract.do must be an array of strings");
   });
 
+  it("rejects invalid manifest task shapes", async () => {
+    await writeFile(
+      "pack.yaml",
+      `schemaVersion: 1
+tasks:
+  - title: 123
+  - id: inspect
+    doneWhen:
+      - true`,
+    );
+
+    await expect(
+      initPack({
+        id: "bad-manifest-task",
+        includes: [{ type: "manifest", ref: "pack.yaml" }],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow("tasks[0].title must be a string");
+  });
+
+  it("rejects manifest task aliases in strict mode", async () => {
+    await writeFile(
+      "pack.yaml",
+      `schemaVersion: 1
+tasks:
+  - name: Inspect
+    description: Read the design`,
+    );
+
+    await expect(
+      initPack({
+        id: "alias-manifest-task",
+        includes: [{ type: "manifest", ref: "pack.yaml" }],
+        gitRefresh: "auto",
+        strict: true,
+      }),
+    ).rejects.toThrow("tasks[0].name");
+  });
+
   it("rejects git manifest refs without a file path", async () => {
     await expect(
       initPack({
@@ -237,6 +276,36 @@ contract:
 
     await expect(status("obsolete", false)).rejects.toThrow(
       "unsupported pack state field 'unexpectedField'",
+    );
+  });
+
+  it("rejects invalid pack task state before mutation", async () => {
+    await mkdir(".agent-pack/state/packs", { recursive: true });
+    await writeFile(
+      ".agent-pack/state/packs/bad-task-state.json",
+      JSON.stringify({
+        schemaVersion: 1,
+        id: "bad-task-state",
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        repoRoot: ".",
+        taskCounts: { total: 1, pending: 1, inProgress: 0, completed: 0, blocked: 0 },
+        tasks: [
+          {
+            id: "t001",
+            title: "Inspect",
+            status: "pending",
+            notes: "not an array",
+          },
+        ],
+        references: [],
+        skills: [],
+      }),
+    );
+
+    await expect(updateTask("t001", "completed", "Done.", "bad-task-state")).rejects.toThrow(
+      "tasks[0].notes",
     );
   });
 
