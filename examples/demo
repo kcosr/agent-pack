@@ -1,0 +1,18 @@
+schemaVersion: 1
+name: demo
+instructions: |
+  This demo pack verifies the basic agent-pack loop: read the brief, run a
+  simple command, record evidence in task notes, and mark the task done.
+
+tasks:
+  - id: record-date
+    title: Run date and record the output
+    category: demo
+    body: |
+      Run `date` from the repository root. Add a task note containing the exact
+      command you ran and the complete output. Then mark this task done with a
+      short completion note.
+    doneWhen:
+      - Notes include the exact `date` command that was run.
+      - Notes include the complete `date` output.
+      - The task is marked completed.

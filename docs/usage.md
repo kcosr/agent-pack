@@ -8,24 +8,23 @@ Create a pack:
 
 ```bash
 agent-pack init \
-  --id review-pack \
-  --manifest ./examples/design-review.yaml \
-  --reference ./README.md \
-  "Review this project and record concrete findings."
+  --id demo-pack \
+  --manifest ./examples/demo \
+  "Run the demo task and record the result."
 ```
 
 Print the agent brief:
 
 ```bash
-agent-pack brief --id review-pack
+agent-pack brief --id demo-pack
 ```
 
 Then ask an agent to run the brief and update task status as it works:
 
 ```bash
-agent-pack start t001 --id review-pack
-agent-pack note t001 --id review-pack "Read README and usage docs."
-agent-pack done t001 --id review-pack --note "Findings recorded."
+agent-pack start t001 --id demo-pack
+agent-pack note t001 --id demo-pack "date output: Thu May 7 ..."
+agent-pack done t001 --id demo-pack --note "Recorded date output."
 ```
 
 ## Source Types
@@ -67,6 +66,6 @@ Commit `.agent-pack/state/` if you want pack progress to travel with the reposit
 On a new host, rebuild git-backed material:
 
 ```bash
-agent-pack sync --id review-pack
-agent-pack brief --id review-pack
+agent-pack sync --id demo-pack
+agent-pack brief --id demo-pack
 ```
