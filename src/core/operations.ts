@@ -15,6 +15,7 @@ import type {
   ManifestReference,
   ManifestSkill,
   ManifestTask,
+  PackContract,
   PackManifest,
   PackState,
   PackTask,
@@ -31,9 +32,7 @@ export async function initPack(input: InitInput): Promise<PackState> {
   const skillRefs: ManifestSkill[] = [];
   const instructions: string[] = [];
   let name = input.name;
-  let contract: unknown;
-  let surfaceInventory: unknown[] | undefined;
-  let assumptions: unknown[] | undefined;
+  let contract: PackContract | undefined;
 
   for (const manifestRef of input.manifests) {
     const { manifest, source: manifestSource } = await readManifestRef(
@@ -51,9 +50,7 @@ export async function initPack(input: InitInput): Promise<PackState> {
     );
     referenceRefs.push(...(manifest.references ?? []));
     skillRefs.push(...(manifest.skills ?? []));
-    contract ??= manifest.contract;
-    surfaceInventory ??= manifest.surfaceInventory;
-    assumptions ??= manifest.assumptions;
+    contract = mergeContract(contract, manifest.contract);
   }
 
   for (const instructionFile of input.instructionFiles) {
@@ -93,11 +90,22 @@ export async function initPack(input: InitInput): Promise<PackState> {
     references,
     skills,
     contract,
-    surfaceInventory,
-    assumptions,
   };
   await store.createPack(pack);
   return store.loadPack(pack.id);
+}
+
+function mergeContract(
+  current: PackContract | undefined,
+  next: PackContract | undefined,
+): PackContract | undefined {
+  if (!next) {
+    return current;
+  }
+  return {
+    do: [...(current?.do ?? []), ...(next.do ?? [])],
+    dont: [...(current?.dont ?? []), ...(next.dont ?? [])],
+  };
 }
 
 async function readManifestRef(

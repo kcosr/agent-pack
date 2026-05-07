@@ -69,13 +69,19 @@ export function renderBrief(
     }
   }
   if (pack.contract) {
-    lines.push("", "Contract:", formatBlock(pack.contract));
-  }
-  if (pack.surfaceInventory?.length) {
-    lines.push("", "Surface inventory:", formatBlock(pack.surfaceInventory));
-  }
-  if (pack.assumptions?.length) {
-    lines.push("", "Assumptions:", formatBlock(pack.assumptions));
+    lines.push("", "Contract:", "Follow this contract while working this pack.");
+    if (pack.contract.do?.length) {
+      lines.push("Do:");
+      for (const entry of pack.contract.do) {
+        lines.push(`- ${entry}`);
+      }
+    }
+    if (pack.contract.dont?.length) {
+      lines.push("Don't:");
+      for (const entry of pack.contract.dont) {
+        lines.push(`- ${entry}`);
+      }
+    }
   }
   lines.push("", "Progress commands:");
   for (const task of pack.tasks) {
@@ -108,8 +114,4 @@ export function renderSummary(pack: PackState): string {
 
 function formatTaskSummary(task: PackTask): string {
   return `[${task.status}] ${task.id} - ${task.title}`;
-}
-
-function formatBlock(value: unknown): string {
-  return typeof value === "string" ? value : JSON.stringify(value, null, 2);
 }

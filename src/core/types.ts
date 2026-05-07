@@ -53,6 +53,11 @@ export interface TaskCounts {
   blocked: number;
 }
 
+export interface PackContract {
+  do?: string[];
+  dont?: string[];
+}
+
 export interface PackState {
   schemaVersion: 1;
   id: string;
@@ -67,9 +72,7 @@ export interface PackState {
   tasks: PackTask[];
   references: PackReference[];
   skills: PackSkill[];
-  contract?: unknown;
-  surfaceInventory?: unknown[];
-  assumptions?: unknown[];
+  contract?: PackContract;
 }
 
 export interface ManifestTask {
@@ -100,9 +103,7 @@ export interface PackManifest {
   tasks?: ManifestTask[];
   references?: ManifestReference[];
   skills?: ManifestSkill[];
-  contract?: unknown;
-  surfaceInventory?: unknown[];
-  assumptions?: unknown[];
+  contract?: PackContract;
 }
 
 export interface InitInput {

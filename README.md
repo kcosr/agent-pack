@@ -177,6 +177,13 @@ references:
 
 skills:
   - ref: ./skills/fresh-eyes/SKILL.md
+
+contract:
+  do:
+    - Run relevant tests before marking tasks done.
+    - Record concrete evidence in task notes.
+  dont:
+    - Leave required task state updates until the end.
 ```
 
 Initialize a pack:

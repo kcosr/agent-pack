@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
 import { AgentPackError } from "../errors.js";
-import type { ManifestTask, PackManifest } from "../types.js";
+import type { ManifestTask, PackContract, PackManifest } from "../types.js";
 
 const manifestKeys = new Set([
   "schemaVersion",
@@ -12,11 +12,10 @@ const manifestKeys = new Set([
   "references",
   "skills",
   "contract",
-  "surfaceInventory",
-  "assumptions",
 ]);
 const taskKeys = new Set(["id", "title", "name", "category", "body", "description", "doneWhen"]);
 const includeKeys = new Set(["name", "description", "ref"]);
+const contractKeys = new Set(["do", "dont"]);
 
 export async function readManifest(filePath: string, strict = false): Promise<PackManifest> {
   const content = await readText(filePath, "manifest");
@@ -116,12 +115,7 @@ function validateManifest(
   validateTasks(manifest.tasks, filePath, strict);
   validateIncludes(manifest.references, "references", filePath, strict);
   validateIncludes(manifest.skills, "skills", filePath, strict);
-  if (manifest.surfaceInventory !== undefined && !Array.isArray(manifest.surfaceInventory)) {
-    throw new AgentPackError(`manifest surfaceInventory must be an array: ${filePath}`);
-  }
-  if (manifest.assumptions !== undefined && !Array.isArray(manifest.assumptions)) {
-    throw new AgentPackError(`manifest assumptions must be an array: ${filePath}`);
-  }
+  validateContract(manifest.contract, filePath, strict);
 }
 
 function validateTasks(value: unknown, filePath: string, strict: boolean): void {
@@ -166,6 +160,31 @@ function validateIncludes(
     if (typeof entry.ref !== "string" || !entry.ref.trim()) {
       throw new AgentPackError(`manifest ${label}[${index}].ref must be a string: ${filePath}`);
     }
+  }
+}
+
+function validateContract(value: unknown, filePath: string, strict: boolean): void {
+  if (value === undefined) {
+    return;
+  }
+  if (!isObject(value)) {
+    throw new AgentPackError(`manifest contract must be an object: ${filePath}`);
+  }
+  assertKnownKeys(value, contractKeys, "contract");
+  const contract = value as PackContract;
+  validateStringList(contract.do, "contract.do", filePath);
+  validateStringList(contract.dont, "contract.dont", filePath);
+  if (!contract.do?.length && !contract.dont?.length) {
+    throw new AgentPackError(`manifest contract requires do or dont entries: ${filePath}`);
+  }
+}
+
+function validateStringList(value: unknown, label: string, filePath: string): void {
+  if (value === undefined) {
+    return;
+  }
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string" || !entry.trim())) {
+    throw new AgentPackError(`manifest ${label} must be an array of strings: ${filePath}`);
   }
 }
 

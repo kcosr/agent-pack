@@ -40,9 +40,10 @@ references:
 skills:
   - ref: ./skills/**
 contract:
-  type: review
-assumptions:
-  - Local files are current.`,
+  do:
+    - Record concrete evidence.
+  dont:
+    - Skip referenced material.`,
     );
 
     const pack = await initPack({
@@ -61,7 +62,10 @@ assumptions:
     expect(pack.tasks[0]?.source?.path).toBe("./pack.yaml");
     expect(pack.references[0]?.path).toBe("./docs/design.md");
     expect(pack.skills[0]?.name).toBe("fresh-eyes");
-    expect(pack.contract).toEqual({ type: "review" });
+    expect(pack.contract).toEqual({
+      do: ["Record concrete evidence."],
+      dont: ["Skip referenced material."],
+    });
 
     const updated = await updateTask("t001", "completed", "Done.", "design-review");
     expect(updated.status).toBe("completed");
@@ -121,6 +125,28 @@ references:
     ).rejects.toThrow("tasks[0].unknownNested");
   });
 
+  it("rejects invalid contract shapes", async () => {
+    await writeFile(
+      "pack.yaml",
+      `schemaVersion: 1
+contract:
+  do: Run tests`,
+    );
+
+    await expect(
+      initPack({
+        id: "bad-contract",
+        manifests: ["pack.yaml"],
+        instructionFiles: [],
+        taskRefs: [],
+        adHocTasks: [],
+        referenceRefs: [],
+        skillRefs: [],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow("contract.do must be an array of strings");
+  });
+
   it("rejects git manifest refs without a file path", async () => {
     await expect(
       initPack({
@@ -163,6 +189,30 @@ references:
     await writeFile(".agent-pack/state/packs/bad.json", JSON.stringify({ schemaVersion: 99 }));
 
     await expect(status("bad", false)).rejects.toThrow("schemaVersion 99 is not supported");
+  });
+
+  it("rejects unknown pack state fields", async () => {
+    await mkdir(".agent-pack/state/packs", { recursive: true });
+    await writeFile(
+      ".agent-pack/state/packs/obsolete.json",
+      JSON.stringify({
+        schemaVersion: 1,
+        id: "obsolete",
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        repoRoot: ".",
+        taskCounts: { total: 0, pending: 0, inProgress: 0, completed: 0, blocked: 0 },
+        tasks: [],
+        references: [],
+        skills: [],
+        unexpectedField: true,
+      }),
+    );
+
+    await expect(status("obsolete", false)).rejects.toThrow(
+      "unsupported pack state field 'unexpectedField'",
+    );
   });
 
   it("preserves concurrent task notes through locked updates", async () => {

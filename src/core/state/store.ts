@@ -211,10 +211,59 @@ function validatePack(value: unknown, filePath: string): PackState {
       throw new AgentPackError(`invalid pack state field '${field}': ${filePath}`);
     }
   }
+  validateKnownPackFields(value, filePath);
+  validatePackContract(value.contract, filePath);
   if (!isObject(value.taskCounts)) {
     throw new AgentPackError(`invalid pack state field 'taskCounts': ${filePath}`);
   }
   return value as unknown as PackState;
+}
+
+function validateKnownPackFields(value: Record<string, unknown>, filePath: string): void {
+  const allowed = new Set([
+    "schemaVersion",
+    "id",
+    "name",
+    "status",
+    "createdAt",
+    "updatedAt",
+    "repoRoot",
+    "prompt",
+    "instructions",
+    "taskCounts",
+    "tasks",
+    "references",
+    "skills",
+    "contract",
+  ]);
+  for (const field of Object.keys(value)) {
+    if (!allowed.has(field)) {
+      throw new AgentPackError(`unsupported pack state field '${field}': ${filePath}`);
+    }
+  }
+}
+
+function validatePackContract(value: unknown, filePath: string): void {
+  if (value === undefined) {
+    return;
+  }
+  if (!isObject(value)) {
+    throw new AgentPackError(`invalid pack state field 'contract': ${filePath}`);
+  }
+  for (const key of Object.keys(value)) {
+    if (key !== "do" && key !== "dont") {
+      throw new AgentPackError(`invalid pack contract field '${key}': ${filePath}`);
+    }
+  }
+  for (const field of ["do", "dont"]) {
+    const entries = value[field];
+    if (
+      entries !== undefined &&
+      (!Array.isArray(entries) || entries.some((entry) => typeof entry !== "string"))
+    ) {
+      throw new AgentPackError(`invalid pack contract field '${field}': ${filePath}`);
+    }
+  }
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

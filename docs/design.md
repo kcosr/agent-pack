@@ -51,8 +51,7 @@ A pack can contain:
 - `tasks`: mutable work items with status, notes, and evidence.
 - `references`: read-only context files for the agent to inspect.
 - `skills`: read-only `SKILL.md` files plus extracted metadata.
-- `contract`: optional observable behavior/specification.
-- `surfaceInventory`: optional list of user-visible names to wire or verify.
+- `contract`: optional do/dont rules rendered as brief instructions.
 - `summary`: generated projection of canonical pack state.
 
 ## CLI Sketch
@@ -125,7 +124,7 @@ Brief output should include:
 - task list and status
 - references with descriptions and readable paths
 - skills with extracted descriptions and readable paths
-- contract, surface inventory, assumptions, and blockers when present
+- contract rules and blockers when present
 - commands for updating task progress
 
 Example:
@@ -433,20 +432,11 @@ skills:
   - ref: ./skills/fresh-eyes/SKILL.md
 
 contract:
-  type: design
-  summary: Produce a comprehensive pack design without changing implementation files.
-
-surfaceInventory:
-  - name: agent-pack
-    disposition: added
-    layers:
-      - CLI command name
-      - state directory name
-      - environment variables
-      - brief rendering
-      - documentation examples
-    symmetricPeers: []
-    removalTwin: null
+  do:
+    - Run relevant checks before marking tasks done.
+    - Record concrete evidence in task notes.
+  dont:
+    - Leave task state updates until the end.
 ```
 
 CLI flags and YAML can be combined. Merge order should be deterministic:
@@ -578,11 +568,14 @@ This still supports resuming on a new host. A user can clone the project, then t
     }
   ],
   "contract": {
-    "type": "design",
-    "summary": "Produce a comprehensive pack design."
-  },
-  "surfaceInventory": [],
-  "assumptions": []
+    "do": [
+      "Run relevant checks before marking tasks done.",
+      "Record concrete evidence in task notes."
+    ],
+    "dont": [
+      "Leave task state updates until the end."
+    ]
+  }
 }
 ```
 
