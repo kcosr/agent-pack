@@ -19,6 +19,20 @@ describe("extractSkillMetadata", () => {
     });
   });
 
+  it("ignores unknown frontmatter fields", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "agent-pack-skill-"));
+    const skillPath = path.join(dir, "SKILL.md");
+    await writeFile(
+      skillPath,
+      "---\nname: reviewer\ndescription: Review code carefully.\ndisable-model-invocation: true\n---\n# Other\n",
+    );
+
+    await expect(extractSkillMetadata(skillPath)).resolves.toEqual({
+      name: "reviewer",
+      description: "Review code carefully.",
+    });
+  });
+
   it("falls back to heading and first paragraph", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "agent-pack-skill-"));
     const skillPath = path.join(dir, "SKILL.md");

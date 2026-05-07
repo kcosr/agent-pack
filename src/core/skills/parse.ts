@@ -32,21 +32,12 @@ function parseFrontmatter(
     throw new AgentPackError(`skill frontmatter must be a YAML object: ${filePath}`);
   }
   const raw = parsed as Record<string, unknown>;
-  assertKnownSkillKeys(raw, filePath);
   validateOptionalString(raw.name, "name", filePath);
   validateOptionalString(raw.description, "description", filePath);
   return {
     name: typeof raw.name === "string" ? raw.name : undefined,
     description: typeof raw.description === "string" ? raw.description : undefined,
   };
-}
-
-function assertKnownSkillKeys(value: Record<string, unknown>, filePath: string): void {
-  for (const key of Object.keys(value)) {
-    if (key !== "name" && key !== "description") {
-      throw new AgentPackError(`unsupported skill frontmatter field ${key}: ${filePath}`);
-    }
-  }
 }
 
 function validateOptionalString(value: unknown, field: string, filePath: string): void {

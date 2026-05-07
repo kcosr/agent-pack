@@ -156,7 +156,7 @@ agent-pack init --skills './skills/**' --add-task "Apply relevant skills to this
 
 That command scans broadly but only includes matching `SKILL.md` files.
 
-A `SKILL.md` may include YAML frontmatter with `name` and `description` fields. Unknown frontmatter fields are rejected. Without frontmatter, the name falls back to the first `#` heading and then the parent directory name; the description falls back to the first paragraph, capped at 300 characters.
+A `SKILL.md` may include YAML frontmatter with `name` and `description` fields. Other frontmatter fields are ignored. Without frontmatter, the name falls back to the first `#` heading and then the parent directory name; the description falls back to the first paragraph, capped at 300 characters.
 
 ```markdown
 ---
