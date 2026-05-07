@@ -24,4 +24,17 @@ describe("parseGitRef", () => {
       requestedRef: undefined,
     });
   });
+
+  it("rejects option-looking URLs and refs", () => {
+    expect(() => parseGitRef("git+--upload-pack=touch /tmp/x")).toThrow("invalid git URL");
+    expect(() => parseGitRef("git+https://github.com/org/repo.git#--help")).toThrow(
+      "invalid git ref",
+    );
+  });
+
+  it("rejects paths that escape the repository", () => {
+    expect(() => parseGitRef("git+https://github.com/org/repo.git//../secret#main")).toThrow(
+      "escapes repository",
+    );
+  });
 });

@@ -17,6 +17,7 @@ import {
 import type { GitRefresh, ManifestReference, ManifestSkill, PackState } from "../core/types.js";
 
 const program = new Command();
+let startupError: AgentPackError | undefined;
 
 program
   .name("agent-pack")
@@ -221,7 +222,14 @@ program
     });
   });
 
-program.parseAsync(process.argv);
+program.parseAsync(process.argv).catch((error) => {
+  if (error instanceof AgentPackError) {
+    console.error(`agent-pack: ${error.message}`);
+    process.exitCode = 1;
+    return;
+  }
+  throw error;
+});
 
 function collect(value: string, previous: string[]): string[] {
   previous.push(value);
@@ -231,7 +239,19 @@ function collect(value: string, previous: string[]): string[] {
 function gitRefreshOption(): Option {
   return new Option("--git-refresh <policy>", "git fetch policy")
     .choices(["auto", "always", "never"])
-    .default((process.env.AGENT_PACK_GIT_REFRESH as GitRefresh | undefined) ?? "auto");
+    .default(defaultGitRefresh());
+}
+
+function defaultGitRefresh(): GitRefresh {
+  const value = process.env.AGENT_PACK_GIT_REFRESH;
+  if (!value) {
+    return "auto";
+  }
+  if (value === "auto" || value === "always" || value === "never") {
+    return value;
+  }
+  startupError = new AgentPackError(`invalid AGENT_PACK_GIT_REFRESH value: ${value}`);
+  return "auto";
 }
 
 function toRefs(refs: string[]): ManifestReference[] {
@@ -259,6 +279,9 @@ function printJson(value: unknown): void {
 
 async function run(fn: () => Promise<void>): Promise<void> {
   try {
+    if (startupError) {
+      throw startupError;
+    }
     await fn();
   } catch (error) {
     if (error instanceof AgentPackError) {

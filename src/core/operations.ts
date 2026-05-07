@@ -1,11 +1,12 @@
 import path from "node:path";
 import { renderBrief, renderSummary } from "./brief/render.js";
 import { AgentPackError } from "./errors.js";
+import { pathExists } from "./fs.js";
 import { ensureGitSourceSnapshot, gitSourceTargetPath } from "./git/cache.js";
 import { readInstructions, readManifest } from "./manifest/parse.js";
 import { resolveInputPath, toDisplayPath } from "./paths.js";
 import { resolveReferences, resolveSkills } from "./sources/resolve.js";
-import { StateStore } from "./state/store.js";
+import { StateStore, assertValidPackId } from "./state/store.js";
 import { loadTasks } from "./tasks/load.js";
 import type {
   GitRefresh,
@@ -57,7 +58,7 @@ export async function initPack(input: InitInput): Promise<PackState> {
   referenceRefs.push(...input.referenceRefs);
   skillRefs.push(...input.skillRefs);
 
-  const packId = input.id ?? slug(name ?? "pack");
+  const packId = assertValidPackId(input.id ?? slug(name ?? "pack"));
   const tasks = await loadTasks(
     input.taskRefs,
     input.adHocTasks,
@@ -146,26 +147,34 @@ export async function updateTask(
   id?: string,
 ): Promise<PackState> {
   const store = new StateStore();
-  const pack = await store.loadPack(id);
-  const task = getTask(pack, taskId);
-  const now = new Date().toISOString();
-  if (status) {
-    task.status = status;
-    if (status === "in_progress") {
-      task.startedAt ??= now;
-    }
-    if (status === "completed") {
-      task.completedAt = now;
-    }
-    if (status === "blocked") {
-      task.blockedAt = now;
-    }
-  }
-  if (note?.trim()) {
-    task.notes.push(`${now} ${note.trim()}`);
-  }
-  await store.savePack(pack, status ? `task.${status}` : "task.note", { taskId, note });
-  return store.loadPack(pack.id);
+  return store.updatePack(
+    id,
+    (pack) => {
+      const task = getTask(pack, taskId);
+      const now = new Date().toISOString();
+      if (status) {
+        task.status = status;
+        if (status === "in_progress") {
+          task.startedAt ??= now;
+          task.completedAt = undefined;
+          task.blockedAt = undefined;
+        }
+        if (status === "completed") {
+          task.completedAt = now;
+          task.blockedAt = undefined;
+        }
+        if (status === "blocked") {
+          task.blockedAt = now;
+          task.completedAt = undefined;
+        }
+      }
+      if (note?.trim()) {
+        task.notes.push(`${now} ${note.trim()}`);
+      }
+    },
+    status ? `task.${status}` : "task.note",
+    { taskId, note },
+  );
 }
 
 export async function status(id?: string, all = false): Promise<PackState | PackState[]> {
@@ -215,7 +224,6 @@ export async function validateCachePaths(
 }
 
 async function existsDisplayPath(displayPath: string): Promise<boolean> {
-  const { pathExists } = await import("./fs.js");
   const abs = resolveInputPath(displayPath, process.cwd());
   return pathExists(path.normalize(abs));
 }

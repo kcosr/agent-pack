@@ -317,7 +317,7 @@ Whole-repo references should use a clean tracked snapshot, not expose the cached
 
 For local directories, reference files in place recursively by default. Do not follow symlinked directories by default. Preserve paths relative to the referenced directory in pack metadata.
 
-For repo snapshots, export tracked files from the resolved commit into the shared snapshot cache. If the implementation defines default safety excludes for bulky/generated paths, the brief/report must say whether the snapshot is complete or filtered.
+For repo snapshots, export tracked files from the resolved commit into the shared snapshot cache. Reject symlink entries instead of extracting them. If the implementation defines default safety excludes for bulky/generated paths, the brief/report must say whether the snapshot is complete or filtered.
 
 Readable paths should be direct local paths for local sources and repo-local cache paths for git sources:
 

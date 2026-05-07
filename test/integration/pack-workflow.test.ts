@@ -94,6 +94,84 @@ tasks:
     ).rejects.toThrow("unsupported manifest field");
   });
 
+  it("rejects unsupported nested manifest fields in strict mode", async () => {
+    await writeFile(
+      "pack.yaml",
+      `schemaVersion: 1
+tasks:
+  - title: Inspect
+    unknownNested: true
+references:
+  - ref: ./README.md
+    extra: true`,
+    );
+
+    await expect(
+      initPack({
+        id: "strict-nested-pack",
+        manifests: ["pack.yaml"],
+        instructionFiles: [],
+        taskRefs: [],
+        adHocTasks: [],
+        referenceRefs: [],
+        skillRefs: [],
+        gitRefresh: "auto",
+        strict: true,
+      }),
+    ).rejects.toThrow("tasks[0].unknownNested");
+  });
+
+  it("rejects invalid pack IDs before resolving state paths", async () => {
+    await expect(
+      initPack({
+        id: "../outside",
+        manifests: [],
+        instructionFiles: [],
+        taskRefs: [],
+        adHocTasks: ["Inspect"],
+        referenceRefs: [],
+        skillRefs: [],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow("invalid pack id");
+  });
+
+  it("rejects corrupt index JSON instead of treating it as empty", async () => {
+    await mkdir(".agent-pack/state", { recursive: true });
+    await writeFile(".agent-pack/state/index.json", "{bad json");
+
+    await expect(status(undefined, true)).rejects.toThrow("failed to read JSON");
+  });
+
+  it("rejects invalid pack state schema", async () => {
+    await mkdir(".agent-pack/state/packs", { recursive: true });
+    await writeFile(".agent-pack/state/packs/bad.json", JSON.stringify({ schemaVersion: 99 }));
+
+    await expect(status("bad", false)).rejects.toThrow("schemaVersion 99 is not supported");
+  });
+
+  it("preserves concurrent task notes through locked updates", async () => {
+    await initPack({
+      id: "locked-notes",
+      manifests: [],
+      instructionFiles: [],
+      taskRefs: [],
+      adHocTasks: ["Inspect"],
+      referenceRefs: [],
+      skillRefs: [],
+      gitRefresh: "auto",
+    });
+
+    await Promise.all([
+      updateTask("t001", undefined, "first note", "locked-notes"),
+      updateTask("t001", undefined, "second note", "locked-notes"),
+    ]);
+
+    const pack = await status("locked-notes", false);
+    expect(Array.isArray(pack)).toBe(false);
+    expect((pack as Awaited<ReturnType<typeof updateTask>>).tasks[0]?.notes).toHaveLength(2);
+  });
+
   it("reports clear errors for missing local task inputs", async () => {
     await expect(
       initPack({

@@ -15,6 +15,8 @@ const manifestKeys = new Set([
   "surfaceInventory",
   "assumptions",
 ]);
+const taskKeys = new Set(["id", "title", "name", "category", "body", "description", "doneWhen"]);
+const includeKeys = new Set(["name", "description", "ref"]);
 
 export async function readManifest(filePath: string, strict = false): Promise<PackManifest> {
   const content = await readText(filePath, "manifest");
@@ -23,12 +25,9 @@ export async function readManifest(filePath: string, strict = false): Promise<Pa
     throw new AgentPackError(`manifest must be a YAML object: ${filePath}`);
   }
   if (strict) {
-    for (const key of Object.keys(parsed)) {
-      if (!manifestKeys.has(key)) {
-        throw new AgentPackError(`unsupported manifest field in strict mode: ${key}`);
-      }
-    }
+    assertKnownKeys(parsed as Record<string, unknown>, manifestKeys, "manifest");
   }
+  validateManifest(parsed as Record<string, unknown>, filePath, strict);
   return parsed as PackManifest;
 }
 
@@ -96,6 +95,94 @@ export function nameFromRef(ref: string): string {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function validateManifest(
+  manifest: Record<string, unknown>,
+  filePath: string,
+  strict: boolean,
+): void {
+  if (manifest.schemaVersion !== undefined && manifest.schemaVersion !== 1) {
+    throw new AgentPackError(
+      `manifest schemaVersion ${String(manifest.schemaVersion)} is not supported: ${filePath}`,
+    );
+  }
+  if (manifest.name !== undefined && typeof manifest.name !== "string") {
+    throw new AgentPackError(`manifest name must be a string: ${filePath}`);
+  }
+  if (manifest.instructions !== undefined && typeof manifest.instructions !== "string") {
+    throw new AgentPackError(`manifest instructions must be a string: ${filePath}`);
+  }
+  validateTasks(manifest.tasks, filePath, strict);
+  validateIncludes(manifest.references, "references", filePath, strict);
+  validateIncludes(manifest.skills, "skills", filePath, strict);
+  if (manifest.surfaceInventory !== undefined && !Array.isArray(manifest.surfaceInventory)) {
+    throw new AgentPackError(`manifest surfaceInventory must be an array: ${filePath}`);
+  }
+  if (manifest.assumptions !== undefined && !Array.isArray(manifest.assumptions)) {
+    throw new AgentPackError(`manifest assumptions must be an array: ${filePath}`);
+  }
+}
+
+function validateTasks(value: unknown, filePath: string, strict: boolean): void {
+  if (value === undefined) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    throw new AgentPackError(`manifest tasks must be an array: ${filePath}`);
+  }
+  for (const [index, task] of value.entries()) {
+    if (!isObject(task)) {
+      throw new AgentPackError(`manifest tasks[${index}] must be an object: ${filePath}`);
+    }
+    if (strict) {
+      assertKnownKeys(task, taskKeys, `tasks[${index}]`);
+    }
+    if (task.doneWhen !== undefined && !Array.isArray(task.doneWhen)) {
+      throw new AgentPackError(`manifest tasks[${index}].doneWhen must be an array: ${filePath}`);
+    }
+  }
+}
+
+function validateIncludes(
+  value: unknown,
+  label: "references" | "skills",
+  filePath: string,
+  strict: boolean,
+): void {
+  if (value === undefined) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    throw new AgentPackError(`manifest ${label} must be an array: ${filePath}`);
+  }
+  for (const [index, entry] of value.entries()) {
+    if (!isObject(entry)) {
+      throw new AgentPackError(`manifest ${label}[${index}] must be an object: ${filePath}`);
+    }
+    if (strict) {
+      assertKnownKeys(entry, includeKeys, `${label}[${index}]`);
+    }
+    if (typeof entry.ref !== "string" || !entry.ref.trim()) {
+      throw new AgentPackError(`manifest ${label}[${index}].ref must be a string: ${filePath}`);
+    }
+  }
+}
+
+function assertKnownKeys(
+  value: Record<string, unknown>,
+  allowed: Set<string>,
+  label: string,
+): void {
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      throw new AgentPackError(`unsupported manifest field in strict mode: ${label}.${key}`);
+    }
+  }
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function readText(filePath: string, label: string): Promise<string> {

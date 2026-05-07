@@ -208,7 +208,7 @@ Common options:
 
 | Option | Purpose |
 |---|---|
-| `--id <id>` | Use a specific pack ID |
+| `--id <id>` | Use a specific pack ID (`A-Z`, `a-z`, `0-9`, `.`, `_`, `-`) |
 | `--name <name>` | Set a display name |
 | `--manifest <path>` | Load a pack manifest YAML file; repeatable |
 | `--instructions <path>` | Load instructions from Markdown or YAML |
@@ -418,7 +418,7 @@ agent-pack sync --id reviewer-001
 agent-pack brief --id reviewer-001
 ```
 
-Local paths are intentionally live. If a local reference or skill changes after pack creation, the agent reads the current file at that path. Git references resolve to a commit and read from exported snapshots.
+Local paths are intentionally live. If a local reference or skill changes after pack creation, the agent reads the current file at that path. Git references resolve to a commit and read from exported snapshots. Git snapshots reject symlinks instead of extracting them into the cache.
 
 ## Detailed Design
 

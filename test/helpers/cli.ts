@@ -14,12 +14,12 @@ export interface CliResult {
 
 export async function runCli(
   args: string[],
-  options: { cwd: string; reject?: boolean } = { cwd: process.cwd() },
+  options: { cwd: string; reject?: boolean; env?: NodeJS.ProcessEnv } = { cwd: process.cwd() },
 ): Promise<CliResult> {
   try {
     const { stdout, stderr } = await execFileAsync(process.execPath, [cliPath, ...args], {
       cwd: options.cwd,
-      env: { ...process.env },
+      env: { ...process.env, ...options.env },
     });
     return { stdout, stderr };
   } catch (error) {

@@ -129,5 +129,6 @@ export interface RuntimePaths {
   gitCacheDir: string;
   packDir: string;
   eventDir: string;
+  lockDir: string;
   indexPath: string;
 }

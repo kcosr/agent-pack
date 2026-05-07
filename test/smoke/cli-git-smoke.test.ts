@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -99,6 +99,49 @@ describe("agent-pack CLI git smoke", () => {
       expect(brief.stdout).toContain(".agent-pack/cache/snapshots/");
     },
   );
+
+  it("rejects git snapshots that contain symlinks", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "agent-pack-symlink-smoke-"));
+    const repo = path.join(root, "fixture");
+    const remote = path.join(root, "fixture.git");
+    const workspace = path.join(root, "workspace");
+    await mkdir(repo, { recursive: true });
+    await mkdir(workspace, { recursive: true });
+    git(["init", "-b", "main"], repo);
+    git(["config", "user.email", "test@example.com"], repo);
+    git(["config", "user.name", "Test User"], repo);
+    await writeFile(path.join(repo, "target.md"), "# Target\n");
+    await symlink("/tmp/agent-pack-escape", path.join(repo, "escape.md"));
+    git(["add", "."], repo);
+    git(["commit", "-m", "Symlink fixture"], repo);
+    git(["clone", "--bare", repo, remote], root);
+
+    const init = await runCli(
+      [
+        "init",
+        "--id",
+        "symlink-pack",
+        "--reference",
+        `git+file://${remote}#main`,
+        "--task",
+        "Inspect",
+      ],
+      { cwd: workspace, reject: false },
+    );
+
+    expect(init.stderr).toContain("unsupported symlink");
+  });
+
+  it("rejects invalid git refresh policy from the environment", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-env-smoke-"));
+    const result = await runCli(["status", "--all"], {
+      cwd: workspace,
+      reject: false,
+      env: { AGENT_PACK_GIT_REFRESH: "sometimes" },
+    });
+
+    expect(result.stderr).toContain("invalid AGENT_PACK_GIT_REFRESH");
+  });
 });
 
 function git(args: string[], cwd: string): void {
