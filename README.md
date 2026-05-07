@@ -11,8 +11,8 @@ agent-pack init \
   --id design-review \
   --name "Design review" \
   --manifest ./pack.yaml \
-  --references ./docs/design.md \
-  --skills ./skills/fresh-eyes/SKILL.md \
+  --reference ./docs/design.md \
+  --skill ./skills/fresh-eyes/SKILL.md \
   "Review the design and record concrete findings."
 
 agent-pack brief --id design-review
@@ -210,14 +210,16 @@ Common options:
 |---|---|
 | `--id <id>` | Use a specific pack ID (`A-Z`, `a-z`, `0-9`, `.`, `_`, `-`) |
 | `--name <name>` | Set a display name |
-| `--manifest <path>` | Load a pack manifest YAML file; repeatable |
+| `--manifest <ref>` | Load one manifest YAML file or git ref |
+| `--manifests <ref>` | Alias for `--manifest`; useful when passing several manifests |
 | `--instructions <path>` | Load instructions from Markdown or YAML |
-| `--task <text>` | Add one ad hoc task |
-| `--tasks <ref>` | Add task YAML file or glob |
+| `--add-task <text>` | Add one ad hoc task |
+| `--task <ref>` | Add one task YAML file, glob, or git ref |
+| `--tasks <ref>` | Alias for `--task`; useful when passing several task sources |
 | `--reference <ref>` | Add one reference |
-| `--references <ref>` | Add a reference file, directory, glob, or repo |
+| `--references <ref>` | Alias for `--reference`; useful when passing several references |
 | `--skill <ref>` | Add one `SKILL.md` file |
-| `--skills <ref>` | Add skill file or glob |
+| `--skills <ref>` | Alias for `--skill`; useful when passing several skills |
 | `--git-refresh auto\|always\|never` | Control git fetching for this command |
 | `--state-dir <path>` | Override the state directory |
 | `--json` | Emit machine-readable output |
@@ -228,10 +230,11 @@ Example:
 ```bash
 agent-pack init \
   --id reviewer-001 \
-  --manifest ./base-pack.yaml \
-  --tasks ./tasks/*.yaml \
+  --manifest git+https://github.com/org/packs.git//base-pack.yaml#main \
+  --task ./tasks/*.yaml \
   --references './docs/**/*.md' \
   --skills './skills/**' \
+  --add-task "Check local unstaged changes" \
   "Use the included docs and skills to complete the review."
 ```
 
@@ -302,7 +305,12 @@ Derived pack statuses:
 
 ## Manifests
 
-Manifests are YAML files that define reusable pack content.
+Manifests are YAML files that define reusable pack content. A manifest ref can be a local file or a git file ref:
+
+```bash
+agent-pack init --manifest ./pack.yaml
+agent-pack init --manifests git+https://github.com/org/packs.git//review.yaml#main
+```
 
 ```yaml
 schemaVersion: 1
@@ -335,12 +343,16 @@ skills:
 
 CLI flags and manifests can be combined. Merge order is deterministic:
 
-1. manifests in flag order
-2. `--tasks` in flag order
-3. `--references` in flag order
-4. `--skills` in flag order
-5. `--task` ad hoc entries in flag order
-6. positional prompt
+1. Manifest refs are read first in flag order. `--manifest` entries are processed before `--manifests` entries.
+2. Each manifest contributes its `instructions`, `tasks`, `references`, `skills`, and pack metadata. Manifest-defined task sources point back to the manifest file, including remote manifest snapshots.
+3. `--instructions` files append after manifest instructions, in flag order.
+4. CLI task source refs append after manifest tasks. `--task` entries are processed before `--tasks` entries.
+5. Inline ad hoc tasks from `--add-task` append after task source refs.
+6. CLI reference refs append after manifest references. `--reference` entries are processed before `--references` entries.
+7. CLI skill refs append after manifest skills. `--skill` entries are processed before `--skills` entries.
+8. The positional prompt is stored as the pack-level prompt and rendered at the top of the brief.
+
+The merge is deterministic, but it is category-based rather than raw command-line order based. Interleaving different flag categories on the shell command line does not change this order.
 
 ## Git Sources
 

@@ -13,10 +13,11 @@ Use explicit source flags for pack inputs, plus one optional positional prompt:
 ```bash
 agent-pack init \
   --manifest ./base-pack.yaml \
-  --tasks ./tasks/*.yaml \
-  --references ./docs/state.md \
+  --task ./tasks/*.yaml \
+  --reference ./docs/state.md \
   --references 'git+https://github.com/org/repo.git//docs/**/*.md#main' \
-  --skills ./skills/*/SKILL.md \
+  --skill ./skills/*/SKILL.md \
+  --add-task "Check local notes" \
   --id worker-123 \
   "Review these materials and work through the tasks."
 ```
@@ -68,14 +69,16 @@ Suggested options:
 |---|---|
 | `--id <id>` | Use a specific pack instance ID |
 | `--name <name>` | Display pack name |
-| `--manifest <path>` | Load a pack manifest YAML file; repeatable |
+| `--manifest <ref>` | Load one manifest YAML file or git ref |
+| `--manifests <ref>` | Alias for `--manifest` |
 | `--instructions <path>` | Markdown/YAML instructions file |
-| `--task <text>` | Add one ad hoc task |
-| `--tasks <ref>` | Add task YAML file/glob |
+| `--add-task <text>` | Add one ad hoc task |
+| `--task <ref>` | Add one task YAML file/glob/git ref |
+| `--tasks <ref>` | Alias for `--task` |
 | `--reference <ref>` | Add one reference file |
-| `--references <ref>` | Add reference file, directory, glob, or repo |
+| `--references <ref>` | Alias for `--reference` |
 | `--skill <ref>` | Add one skill file |
-| `--skills <ref>` | Add skill file/glob |
+| `--skills <ref>` | Alias for `--skill` |
 | `--git-refresh auto\|always\|never` | Override git fetch policy for git sources |
 | `--state-dir <path>` | Override state directory |
 | `--json` | Emit machine-readable output |
@@ -90,9 +93,10 @@ agent-pack init \
   --id design-worker \
   --name "Design review" \
   --manifest ./base-pack.yaml \
-  --tasks ./tasks/design-review.yaml \
-  --references ./docs/current-design.md \
-  --skills ~/.codex/skills/.system/fresh-eyes/SKILL.md \
+  --task ./tasks/design-review.yaml \
+  --reference ./docs/current-design.md \
+  --skill ~/.codex/skills/.system/fresh-eyes/SKILL.md \
+  --add-task "Check local notes" \
   "Review the design and record concrete findings in task notes."
 ```
 
@@ -100,10 +104,11 @@ agent-pack init \
 agent-pack init \
   --id reviewer-001 \
   --manifest ./base-pack.yaml \
-  --manifest ./review-pack.yaml \
+  --manifests 'git+https://github.com/org/packs.git//review-pack.yaml#main' \
   --tasks ./tasks/*.yaml \
   --references 'git+https://github.com/org/repo.git//docs/**/*.md#main' \
   --skills 'git+https://github.com/org/skills.git//*/SKILL.md#v1' \
+  --add-task "Check local changes" \
   "Use the repository docs and supplemental skills to complete the review."
 ```
 
@@ -446,12 +451,13 @@ surfaceInventory:
 
 CLI flags and YAML can be combined. Merge order should be deterministic:
 
-1. YAML pack sources from `--manifest <file>`, in flag order
-2. `--tasks`, in flag order
-3. `--references`, in flag order
-4. `--skills`, in flag order
-5. `--task` ad hoc entries, in flag order
-6. positional prompt, stored as pack-level `prompt`
+1. YAML pack sources from `--manifest` / `--manifests`, in flag order within each option
+2. `--instructions`, in flag order
+3. `--task` / `--tasks` source refs, in flag order within each option
+4. `--add-task` ad hoc entries, in flag order
+5. `--reference` / `--references`, in flag order within each option
+6. `--skill` / `--skills`, in flag order within each option
+7. positional prompt, stored as pack-level `prompt`
 
 ## State Layout
 
@@ -624,13 +630,14 @@ Reference-only packs should be allowed without warning. A pack can be useful as 
 
 ### Pack Manifests
 
-Support repeatable `--manifest pack.yaml` in v1. YAML is the cleanest way to attach names and descriptions to references and skills, define instructions, and keep larger pack definitions reviewable.
+Support repeatable `--manifest pack.yaml` and `--manifests git+repo//pack.yaml#ref` in v1. YAML is the cleanest way to attach names and descriptions to references and skills, define instructions, and keep larger pack definitions reviewable.
 
 ```bash
 agent-pack init --manifest ./pack.yaml --id design-worker
+agent-pack init --manifests git+https://github.com/org/packs.git//pack.yaml#main --id design-worker
 ```
 
-CLI flags can still be used for quick one-off packs. If both manifests and explicit flags are provided, merge deterministically: load manifests first in flag order, then append CLI-provided tasks, references, skills, and ad hoc tasks in flag order.
+CLI flags can still be used for quick one-off packs. If both manifests and explicit flags are provided, merge deterministically: load manifests first in flag order, then append instruction files, CLI-provided task source refs, ad hoc tasks, references, and skills in category order.
 
 ### Local Files
 
@@ -923,7 +930,7 @@ The script should not run tests itself; release instructions should require `npm
 
 `agent-pack` bundles tasks, references, and skills into a durable handoff packet. The pack model keeps mutable task progress while adding read-only context and skill metadata. The important constraints are:
 
-- explicit flags: `--tasks`, `--references`, `--skills`
+- explicit flags: `--manifest`, `--task` / `--tasks`, `--reference` / `--references`, `--skill` / `--skills`
 - skills are only `SKILL.md`
 - references can be files, directories, globs, git paths, or git repo snapshots
 - local files are referenced in place by default

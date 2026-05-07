@@ -2,7 +2,8 @@ import path from "node:path";
 import { renderBrief, renderSummary } from "./brief/render.js";
 import { AgentPackError } from "./errors.js";
 import { pathExists } from "./fs.js";
-import { ensureGitSourceSnapshot, gitSourceTargetPath } from "./git/cache.js";
+import { ensureGitSourceSnapshot, gitSourceTargetPath, materializeGitRef } from "./git/cache.js";
+import { isGitRef } from "./git/ref.js";
 import { readInstructions, readManifest } from "./manifest/parse.js";
 import { resolveInputPath, toDisplayPath } from "./paths.js";
 import { resolveReferences, resolveSkills } from "./sources/resolve.js";
@@ -14,8 +15,10 @@ import type {
   ManifestReference,
   ManifestSkill,
   ManifestTask,
+  PackManifest,
   PackState,
   PackTask,
+  RuntimePaths,
   TaskStatus,
 } from "./types.js";
 
@@ -31,12 +34,13 @@ export async function initPack(input: InitInput): Promise<PackState> {
   let surfaceInventory: unknown[] | undefined;
   let assumptions: unknown[] | undefined;
 
-  for (const manifestPath of input.manifests) {
-    const manifest = await readManifest(manifestPath, input.strict);
-    const manifestSource = {
-      kind: "file" as const,
-      path: toDisplayPath(resolveInputPath(manifestPath, paths.repoRoot), paths.repoRoot),
-    };
+  for (const manifestRef of input.manifests) {
+    const { manifest, source: manifestSource } = await readManifestRef(
+      manifestRef,
+      paths,
+      input.gitRefresh,
+      input.strict,
+    );
     name ??= manifest.name;
     if (manifest.instructions) {
       instructions.push(manifest.instructions);
@@ -93,6 +97,29 @@ export async function initPack(input: InitInput): Promise<PackState> {
   };
   await store.createPack(pack);
   return store.loadPack(pack.id);
+}
+
+async function readManifestRef(
+  ref: string,
+  paths: RuntimePaths,
+  refresh: GitRefresh,
+  strict?: boolean,
+): Promise<{ manifest: PackManifest; source: PackTask["source"] }> {
+  if (!isGitRef(ref)) {
+    const absPath = resolveInputPath(ref, paths.repoRoot);
+    return {
+      manifest: await readManifest(absPath, strict),
+      source: { kind: "file" as const, path: toDisplayPath(absPath, paths.repoRoot) },
+    };
+  }
+  const materialized = await materializeGitRef(ref, paths, refresh);
+  if (!materialized.pathInRepo) {
+    throw new AgentPackError(`git manifest source requires a file path inside the repo: ${ref}`);
+  }
+  return {
+    manifest: await readManifest(materialized.targetAbs, strict),
+    source: materialized.source,
+  };
 }
 
 export async function syncPack(id: string | undefined, refresh: GitRefresh): Promise<PackState> {

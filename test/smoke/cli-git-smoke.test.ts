@@ -11,6 +11,7 @@ describe("agent-pack CLI git smoke", () => {
     const repo = path.join(root, "fixture");
     const remote = path.join(root, "fixture.git");
     const workspace = path.join(root, "workspace");
+    const remoteUrl = `file://${remote}`;
     await mkdir(repo, { recursive: true });
     await mkdir(workspace, { recursive: true });
     git(["init", "-b", "main"], repo);
@@ -28,22 +29,40 @@ describe("agent-pack CLI git smoke", () => {
       path.join(repo, "skills/review/SKILL.md"),
       "---\nname: review-skill\ndescription: Review with evidence.\n---\n",
     );
+    await writeFile(
+      path.join(repo, "pack.yaml"),
+      `schemaVersion: 1
+name: remote-manifest
+instructions: Use the remote manifest.
+tasks:
+  - id: inspect-manifest
+    title: Inspect manifest material
+references:
+  - name: manifest reference
+    ref: git+${remoteUrl}//docs/reference.md#main
+skills:
+  - ref: git+${remoteUrl}//skills/**#main
+`,
+    );
     git(["add", "."], repo);
     git(["commit", "-m", "Initial fixture"], repo);
     git(["clone", "--bare", repo, remote], root);
-    const remoteUrl = `file://${remote}`;
 
     const init = await runCli(
       [
         "init",
         "--id",
         "git-pack",
+        "--manifests",
+        `git+${remoteUrl}//pack.yaml#main`,
         "--reference",
         `git+${remoteUrl}//docs/reference.md#main`,
-        "--tasks",
+        "--task",
         `git+${remoteUrl}//tasks/*.yaml#main`,
         "--skills",
         `git+${remoteUrl}//skills/**#main`,
+        "--add-task",
+        "Inspect ad hoc material",
         "Use git material.",
       ],
       { cwd: workspace },
@@ -52,6 +71,7 @@ describe("agent-pack CLI git smoke", () => {
 
     const brief = await runCli(["brief", "--id", "git-pack"], { cwd: workspace });
     expect(brief.stdout).toContain(".agent-pack/cache/snapshots/");
+    expect(brief.stdout).toContain("Inspect manifest material");
     expect(brief.stdout).toContain("review-skill");
 
     await rm(path.join(workspace, ".agent-pack/cache"), { recursive: true, force: true });
@@ -71,6 +91,7 @@ describe("agent-pack CLI git smoke", () => {
 
     const restored = await runCli(["brief", "--id", "git-pack"], { cwd: workspace });
     expect(restored.stdout).toContain("Inspect git material");
+    expect(restored.stdout).toContain("Inspect ad hoc material");
   });
 
   it.skipIf(process.env.AGENT_PACK_SMOKE_LIVE_GIT !== "1")(
@@ -87,7 +108,7 @@ describe("agent-pack CLI git smoke", () => {
           "live-git-pack",
           "--reference",
           `git+${repo}`,
-          "--task",
+          "--add-task",
           "Inspect live git material",
           "Use live git material.",
         ],
@@ -123,7 +144,7 @@ describe("agent-pack CLI git smoke", () => {
         "symlink-pack",
         "--reference",
         `git+file://${remote}#main`,
-        "--task",
+        "--add-task",
         "Inspect",
       ],
       { cwd: workspace, reject: false },

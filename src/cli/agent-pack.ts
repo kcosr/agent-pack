@@ -29,9 +29,11 @@ program
   .description("Create a pack.")
   .option("--id <id>", "use a specific pack ID")
   .option("--name <name>", "set a display name")
-  .option("--manifest <path>", "load a pack manifest YAML file", collect, [])
+  .option("--manifest <ref>", "load a pack manifest YAML file or git ref", collect, [])
+  .option("--manifests <ref>", "load a pack manifest YAML file or git ref", collect, [])
   .option("--instructions <path>", "load instructions from Markdown or YAML", collect, [])
-  .option("--task <text>", "add one ad hoc task", collect, [])
+  .option("--add-task <text>", "add one ad hoc task", collect, [])
+  .option("--task <ref>", "add task YAML file or glob", collect, [])
   .option("--tasks <ref>", "add task YAML file or glob", collect, [])
   .option("--reference <ref>", "add one reference", collect, [])
   .option("--references <ref>", "add a reference file, directory, glob, or repo", collect, [])
@@ -47,10 +49,10 @@ program
       const pack = await initPack({
         id: options.id,
         name: options.name,
-        manifests: options.manifest,
+        manifests: [...options.manifest, ...options.manifests],
         instructionFiles: options.instructions,
-        taskRefs: options.tasks,
-        adHocTasks: options.task,
+        taskRefs: [...options.task, ...options.tasks],
+        adHocTasks: options.addTask,
         referenceRefs: toRefs([...options.reference, ...options.references]),
         skillRefs: toSkills([...options.skill, ...options.skills]),
         prompt,
