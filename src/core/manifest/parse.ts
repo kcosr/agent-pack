@@ -17,71 +17,49 @@ const taskKeys = new Set(["id", "title", "category", "body", "doneWhen"]);
 const includeKeys = new Set(["name", "description", "ref"]);
 const contractKeys = new Set(["do", "dont"]);
 
-export async function readManifest(filePath: string, strict = false): Promise<PackManifest> {
+export async function readManifest(filePath: string): Promise<PackManifest> {
   const content = await readText(filePath, "manifest");
   const parsed = parseYaml(content, filePath);
   if (!parsed || typeof parsed !== "object") {
     throw new AgentPackError(`manifest must be a YAML object: ${filePath}`);
   }
-  if (strict) {
-    assertKnownKeys(parsed as Record<string, unknown>, manifestKeys, "manifest");
-  }
-  validateManifest(parsed as Record<string, unknown>, filePath, strict);
+  assertKnownKeys(parsed as Record<string, unknown>, manifestKeys, "manifest");
+  validateManifest(parsed as Record<string, unknown>, filePath);
   return parsed as PackManifest;
 }
 
-export async function readInstructions(filePath: string, strict = false): Promise<string> {
-  const content = await readText(filePath, "instructions");
-  if (/\.(ya?ml)$/i.test(filePath)) {
-    const parsed = parseYaml(content, filePath);
-    if (parsed && typeof parsed === "object") {
-      const raw = parsed as Record<string, unknown>;
-      if (strict) {
-        assertKnownKeys(raw, new Set(["instructions"]), "instructions");
-      }
-      if (typeof raw.instructions === "string") {
-        return raw.instructions;
-      }
-      if (strict) {
-        throw new AgentPackError(`instructions YAML must define instructions: ${filePath}`);
-      }
-    }
-  }
-  return content;
+export async function readInstructions(filePath: string): Promise<string> {
+  return readText(filePath, "instructions");
 }
 
-export async function readTaskFile(filePath: string, strict = false): Promise<ManifestTask[]> {
+export async function readTaskFile(filePath: string): Promise<ManifestTask[]> {
   const content = await readText(filePath, "task file");
   const parsed = parseYaml(content, filePath);
   if (Array.isArray(parsed)) {
-    return parsed.map((task, index) => normalizeTask(task, strict, `tasks[${index}]`));
+    return parsed.map((task, index) => normalizeTask(task, `tasks[${index}]`));
   }
   if (parsed && typeof parsed === "object") {
     const raw = parsed as Record<string, unknown>;
     if (Array.isArray(raw.tasks)) {
-      if (strict) {
-        assertKnownKeys(raw, new Set(["tasks"]), "taskFile");
-      }
-      return raw.tasks.map((task, index) => normalizeTask(task, strict, `tasks[${index}]`));
+      assertKnownKeys(raw, new Set(["tasks"]), "taskFile");
+      return raw.tasks.map((task, index) => normalizeTask(task, `tasks[${index}]`));
     }
   }
   if (parsed && typeof parsed === "object") {
-    return [normalizeTask(parsed, strict, "task")];
+    return [normalizeTask(parsed, "task")];
   }
   throw new AgentPackError(`task file must contain a task or tasks: ${filePath}`);
 }
 
-export function normalizeTask(task: unknown, strict = false, label = "task"): ManifestTask {
+export function normalizeTask(task: unknown, label = "task"): ManifestTask {
   if (!task || typeof task !== "object") {
     throw new AgentPackError("task must be an object");
   }
   const raw = task as Record<string, unknown>;
-  if (strict) {
-    assertKnownKeys(raw, taskKeys, label);
-  }
-  const title = stringValue(raw.title) ?? stringValue(raw.name) ?? stringValue(raw.id);
+  assertKnownKeys(raw, taskKeys, label);
+  const title = stringValue(raw.title) ?? stringValue(raw.id);
   if (!title) {
-    throw new AgentPackError("task requires title, name, or id");
+    throw new AgentPackError("task requires title or id");
   }
   if (
     raw.doneWhen !== undefined &&
@@ -97,7 +75,7 @@ export function normalizeTask(task: unknown, strict = false, label = "task"): Ma
     id: stringValue(raw.id),
     title,
     category: stringValue(raw.category),
-    body: stringValue(raw.body) ?? stringValue(raw.description),
+    body: stringValue(raw.body),
     doneWhen,
   };
 }
@@ -115,11 +93,7 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
-function validateManifest(
-  manifest: Record<string, unknown>,
-  filePath: string,
-  strict: boolean,
-): void {
+function validateManifest(manifest: Record<string, unknown>, filePath: string): void {
   if (manifest.schemaVersion !== undefined && manifest.schemaVersion !== 1) {
     throw new AgentPackError(
       `manifest schemaVersion ${String(manifest.schemaVersion)} is not supported: ${filePath}`,
@@ -131,13 +105,13 @@ function validateManifest(
   if (manifest.instructions !== undefined && typeof manifest.instructions !== "string") {
     throw new AgentPackError(`manifest instructions must be a string: ${filePath}`);
   }
-  validateTasks(manifest.tasks, filePath, strict);
-  validateIncludes(manifest.references, "references", filePath, strict);
-  validateIncludes(manifest.skills, "skills", filePath, strict);
-  validateContract(manifest.contract, filePath, strict);
+  validateTasks(manifest.tasks, filePath);
+  validateIncludes(manifest.references, "references", filePath);
+  validateIncludes(manifest.skills, "skills", filePath);
+  validateContract(manifest.contract, filePath);
 }
 
-function validateTasks(value: unknown, filePath: string, strict: boolean): void {
+function validateTasks(value: unknown, filePath: string): void {
   if (value === undefined) {
     return;
   }
@@ -148,9 +122,7 @@ function validateTasks(value: unknown, filePath: string, strict: boolean): void 
     if (!isObject(task)) {
       throw new AgentPackError(`manifest tasks[${index}] must be an object: ${filePath}`);
     }
-    if (strict) {
-      assertKnownKeys(task, taskKeys, `tasks[${index}]`);
-    }
+    assertKnownKeys(task, taskKeys, `tasks[${index}]`);
     validateTaskString(task.id, `tasks[${index}].id`, filePath);
     validateTaskString(task.title, `tasks[${index}].title`, filePath);
     validateTaskString(task.category, `tasks[${index}].category`, filePath);
@@ -162,12 +134,7 @@ function validateTasks(value: unknown, filePath: string, strict: boolean): void 
   }
 }
 
-function validateIncludes(
-  value: unknown,
-  label: "references" | "skills",
-  filePath: string,
-  strict: boolean,
-): void {
+function validateIncludes(value: unknown, label: "references" | "skills", filePath: string): void {
   if (value === undefined) {
     return;
   }
@@ -178,16 +145,14 @@ function validateIncludes(
     if (!isObject(entry)) {
       throw new AgentPackError(`manifest ${label}[${index}] must be an object: ${filePath}`);
     }
-    if (strict) {
-      assertKnownKeys(entry, includeKeys, `${label}[${index}]`);
-    }
+    assertKnownKeys(entry, includeKeys, `${label}[${index}]`);
     if (typeof entry.ref !== "string" || !entry.ref.trim()) {
       throw new AgentPackError(`manifest ${label}[${index}].ref must be a string: ${filePath}`);
     }
   }
 }
 
-function validateContract(value: unknown, filePath: string, strict: boolean): void {
+function validateContract(value: unknown, filePath: string): void {
   if (value === undefined) {
     return;
   }
@@ -225,7 +190,7 @@ function assertKnownKeys(
 ): void {
   for (const key of Object.keys(value)) {
     if (!allowed.has(key)) {
-      throw new AgentPackError(`unsupported manifest field in strict mode: ${label}.${key}`);
+      throw new AgentPackError(`unsupported metadata field: ${label}.${key}`);
     }
   }
 }

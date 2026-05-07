@@ -122,7 +122,6 @@ export interface InitInput {
   stateDir?: string;
   gitRefresh: GitRefresh;
   json?: boolean;
-  strict?: boolean;
 }
 
 export interface RuntimePaths {

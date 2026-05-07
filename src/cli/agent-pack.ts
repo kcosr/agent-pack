@@ -259,7 +259,6 @@ function configureInitCommand(root: Command): void {
     .addOption(gitRefreshOption())
     .option("--state-dir <path>", "override the state directory")
     .option("--json", "emit machine-readable output")
-    .option("--strict", "reject ambiguous or unsupported metadata")
     .argument("[prompt]", "one-off prompt rendered at the top of the brief")
     .action(async (prompt, options) => {
       await run(async () => {
@@ -271,7 +270,6 @@ function configureInitCommand(root: Command): void {
           stateDir: options.stateDir,
           gitRefresh: options.gitRefresh,
           json: options.json,
-          strict: options.strict,
         });
         if (options.json) {
           printJson({ id: pack.id, briefCommand: `agent-pack brief --id ${pack.id}`, pack });

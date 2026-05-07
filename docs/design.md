@@ -81,7 +81,6 @@ Suggested options:
 | `--git-refresh auto\|always\|never` | Override git fetch policy for git sources |
 | `--state-dir <path>` | Override state directory |
 | `--json` | Emit machine-readable output |
-| `--strict` | Reject ambiguous/unsupported metadata |
 
 Both singular and plural forms can accept globs; singular reads better for one file, plural reads better for many.
 

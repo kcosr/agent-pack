@@ -41,7 +41,6 @@ export async function initPack(input: InitInput): Promise<PackState> {
           include.ref,
           paths,
           input.gitRefresh,
-          input.strict,
         );
         name ??= manifest.name;
         if (manifest.instructions) {
@@ -60,7 +59,7 @@ export async function initPack(input: InitInput): Promise<PackState> {
         break;
       }
       case "instructions":
-        instructions.push(await readInstructions(include.path, input.strict));
+        instructions.push(await readInstructions(include.path));
         break;
       case "taskRef":
       case "adHocTask":
@@ -78,9 +77,9 @@ export async function initPack(input: InitInput): Promise<PackState> {
   }
 
   const packId = assertValidPackId(input.id ?? slug(name ?? "pack"));
-  const tasks = await loadTasks(taskInputs, paths, input.gitRefresh, input.strict);
+  const tasks = await loadTasks(taskInputs, paths, input.gitRefresh);
   const references = await resolveReferences(referenceRefs, paths, input.gitRefresh);
-  const skills = await resolveSkills(skillRefs, paths, input.gitRefresh, input.strict);
+  const skills = await resolveSkills(skillRefs, paths, input.gitRefresh);
   const now = new Date().toISOString();
   const pack: PackState = {
     schemaVersion: 1,
@@ -127,12 +126,11 @@ async function readManifestRef(
   ref: string,
   paths: RuntimePaths,
   refresh: GitRefresh,
-  strict?: boolean,
 ): Promise<{ manifest: PackManifest; source: SourceInfo }> {
   if (!isGitRef(ref)) {
     const absPath = resolveInputPath(ref, paths.repoRoot);
     return {
-      manifest: await readManifest(absPath, strict),
+      manifest: await readManifest(absPath),
       source: { kind: "file" as const, path: toDisplayPath(absPath, paths.repoRoot) },
     };
   }
@@ -142,7 +140,7 @@ async function readManifestRef(
   const materialized = await materializeGitRef(ref, paths, refresh);
   let manifest: PackManifest;
   try {
-    manifest = await readManifest(materialized.targetAbs, strict);
+    manifest = await readManifest(materialized.targetAbs);
   } catch (error) {
     throw new AgentPackError(`failed to read git manifest ${ref}: ${errorMessage(error)}`);
   }

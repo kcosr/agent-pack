@@ -124,7 +124,7 @@ skills:
     expect(pack.skills.map((skill) => skill.name)).toEqual(["first", "second"]);
   });
 
-  it("rejects unsupported manifest fields in strict mode", async () => {
+  it("rejects unsupported manifest fields", async () => {
     await writeFile(
       "pack.yaml",
       `schemaVersion: 1
@@ -135,15 +135,14 @@ tasks:
 
     await expect(
       initPack({
-        id: "strict-pack",
+        id: "unsupported-field-pack",
         includes: [{ type: "manifest", ref: "pack.yaml" }],
         gitRefresh: "auto",
-        strict: true,
       }),
-    ).rejects.toThrow("unsupported manifest field");
+    ).rejects.toThrow("unsupported metadata field");
   });
 
-  it("rejects unsupported nested manifest fields in strict mode", async () => {
+  it("rejects unsupported nested manifest fields", async () => {
     await writeFile(
       "pack.yaml",
       `schemaVersion: 1
@@ -157,10 +156,9 @@ references:
 
     await expect(
       initPack({
-        id: "strict-nested-pack",
+        id: "unsupported-nested-pack",
         includes: [{ type: "manifest", ref: "pack.yaml" }],
         gitRefresh: "auto",
-        strict: true,
       }),
     ).rejects.toThrow("tasks[0].unknownNested");
   });
@@ -202,7 +200,7 @@ tasks:
     ).rejects.toThrow("tasks[0].title must be a string");
   });
 
-  it("rejects manifest task aliases in strict mode", async () => {
+  it("rejects manifest task aliases", async () => {
     await writeFile(
       "pack.yaml",
       `schemaVersion: 1
@@ -216,12 +214,11 @@ tasks:
         id: "alias-manifest-task",
         includes: [{ type: "manifest", ref: "pack.yaml" }],
         gitRefresh: "auto",
-        strict: true,
       }),
     ).rejects.toThrow("tasks[0].name");
   });
 
-  it("rejects unknown task file fields in strict mode", async () => {
+  it("rejects unknown task file fields", async () => {
     await writeFile(
       "task.yaml",
       `title: Inspect
@@ -230,37 +227,34 @@ unknown: true`,
 
     await expect(
       initPack({
-        id: "strict-task-file",
+        id: "unsupported-task-file",
         includes: [{ type: "taskRef", ref: "./task.yaml" }],
         gitRefresh: "auto",
-        strict: true,
       }),
     ).rejects.toThrow("task.unknown");
   });
 
-  it("rejects ambiguous instructions YAML in strict mode", async () => {
+  it("treats instruction files as raw text", async () => {
     await writeFile("instructions.yaml", "note: Review carefully");
 
-    await expect(
-      initPack({
-        id: "strict-instructions",
-        includes: [{ type: "instructions", path: "./instructions.yaml" }],
-        gitRefresh: "auto",
-        strict: true,
-      }),
-    ).rejects.toThrow("instructions.note");
+    const pack = await initPack({
+      id: "raw-instructions",
+      includes: [{ type: "instructions", path: "./instructions.yaml" }],
+      gitRefresh: "auto",
+    });
+
+    expect(pack.instructions).toBe("note: Review carefully");
   });
 
-  it("rejects invalid skill frontmatter in strict mode", async () => {
+  it("rejects invalid skill frontmatter", async () => {
     await mkdir("skills/bad", { recursive: true });
     await writeFile("skills/bad/SKILL.md", "---\nname: 123\n---\n# Bad\n");
 
     await expect(
       initPack({
-        id: "strict-skill",
+        id: "invalid-skill",
         includes: [{ type: "skill", ref: { ref: "./skills/bad/SKILL.md" } }],
         gitRefresh: "auto",
-        strict: true,
       }),
     ).rejects.toThrow("frontmatter name must be a string");
   });

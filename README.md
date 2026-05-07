@@ -243,7 +243,6 @@ Common options:
 | `--git-refresh auto\|always\|never` | Control git fetching for this command |
 | `--state-dir <path>` | Override the state directory |
 | `--json` | Emit machine-readable output |
-| `--strict` | Reject ambiguous or unsupported metadata |
 
 Example:
 

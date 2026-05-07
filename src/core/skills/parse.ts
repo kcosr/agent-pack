@@ -8,12 +8,9 @@ export interface SkillMetadata {
   description?: string;
 }
 
-export async function extractSkillMetadata(
-  filePath: string,
-  strict = false,
-): Promise<SkillMetadata> {
+export async function extractSkillMetadata(filePath: string): Promise<SkillMetadata> {
   const content = await readFile(filePath, "utf8");
-  const frontmatter = parseFrontmatter(content, filePath, strict);
+  const frontmatter = parseFrontmatter(content, filePath);
   const name = frontmatter.name ?? firstHeading(content) ?? basename(dirname(filePath));
   const description = frontmatter.description ?? firstParagraph(content);
   return { name, description };
@@ -22,7 +19,6 @@ export async function extractSkillMetadata(
 function parseFrontmatter(
   content: string,
   filePath: string,
-  strict: boolean,
 ): Partial<Record<"name" | "description", string>> {
   if (!content.startsWith("---\n")) {
     return {};
@@ -33,20 +29,24 @@ function parseFrontmatter(
   }
   const parsed = YAML.parse(content.slice(4, end));
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    if (strict) {
-      throw new AgentPackError(`skill frontmatter must be a YAML object: ${filePath}`);
-    }
-    return {};
+    throw new AgentPackError(`skill frontmatter must be a YAML object: ${filePath}`);
   }
   const raw = parsed as Record<string, unknown>;
-  if (strict) {
-    validateOptionalString(raw.name, "name", filePath);
-    validateOptionalString(raw.description, "description", filePath);
-  }
+  assertKnownSkillKeys(raw, filePath);
+  validateOptionalString(raw.name, "name", filePath);
+  validateOptionalString(raw.description, "description", filePath);
   return {
     name: typeof raw.name === "string" ? raw.name : undefined,
     description: typeof raw.description === "string" ? raw.description : undefined,
   };
+}
+
+function assertKnownSkillKeys(value: Record<string, unknown>, filePath: string): void {
+  for (const key of Object.keys(value)) {
+    if (key !== "name" && key !== "description") {
+      throw new AgentPackError(`unsupported skill frontmatter field ${key}: ${filePath}`);
+    }
+  }
 }
 
 function validateOptionalString(value: unknown, field: string, filePath: string): void {

@@ -37,7 +37,6 @@ export async function resolveSkills(
   refs: ManifestSkill[],
   paths: RuntimePaths,
   refresh: GitRefresh,
-  strict = false,
 ): Promise<PackSkill[]> {
   const skills: PackSkill[] = [];
   for (const entry of refs) {
@@ -48,7 +47,7 @@ export async function resolveSkills(
       throw new AgentPackError(`skill source resolved no SKILL.md files: ${entry.ref}`);
     }
     for (const file of files) {
-      const metadata = await readSkillMetadata(file.absPath, entry.ref, strict);
+      const metadata = await readSkillMetadata(file.absPath, entry.ref);
       skills.push({
         id: `s${String(skills.length + 1).padStart(3, "0")}`,
         name: entry.name ?? metadata.name,
@@ -173,9 +172,9 @@ async function resolveLocalSkillFiles(
   return resolved;
 }
 
-async function readSkillMetadata(filePath: string, ref: string, strict: boolean) {
+async function readSkillMetadata(filePath: string, ref: string) {
   try {
-    return await extractSkillMetadata(filePath, strict);
+    return await extractSkillMetadata(filePath);
   } catch (error) {
     throw new AgentPackError(`skill file not found or unreadable: ${ref}: ${errorMessage(error)}`);
   }
