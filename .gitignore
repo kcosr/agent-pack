@@ -1,0 +1,7 @@
+node_modules/
+dist/
+coverage/
+.agent-pack/cache/
+.agent-pack/locks/
+.agent-pack/tmp/
+*.log

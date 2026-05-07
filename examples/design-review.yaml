@@ -1,0 +1,22 @@
+schemaVersion: 1
+name: design-review
+instructions: |
+  Review the included material before starting tasks.
+  Record concrete evidence in task notes.
+
+tasks:
+  - id: inspect
+    title: Inspect the design
+    category: review
+    body: Read the design and identify gaps, contradictions, or missing decisions.
+    doneWhen:
+      - Notes list the sections reviewed.
+      - Any findings include file paths or command output.
+
+references:
+  - name: design
+    description: Detailed product design.
+    ref: ./docs/design.md
+
+skills:
+  - ref: ./skills/fresh-eyes/SKILL.md

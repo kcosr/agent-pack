@@ -1,0 +1,106 @@
+import { execFileSync } from "node:child_process";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+import { runCli } from "../helpers/cli.js";
+
+describe("agent-pack CLI git smoke", () => {
+  it("clones git sources, materializes snapshots, syncs missing cache, and renders brief", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "agent-pack-smoke-"));
+    const repo = path.join(root, "fixture");
+    const remote = path.join(root, "fixture.git");
+    const workspace = path.join(root, "workspace");
+    await mkdir(repo, { recursive: true });
+    await mkdir(workspace, { recursive: true });
+    git(["init", "-b", "main"], repo);
+    git(["config", "user.email", "test@example.com"], repo);
+    git(["config", "user.name", "Test User"], repo);
+    await mkdir(path.join(repo, "docs"), { recursive: true });
+    await mkdir(path.join(repo, "tasks"), { recursive: true });
+    await mkdir(path.join(repo, "skills/review"), { recursive: true });
+    await writeFile(path.join(repo, "docs/reference.md"), "# Reference\n");
+    await writeFile(
+      path.join(repo, "tasks/review.yaml"),
+      "id: inspect-git\ntitle: Inspect git material\n",
+    );
+    await writeFile(
+      path.join(repo, "skills/review/SKILL.md"),
+      "---\nname: review-skill\ndescription: Review with evidence.\n---\n",
+    );
+    git(["add", "."], repo);
+    git(["commit", "-m", "Initial fixture"], repo);
+    git(["clone", "--bare", repo, remote], root);
+    const remoteUrl = `file://${remote}`;
+
+    const init = await runCli(
+      [
+        "init",
+        "--id",
+        "git-pack",
+        "--reference",
+        `git+${remoteUrl}//docs/reference.md#main`,
+        "--tasks",
+        `git+${remoteUrl}//tasks/*.yaml#main`,
+        "--skills",
+        `git+${remoteUrl}//skills/**#main`,
+        "Use git material.",
+      ],
+      { cwd: workspace },
+    );
+    expect(init.stdout).toContain("Created pack git-pack");
+
+    const brief = await runCli(["brief", "--id", "git-pack"], { cwd: workspace });
+    expect(brief.stdout).toContain(".agent-pack/cache/snapshots/");
+    expect(brief.stdout).toContain("review-skill");
+
+    await rm(path.join(workspace, ".agent-pack/cache"), { recursive: true, force: true });
+    const missing = await runCli(["brief", "--id", "git-pack"], { cwd: workspace, reject: false });
+    expect(missing.stderr).toContain("agent-pack sync --id git-pack");
+
+    const never = await runCli(["sync", "--id", "git-pack", "--git-refresh", "never"], {
+      cwd: workspace,
+      reject: false,
+    });
+    expect(never.stderr).toContain("git cache missing");
+
+    const sync = await runCli(["sync", "--id", "git-pack", "--git-refresh", "always"], {
+      cwd: workspace,
+    });
+    expect(sync.stdout).toContain("Synced pack git-pack");
+
+    const restored = await runCli(["brief", "--id", "git-pack"], { cwd: workspace });
+    expect(restored.stdout).toContain("Inspect git material");
+  });
+
+  it.skipIf(process.env.AGENT_PACK_SMOKE_LIVE_GIT !== "1")(
+    "initializes a pack from a live HTTPS git reference",
+    async () => {
+      const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-live-smoke-"));
+      const repo =
+        process.env.AGENT_PACK_SMOKE_REPO ?? "https://github.com/octocat/Hello-World.git";
+
+      const init = await runCli(
+        [
+          "init",
+          "--id",
+          "live-git-pack",
+          "--reference",
+          `git+${repo}`,
+          "--task",
+          "Inspect live git material",
+          "Use live git material.",
+        ],
+        { cwd: workspace },
+      );
+      expect(init.stdout).toContain("Created pack live-git-pack");
+
+      const brief = await runCli(["brief", "--id", "live-git-pack"], { cwd: workspace });
+      expect(brief.stdout).toContain(".agent-pack/cache/snapshots/");
+    },
+  );
+});
+
+function git(args: string[], cwd: string): void {
+  execFileSync("git", args, { cwd, stdio: "pipe" });
+}

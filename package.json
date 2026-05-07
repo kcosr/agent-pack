@@ -1,0 +1,42 @@
+{
+  "name": "agent-pack",
+  "version": "0.1.0",
+  "description": "Prepare durable work packets for coding agents.",
+  "type": "module",
+  "bin": {
+    "agent-pack": "./dist/cli/agent-pack.js"
+  },
+  "files": ["dist", "README.md", "docs"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
+    "test": "vitest run test/unit test/integration",
+    "test:smoke": "npm run build && vitest run test/smoke",
+    "test:watch": "vitest",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "check": "npm run lint && npm run typecheck && npm run test",
+    "lint-staged": "lint-staged",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "fast-glob": "^3.3.3",
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^22.10.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.11",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,mjs,cjs,json,md,yaml,yml}": ["biome format --write"]
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
