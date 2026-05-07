@@ -7,7 +7,6 @@ instructions: |
 tasks:
   - id: record-date
     title: Run date and record the output
-    category: demo
     body: |
       Run `date` from the repository root. Add a task note containing the exact
       command you ran and the complete output. Then mark this task done with a

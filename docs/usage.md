@@ -2,6 +2,13 @@
 
 This page is a compact reference for installed `agent-pack` users. Start with the repository `README.md` for the full walkthrough.
 
+Run commands from the repository or workspace that contains the files you want the agent to inspect.
+
+Requirements:
+
+- Node.js 20 or newer
+- Git on `PATH` for git-backed inputs
+
 ## Basic Flow
 
 Create a pack:
@@ -9,7 +16,7 @@ Create a pack:
 ```bash
 agent-pack init \
   --id demo-pack \
-  --manifest ./examples/demo.yaml \
+  --add-task "Run date and record the output." \
   "Run the demo task and record the result."
 ```
 
@@ -38,7 +45,7 @@ Use these flags with `agent-pack init`:
 - `--skill <ref>`: one `SKILL.md` file or a glob/directory scan for `SKILL.md`
 - `--instructions <path>`: raw text instructions file
 
-Git refs use this shape:
+Git refs use this shape. See the README for the full list of supported URL forms:
 
 ```text
 git+https://github.com/org/repo.git//path/in/repo.md#main
@@ -61,7 +68,7 @@ Git cache material is rebuildable:
 .agent-pack/cache/
 ```
 
-Commit `.agent-pack/state/` if you want pack progress to travel with the repository. Ignore `.agent-pack/cache/`, `.agent-pack/locks/`, and `.agent-pack/tmp/`.
+Commit `.agent-pack/state/` if you want pack progress to travel with the repository. Ignore `.agent-pack/cache/` and `.agent-pack/locks/`.
 
 On a new host, rebuild git-backed material:
 

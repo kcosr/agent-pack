@@ -1,33 +1,29 @@
 # agent-pack
 
-`agent-pack` prepares durable work packets for coding agents.
+`agent-pack` writes a durable brief and task state for a coding agent to read from disk. It is for developers using an LLM coding CLI or editor agent who want tasks, references, instructions, and progress to survive beyond one chat thread.
 
-A pack can contain tasks, reference material, supplemental skills, instructions, and a one-off prompt. The agent reads the generated brief, works through the tasks, and records progress back into pack state with explicit commands.
+`agent-pack` does not run the agent. It prepares the work, renders the agent-facing brief, and records task progress while you run your agent CLI separately.
 
-The result is a repeatable handoff workflow:
+A minimal handoff looks like this:
 
 ```bash
 agent-pack init \
-  --id design-review \
-  --name "Design review" \
-  --manifest ./pack.yaml \
-  --reference ./docs/usage.md \
-  --reference git+https://github.com/example/product.git#main \
-  --skill /home/kevin/.agents/skills/fresh-eyes/SKILL.md \
-  "Review the design and record concrete findings."
+  --id quickstart \
+  --add-task "Read the README and identify one concrete improvement." \
+  "Get oriented and record evidence in task notes."
 
-agent-pack brief --id design-review
+agent-pack brief --id quickstart
 ```
 
-Then tell an agent:
+Then paste a handoff like this into your agent CLI:
 
 ```text
-Run agent-pack brief --id design-review and work the pack.
+Run agent-pack brief --id quickstart and work the pack. Update task status as you go.
 ```
 
 ## Why Use It
 
-Agents work better when the handoff is explicit. `agent-pack` gives the user and agent a shared state file, a stable brief, and simple progress commands.
+Without `agent-pack`, the typical handoff is a long prompt or chat thread. Tasks, references, and progress are not separately addressable. With `agent-pack`, the user and agent share a state file, a stable brief, and simple progress commands.
 
 Use it when you want to:
 
@@ -37,8 +33,6 @@ Use it when you want to:
 - keep task progress, notes, blockers, and completion evidence in one place
 - resume work later from committed state
 - avoid relying on a long chat thread as the only source of truth
-
-`agent-pack` does not run the agent. It prepares the work and tracks progress. You run your agent CLI separately and tell it to read the pack brief.
 
 ## Installation
 
@@ -51,15 +45,15 @@ agent-pack --help
 
 Requirements:
 
-- Node.js
+- Node.js 20 or newer
 - Git on `PATH` for git-backed references and skills
-- normal git credentials configured for private repositories
+- Git authentication for private repositories. `agent-pack` shells out to `git`, so SSH agent, credential helper, netrc, platform keychain, GitHub CLI, or configured askpass can work.
 
 ## Core Concepts
 
 ### Pack
 
-A pack is the durable unit of work. It has an ID, optional display name, prompt, instructions, tasks, references, skills, provenance, status, and event history.
+A pack is the durable unit of work. A pack stores a prompt, instructions, tasks, references, skills, an optional contract, task status, and notes. Alongside the pack file, `agent-pack` writes an append-only event log for state changes.
 
 By default, pack state is stored in the repository working tree:
 
@@ -75,12 +69,11 @@ Git-backed source material is cached separately:
 .agent-pack/cache/
 ```
 
-The cache can always be rebuilt with `agent-pack sync`. Keep cache, locks, and temp files out of git:
+The cache can always be rebuilt with `agent-pack sync`. Keep cache and locks out of git:
 
 ```gitignore
 .agent-pack/cache/
 .agent-pack/locks/
-.agent-pack/tmp/
 ```
 
 If you do not want pack instances committed to the repo, either ignore all of `.agent-pack/` or point state and cache at an external directory:
@@ -94,6 +87,16 @@ export AGENT_PACK_STATE_DIR="$HOME/.local/state/agent-pack/my-repo"
 export AGENT_PACK_CACHE_DIR="$HOME/.cache/agent-pack/my-repo"
 ```
 
+### Brief
+
+The brief is the text document rendered by `agent-pack brief`. It is meant to be pasted into an agent or read by an agent from the shell.
+
+When present, the brief renders sections in this order: prompt, instructions, tasks, references, skills, contract, and progress commands. `agent-pack` lists reference paths in the brief; it does not paste referenced file contents into the brief.
+
+### Manifest
+
+A manifest is a reusable YAML file that can contribute instructions, tasks, references, skills, and contract rules to a pack. Manifest parsing is strict: unknown fields fail fast instead of being ignored.
+
 ### Prompt
 
 The optional positional prompt is a one-off instruction for this pack instance:
@@ -106,24 +109,26 @@ It is rendered at the top of the brief. Prompts are not tasks, references, or re
 
 ### Instructions
 
-Instructions are durable guidance loaded from a manifest or an instructions file. They are rendered after the prompt and before the tasks.
+Instructions are durable guidance loaded from a manifest or a raw instructions file. They are rendered after the prompt and before the tasks.
 
 Use instructions for reusable workflow guidance such as review standards, evidence requirements, or completion expectations.
 
 ### Tasks
 
-Tasks are mutable work items. Agents update task state as they work:
+Tasks are mutable work items. Each task gets an auto-generated runtime ID (`t001`, `t002`, ...). If a manifest task has its own `id`, that value is preserved as `sourceId` for traceability, but progress commands use the runtime ID shown by `agent-pack list`.
+
+Agents update task state as they work:
 
 ```bash
-agent-pack start t001 --id worker-123
-agent-pack note t001 --id worker-123 "Read docs/usage.md sections on sync."
-agent-pack done t001 --id worker-123 --note "Documented findings in the task notes."
-agent-pack block t002 --id worker-123 --note "Need a decision on git refresh behavior."
+agent-pack list --id quickstart
+agent-pack start t001 --id quickstart
+agent-pack note t001 --id quickstart "Read README.md."
+agent-pack done t001 --id quickstart --note "Recorded findings in task notes."
 ```
 
 ### References
 
-References are read-only context. They can be local files, local directories, globs, git paths, or whole git repo snapshots.
+References are named pointers to read-only context the agent should inspect. They can be local files, local directories, globs, git paths, or whole git repo snapshots.
 
 Examples:
 
@@ -137,7 +142,7 @@ git+https://github.com/org/repo.git#main
 git+git@github.com:org/repo.git//docs/reference.md#main
 ```
 
-Directory and whole-repo references stay as one logical reference in the brief. Glob references list the matched files.
+Directory and whole-repo references stay as one logical reference in the brief. Glob references list the matched files. Globs match files, include dotfiles, and do not follow symlinks.
 
 ### Skills
 
@@ -146,73 +151,81 @@ Skills are supplemental `SKILL.md` files. `agent-pack` extracts the skill name, 
 Only files named exactly `SKILL.md` are accepted as skills:
 
 ```bash
-agent-pack init --skills './skills/**'
+agent-pack init --skills './skills/**' --add-task "Apply relevant skills to this work."
 ```
 
 That command scans broadly but only includes matching `SKILL.md` files.
 
-## Quick Start
+A `SKILL.md` may include YAML frontmatter with `name` and `description` fields. Unknown frontmatter fields are rejected. Without frontmatter, the name falls back to the first `#` heading and then the parent directory name; the description falls back to the first paragraph, capped at 300 characters.
 
-Create a small task manifest:
+```markdown
+---
+name: fresh-eyes
+description: Re-read changed code and look for obvious defects.
+---
 
-```yaml
-# pack.yaml
-schemaVersion: 1
-name: design-review
-instructions: |
-  Review the included material before starting tasks.
-  Record concrete evidence in task notes.
+# Fresh Eyes
 
-tasks:
-  - id: inspect
-    title: Inspect the design
-    body: Read the design and identify gaps, contradictions, or missing decisions.
-    doneWhen:
-      - Notes list the sections reviewed.
-      - Any findings include file paths or command output.
-
-references:
-  - name: current design
-    description: Product design for agent-pack.
-    ref: ./docs/usage.md
-
-skills:
-  - ref: ./skills/fresh-eyes/SKILL.md
-
-contract:
-  do:
-    - Run relevant tests before marking tasks done.
-    - Record concrete evidence in task notes.
-  dont:
-    - Leave required task state updates until the end.
+Review the changed files again before finalizing.
 ```
 
-Initialize a pack:
+### Contract
+
+A contract is manifest-only guidance rendered in the brief for the agent to follow. It has `do` and `dont` string lists. If multiple manifests contribute contracts, entries are concatenated in source order.
+
+## Quick Start
+
+Create a pack with one task:
 
 ```bash
 agent-pack init \
-  --id design-review \
-  --manifest ./pack.yaml \
-  "Review the current design and complete each task."
+  --id quickstart \
+  --add-task "Run date and record the output." \
+  "Run the demo task and record evidence."
+```
+
+Expected output:
+
+```text
+Created pack quickstart
+Run: agent-pack brief --id quickstart
 ```
 
 Show the brief:
 
 ```bash
-agent-pack brief --id design-review
+agent-pack brief --id quickstart
+```
+
+Abbreviated output:
+
+```text
+You are working from pack quickstart.
+
+Prompt:
+Run the demo task and record evidence.
+
+Tasks:
+[pending] t001 - Run date and record the output.
+
+Progress commands:
+  agent-pack list --id quickstart
+  agent-pack start <task-id> --id quickstart
+  agent-pack note <task-id> --id quickstart "evidence"
 ```
 
 Tell the agent:
 
 ```text
-Run agent-pack brief --id design-review and work the pack. Update task status as you go.
+Run agent-pack brief --id quickstart and work the pack. Update task status as you go.
 ```
 
 Check progress:
 
 ```bash
-agent-pack status --id design-review
-agent-pack report --id design-review
+agent-pack list --id quickstart
+agent-pack status --id quickstart
+agent-pack report --id quickstart
 ```
 
 ## Command Reference
@@ -229,11 +242,11 @@ Common options:
 
 | Option | Purpose |
 |---|---|
-| `--id <id>` | Use a specific pack ID (`A-Z`, `a-z`, `0-9`, `.`, `_`, `-`) |
+| `--id <id>` | Use a specific pack ID. Must start with `A-Z`, `a-z`, or `0-9`; may contain `A-Z`, `a-z`, `0-9`, `.`, `_`, `-`; max 64 characters |
 | `--name <name>` | Set a display name |
 | `--manifest <ref>` | Load one manifest YAML file or git ref |
 | `--manifests <ref>` | Alias for `--manifest`; useful when passing several manifests |
-| `--instructions <path>` | Load instructions from Markdown or YAML |
+| `--instructions <path>` | Read a plain text or Markdown file verbatim as the pack instructions section |
 | `--add-task <text>` | Add one ad hoc task |
 | `--task <ref>` | Add one task YAML file, glob, or git ref |
 | `--tasks <ref>` | Alias for `--task`; useful when passing several task sources |
@@ -242,10 +255,12 @@ Common options:
 | `--skill <ref>` | Add one `SKILL.md` file |
 | `--skills <ref>` | Alias for `--skill`; useful when passing several skills |
 | `--git-refresh auto\|always\|never` | Control git fetching for this command |
-| `--state-dir <path>` | Override the state directory |
+| `--state-dir <path>` | Override the state directory for `init`; use `AGENT_PACK_STATE_DIR` for other commands |
 | `--json` | Emit machine-readable output |
 
 Example:
+
+Illustrative only: replace the `example/...` URLs and local paths with sources that exist for your project.
 
 ```bash
 agent-pack init \
@@ -272,7 +287,7 @@ Print the agent-facing brief.
 agent-pack brief --id reviewer-001
 ```
 
-The brief includes the prompt, instructions, task list, references, skills, and progress commands.
+The brief includes the prompt, instructions, task list, references, skills, contract if defined, and progress commands.
 
 ### `sync`
 
@@ -293,20 +308,26 @@ Continue work on reviewer-001. Run agent-pack sync --id reviewer-001, then agent
 
 | Value | Meaning |
 |---|---|
-| `auto` | Fetch if the mirror is missing or stale by normal policy |
-| `always` | Fetch before resolving refs or exporting snapshots |
-| `never` | Do not fetch; use existing cache material and fail if missing |
+| `auto` | Clone the mirror if missing; do not refresh existing mirrors |
+| `always` | Clone if missing; otherwise run `git fetch --prune --tags` before resolving refs |
+| `never` | Do not clone or fetch; fail if the mirror is missing |
+
+With `auto`, a branch ref such as `main` continues resolving from the cached mirror until you run `agent-pack sync --git-refresh always`.
+
+Local references and skills are not affected by `sync`; they are read from their paths when the agent uses them.
 
 ### Task Commands
 
 ```bash
 agent-pack list --id reviewer-001
 agent-pack show t001 --id reviewer-001
-agent-pack start t001 --id reviewer-001
+agent-pack start t001 --id reviewer-001 --note "Starting review."
 agent-pack note t001 --id reviewer-001 "Read the design."
 agent-pack done t001 --id reviewer-001 --note "Completed with evidence in notes."
 agent-pack block t002 --id reviewer-001 --note "Need user decision."
 ```
+
+`agent-pack note` takes the note text as a positional argument. `start`, `done`, and `block` take optional note text with `--note`.
 
 ### Status and Reports
 
@@ -319,6 +340,8 @@ agent-pack report --id reviewer-001 --json
 agent-pack summary --id reviewer-001
 ```
 
+`status --all` prints tab-separated columns: pack id, pack name, status, completed/total task count, and blocked count. Use `status --all --json` for scripts.
+
 Derived pack statuses:
 
 | Status | Meaning |
@@ -329,6 +352,10 @@ Derived pack statuses:
 | `blocked` | One or more incomplete tasks are blocked |
 | `completed` | All tasks are completed |
 
+### Exit Codes
+
+`agent-pack` exits `0` on success and `1` for user-visible errors such as validation failures, missing packs, missing files, and git failures. Error messages are printed to stderr.
+
 ## Manifests
 
 Manifests are YAML files that define reusable pack content. A manifest ref can be a local file or a git file ref:
@@ -338,7 +365,26 @@ agent-pack init --manifest ./pack.yaml
 agent-pack init --manifests git+https://github.com/org/packs.git//review.yaml#main
 ```
 
-Treat remote manifests as trusted inputs. Like local manifests, they can name local reference paths and skills that the agent brief will ask the agent to read.
+Treat remote manifests as trusted inputs. A manifest can reference any local path readable by the user running `agent-pack`; a malicious manifest could direct the agent to inspect sensitive local files. Only load manifests from sources you trust.
+
+Manifest parsing is strict. Unknown fields are rejected.
+
+| Location | Allowed fields |
+|---|---|
+| Manifest | `schemaVersion`, `name`, `instructions`, `tasks`, `references`, `skills`, `contract` |
+| Task | `id`, `title`, `category`, `body`, `doneWhen` |
+| Reference or skill include | `name`, `description`, `ref` |
+| Contract | `do`, `dont` |
+
+Rules:
+
+- `schemaVersion`, when present, must be `1`.
+- Each task must have `id` or `title`.
+- `doneWhen`, `contract.do`, and `contract.dont` are arrays of non-empty strings.
+- Reference and skill `ref` values are non-empty strings.
+- `contract` must include at least one `do` or `dont` entry.
+- Manifest task `id` is preserved as `sourceId`; progress commands use the runtime ID (`t001`, `t002`, ...) shown by `agent-pack list`.
+- `category` is stored as task metadata but is not currently rendered in the brief.
 
 ```yaml
 schemaVersion: 1
@@ -350,7 +396,6 @@ instructions: |
 tasks:
   - id: inspect
     title: Inspect implementation
-    category: review
     body: Check the implementation against the included design.
     doneWhen:
       - Notes identify files inspected.
@@ -376,7 +421,7 @@ CLI flags and manifests can be combined. Merge order is deterministic and source
 3. The final brief still renders one section per type. Inside each section, entries keep the relative order of the sources that contributed them.
 4. The positional prompt is stored as the pack-level prompt and rendered at the top of the brief. It is not part of section ordering.
 
-For example, this command places the ad hoc task before manifest tasks, while references and skills still render in their own sections:
+Suppose this command places the ad hoc task before manifest tasks, while references and skills still render in their own sections:
 
 ```bash
 agent-pack init \
@@ -400,7 +445,7 @@ git+<repo-url>//<path-inside-repo>#<ref>
 git+<repo-url>#<ref>
 ```
 
-The `#<ref>` suffix is optional. If omitted, `agent-pack` uses the remote default branch, resolves it to a commit, and records the resolved commit in provenance.
+The `#<ref>` suffix is optional. If omitted, `agent-pack` uses the remote default branch, resolves it to a commit, and records the resolved commit in source metadata.
 
 Supported URL forms:
 
@@ -409,6 +454,8 @@ git+https://github.com/org/repo.git//docs/usage.md#main
 git+http://git.example.com/org/repo.git//docs/usage.md#main
 git+ssh://git@github.com/org/repo.git//docs/usage.md#main
 git+git@github.com:org/repo.git//docs/usage.md#main
+git+file:///path/to/repo.git//docs/usage.md#main
+git+git://git.example.com/org/repo.git//docs/usage.md#main
 ```
 
 Authentication is delegated to normal `git` behavior: SSH agent, credential helper, netrc, platform keychain, or configured askpass.
@@ -422,7 +469,9 @@ Authentication is delegated to normal `git` behavior: SSH agent, credential help
 | `AGENT_PACK_CACHE_DIR` | Cache root | `<repo>/.agent-pack/cache` |
 | `AGENT_PACK_GIT_CACHE_DIR` | Git mirror cache root | `$AGENT_PACK_CACHE_DIR/git` |
 | `AGENT_PACK_GIT_REFRESH` | Default git fetch policy for `init` and `sync` | `auto` |
-| `AGENT_PACK_CMD` | Command name rendered in briefs | `agent-pack` |
+| `AGENT_PACK_CMD` | Command name rendered in brief progress commands; set when invoking through a wrapper | `agent-pack` |
+
+Relative path values resolve from the current working directory. For `AGENT_PACK_GIT_CACHE_DIR`, a relative value resolves under `AGENT_PACK_CACHE_DIR`; an absolute value overrides the cache root.
 
 Set a default pack ID when working on one pack for a while:
 
@@ -450,7 +499,6 @@ Default layout:
     git/
     snapshots/
   locks/
-  tmp/
 ```
 
 Choose one of two common state policies.
@@ -476,7 +524,6 @@ Recommended `.gitignore`:
 ```gitignore
 .agent-pack/cache/
 .agent-pack/locks/
-.agent-pack/tmp/
 ```
 
 ### Keep Pack State Local
@@ -505,6 +552,18 @@ agent-pack brief
 
 Local paths are intentionally live. If a local reference or skill changes after pack creation, the agent reads the current file at that path. Git references resolve to a commit and read from exported snapshots. Git snapshots reject symlinks instead of extracting them into the cache.
 
-## Detailed Design
+### Event Log
+
+Each pack has an append-only JSONL event log under `.agent-pack/state/events/<id>.jsonl`. Events are written for pack creation and task state changes such as start, note, done, and block. Commit event logs with `.agent-pack/state/` when you want the audit trail to travel with the pack.
+
+### Locking
+
+State mutations are serialized with lock directories under `.agent-pack/locks/`. Stale locks whose holder process is gone are recovered automatically. If a command reports a stuck lock and no `agent-pack` process is running, remove the reported lock directory.
+
+### Reinitializing a Pack
+
+`agent-pack init` fails if the pack id already exists. To recreate a scratch pack, remove `.agent-pack/state/packs/<id>.json` and `.agent-pack/state/events/<id>.jsonl`; the index is reconciled from disk by later status/list operations.
+
+## More Documentation
 
 See [docs/usage.md](docs/usage.md) for a compact installed usage reference.

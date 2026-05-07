@@ -5,7 +5,8 @@ This file is a lightweight internal onboarding note for agents working in this r
 ## Start Here
 
 - Read `README.md` for the CLI surface and pack workflow.
-- Read `docs/design.md` for pack state, manifest, reference, skill, and cache semantics.
+- Read `docs/usage.md` for compact installed usage examples.
+- Use README sections for pack state, manifest, reference, skill, and cache semantics.
 - Source code lives in `src/cli/` and `src/core/`.
 - Current CLI entrypoint is `src/cli/agent-pack.ts`.
 - Tests live in `test/unit/`, `test/integration/`, and `test/smoke/`.
