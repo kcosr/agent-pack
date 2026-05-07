@@ -9,7 +9,7 @@ Create a pack:
 ```bash
 agent-pack init \
   --id demo-pack \
-  --manifest ./examples/demo \
+  --manifest ./examples/demo.yaml \
   "Run the demo task and record the result."
 ```
 
