@@ -250,12 +250,18 @@ Example:
 agent-pack init \
   --id reviewer-001 \
   --add-task "Check local unstaged changes" \
-  --manifest git+https://github.com/org/packs.git//base-pack.yaml#main \
+  --manifest git+https://github.com/example/agent-packs.git//review/base.yaml#main \
+  --task git+https://github.com/example/agent-packs.git//tasks/security-review.yaml#main \
   --task ./tasks/*.yaml \
+  --reference git+https://github.com/example/product.git//docs/**/*.md#main \
+  --reference git+https://github.com/example/product.git//adr#main \
   --references './docs/**/*.md' \
+  --skill git+https://github.com/example/agent-skills.git//review/fresh-eyes/SKILL.md#v1.0.0 \
   --skills './skills/**' \
   "Use the included docs and skills to complete the review."
 ```
+
+That command composes content across types: the manifest can contribute instructions, tasks, references, skills, and contract rules; task flags add more tasks; reference flags add both remote and local reading material; skill flags add supplemental `SKILL.md` files.
 
 ### `brief`
 
@@ -375,12 +381,14 @@ For example, this command places the ad hoc task before manifest tasks, while re
 agent-pack init \
   --id ordered-review \
   --add-task "Check local unstaged changes first" \
-  --manifest ./pack.yaml \
+  --manifest git+https://github.com/example/agent-packs.git//review/base.yaml#main \
   --task ./tasks/follow-up.yaml \
-  --reference ./notes.md
+  --reference git+https://github.com/example/product.git//docs/api.md#main \
+  --reference ./notes.md \
+  --skill git+https://github.com/example/agent-skills.git//review/fresh-eyes/SKILL.md#v1.0.0
 ```
 
-The task section renders the ad hoc task, then tasks from `./pack.yaml`, then tasks from `./tasks/follow-up.yaml`. The reference section renders references from `./pack.yaml` before `./notes.md` because the manifest appeared first among reference-contributing sources.
+The task section renders the ad hoc task, then tasks from the remote manifest, then tasks from `./tasks/follow-up.yaml`. The reference section renders references from the remote manifest before the remote API doc and `./notes.md` because the manifest appeared first among reference-contributing sources. Skills from the manifest render before the explicit remote skill for the same reason.
 
 ## Git Sources
 

@@ -38,7 +38,7 @@
     "vitest": "^2.1.8"
   },
   "lint-staged": {
-    "*.{ts,tsx,js,jsx,mjs,cjs,json,md,yaml,yml}": ["biome format --write"]
+    "*.{ts,tsx,js,jsx,mjs,cjs,json,yaml,yml}": ["biome format --write"]
   },
   "engines": {
     "node": ">=20"
