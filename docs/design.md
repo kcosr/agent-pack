@@ -870,9 +870,11 @@ This file is a lightweight internal onboarding note for agents working in this r
 
 ## Release
 
-- Run `npm run check`.
-- Run `node scripts/release.mjs patch`, `minor`, or `major` from `main`.
-- The release script bumps versions, promotes changelog entries, tags, pushes, creates a GitHub prerelease, and opens a fresh `## [Unreleased]` section.
+- Keep the checked-in package version at the last released version. Before the first release, the checked-in baseline is `0.0.0`.
+- Run `npm run release -- minor` from `main` for the first `0.1.0` release.
+- After that, run `npm run release -- patch`, `minor`, `major`, or an explicit `x.y.z` version from `main`.
+- The release script bumps `package.json` and `package-lock.json`, promotes changelog entries, runs checks and smoke tests, dry-runs the npm publish, commits, tags, publishes `@kcosr/agent-pack` to npm, pushes the matching Git tag, creates a GitHub prerelease, and opens a fresh `## [Unreleased]` section.
+- GitHub release tags and npm package versions must match exactly: npm `@kcosr/agent-pack@x.y.z` corresponds to Git tag `vx.y.z`.
 ```
 
 ### Changelog
@@ -911,14 +913,16 @@ Sample `scripts/release.mjs` behavior:
 2. require release branch `main`
 3. bump `package.json` and `package-lock.json`
 4. promote `CHANGELOG.md` `## [Unreleased]` to `## [x.y.z] - YYYY-MM-DD`
-5. commit `Release vx.y.z`
-6. tag `vx.y.z`
-7. push branch and tag
-8. create a GitHub prerelease with `gh release create`
-9. add a fresh `## [Unreleased]` scaffold
-10. commit `Prepare for next release`
-
-The script should not run tests itself; release instructions should require `npm run check` before release.
+5. run `npm run check`
+6. run `npm run test:smoke`
+7. run `npm publish --dry-run --access public`
+8. commit `Release vx.y.z`
+9. tag `vx.y.z`
+10. publish `@kcosr/agent-pack@x.y.z` to npm
+11. push branch and tag
+12. create a GitHub prerelease with `gh release create`
+13. add a fresh `## [Unreleased]` scaffold
+14. commit `Prepare for next release`
 
 ## Summary
 

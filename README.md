@@ -44,7 +44,7 @@ Use it when you want to:
 `agent-pack` is distributed as a Node CLI.
 
 ```bash
-npm install -g agent-pack
+npm install -g @kcosr/agent-pack
 agent-pack --help
 ```
 
