@@ -29,9 +29,12 @@ describe("brief rendering", () => {
     expect(brief).toContain("- Run tests.");
     expect(brief).toContain("Don't:");
     expect(brief).toContain("- Skip evidence.");
-    expect(brief).toContain("  ap start t001 --id review-pack");
-    expect(brief).toContain('  ap note t001 --id review-pack "evidence"');
-    expect(brief).toContain('  ap done t001 --id review-pack --note "completion evidence"');
+    expect(brief).toContain("  ap list --id review-pack");
+    expect(brief).toContain("  ap show <task-id> --id review-pack");
+    expect(brief).toContain("  ap start <task-id> --id review-pack");
+    expect(brief).toContain('  ap note <task-id> --id review-pack "evidence"');
+    expect(brief).toContain('  ap done <task-id> --id review-pack --note "completion evidence"');
+    expect(brief).toContain('  ap block <task-id> --id review-pack --note "blocker"');
   });
 
   it("renders empty task packs and blocked summary entries", () => {

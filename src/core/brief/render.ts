@@ -84,11 +84,12 @@ export function renderBrief(
     }
   }
   lines.push("", "Progress commands:");
-  for (const task of pack.tasks) {
-    lines.push(`  ${commandName} start ${task.id} --id ${pack.id}`);
-    lines.push(`  ${commandName} note ${task.id} --id ${pack.id} "evidence"`);
-    lines.push(`  ${commandName} done ${task.id} --id ${pack.id} --note "completion evidence"`);
-  }
+  lines.push(`  ${commandName} list --id ${pack.id}`);
+  lines.push(`  ${commandName} show <task-id> --id ${pack.id}`);
+  lines.push(`  ${commandName} start <task-id> --id ${pack.id}`);
+  lines.push(`  ${commandName} note <task-id> --id ${pack.id} "evidence"`);
+  lines.push(`  ${commandName} done <task-id> --id ${pack.id} --note "completion evidence"`);
+  lines.push(`  ${commandName} block <task-id> --id ${pack.id} --note "blocker"`);
   return `${lines.join("\n")}\n`;
 }
 
