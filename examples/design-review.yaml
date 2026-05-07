@@ -6,17 +6,17 @@ instructions: |
 
 tasks:
   - id: inspect
-    title: Inspect the design
+    title: Inspect the project docs
     category: review
-    body: Read the design and identify gaps, contradictions, or missing decisions.
+    body: Read the README and usage reference, then identify gaps, contradictions, or missing decisions.
     doneWhen:
       - Notes list the sections reviewed.
       - Any findings include file paths or command output.
 
 references:
-  - name: design
-    description: Detailed product design.
-    ref: ./docs/design.md
-
-skills:
-  - ref: ./skills/fresh-eyes/SKILL.md
+  - name: readme
+    description: Product README.
+    ref: ./README.md
+  - name: usage
+    description: Installed usage reference.
+    ref: ./docs/usage.md

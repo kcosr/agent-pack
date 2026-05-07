@@ -11,7 +11,7 @@ agent-pack init \
   --id design-review \
   --name "Design review" \
   --manifest ./pack.yaml \
-  --reference ./docs/design.md \
+  --reference ./docs/usage.md \
   --skill ./skills/fresh-eyes/SKILL.md \
   "Review the design and record concrete findings."
 
@@ -115,7 +115,7 @@ Tasks are mutable work items. Agents update task state as they work:
 
 ```bash
 agent-pack start t001 --id worker-123
-agent-pack note t001 --id worker-123 "Read docs/design.md sections on sync."
+agent-pack note t001 --id worker-123 "Read docs/usage.md sections on sync."
 agent-pack done t001 --id worker-123 --note "Documented findings in the task notes."
 agent-pack block t002 --id worker-123 --note "Need a decision on git refresh behavior."
 ```
@@ -127,7 +127,7 @@ References are read-only context. They can be local files, local directories, gl
 Examples:
 
 ```text
-./docs/design.md
+./docs/usage.md
 ../some-dir
 ./docs/**/*.md
 git+https://github.com/org/repo.git//docs/reference.md#main
@@ -173,7 +173,7 @@ tasks:
 references:
   - name: current design
     description: Product design for agent-pack.
-    ref: ./docs/design.md
+    ref: ./docs/usage.md
 
 skills:
   - ref: ./skills/fresh-eyes/SKILL.md
@@ -352,7 +352,7 @@ tasks:
 references:
   - name: design
     description: Initial product design.
-    ref: ./docs/design.md
+    ref: ./docs/usage.md
 
   - name: upstream examples
     description: Related docs from an external repository.
@@ -396,10 +396,10 @@ The `#<ref>` suffix is optional. If omitted, `agent-pack` uses the remote defaul
 Supported URL forms:
 
 ```text
-git+https://github.com/org/repo.git//docs/design.md#main
-git+http://git.example.com/org/repo.git//docs/design.md#main
-git+ssh://git@github.com/org/repo.git//docs/design.md#main
-git+git@github.com:org/repo.git//docs/design.md#main
+git+https://github.com/org/repo.git//docs/usage.md#main
+git+http://git.example.com/org/repo.git//docs/usage.md#main
+git+ssh://git@github.com/org/repo.git//docs/usage.md#main
+git+git@github.com:org/repo.git//docs/usage.md#main
 ```
 
 Authentication is delegated to normal `git` behavior: SSH agent, credential helper, netrc, platform keychain, or configured askpass.
@@ -498,4 +498,4 @@ Local paths are intentionally live. If a local reference or skill changes after 
 
 ## Detailed Design
 
-See [docs/design.md](docs/design.md) for the detailed state shape, repository layout, and test strategy.
+See [docs/usage.md](docs/usage.md) for a compact installed usage reference.

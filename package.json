@@ -6,7 +6,7 @@
   "bin": {
     "agent-pack": "dist/cli/agent-pack.js"
   },
-  "files": ["dist", "README.md", "docs"],
+  "files": ["dist", "README.md", "docs", "examples"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",

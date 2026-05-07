@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Command, Option } from "commander";
 import { renderSummary } from "../core/brief/render.js";
 import { AgentPackError } from "../core/errors.js";
@@ -22,7 +25,8 @@ let startupError: AgentPackError | undefined;
 program
   .name("agent-pack")
   .description("Prepare durable work packets for coding agents.")
-  .version("0.1.0");
+  .version(packageVersion())
+  .addHelpText("after", packageHelpText());
 
 configureInitCommand(program);
 
@@ -320,6 +324,41 @@ function statusJson(pack: PackState) {
 
 function printJson(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+function packageHelpText(): string {
+  const resources = [
+    ["README", "README.md"],
+    ["Docs", "docs"],
+    ["Examples", "examples"],
+  ]
+    .map(([label, relativePath]) => ({ label, path: path.join(packageRoot(), relativePath) }))
+    .filter((resource) => existsSync(resource.path));
+  if (resources.length === 0) {
+    return "";
+  }
+  const width = Math.max(...resources.map((resource) => resource.label.length));
+  return `\nResources:\n${resources
+    .map((resource) => `  ${resource.label.padEnd(width)}  ${resource.path}`)
+    .join("\n")}`;
+}
+
+function packageRoot(): string {
+  let dir = path.dirname(fileURLToPath(import.meta.url));
+  while (dir !== path.dirname(dir)) {
+    if (existsSync(path.join(dir, "package.json"))) {
+      return dir;
+    }
+    dir = path.dirname(dir);
+  }
+  return process.cwd();
+}
+
+function packageVersion(): string {
+  const pkg = JSON.parse(readFileSync(path.join(packageRoot(), "package.json"), "utf8")) as {
+    version?: unknown;
+  };
+  return typeof pkg.version === "string" ? pkg.version : "0.0.0";
 }
 
 async function run(fn: () => Promise<void>): Promise<void> {

@@ -6,6 +6,24 @@ import { describe, expect, it } from "vitest";
 import { runCli } from "../helpers/cli.js";
 
 describe("agent-pack CLI git smoke", () => {
+  it("prints package resources in top-level help", async () => {
+    const result = await runCli(["--help"]);
+
+    expect(result.stdout).toContain("Resources:");
+    expect(result.stdout).toContain("README");
+    expect(result.stdout).toContain("README.md");
+    expect(result.stdout).toContain("Docs");
+    expect(result.stdout).toContain("docs");
+    expect(result.stdout).toContain("Examples");
+    expect(result.stdout).toContain("examples");
+  });
+
+  it("prints the package version from package.json", async () => {
+    const result = await runCli(["--version"]);
+
+    expect(result.stdout.trim()).toBe("0.0.0");
+  });
+
   it("preserves command line source order within each section", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-order-smoke-"));
     await mkdir(path.join(workspace, "docs"), { recursive: true });
