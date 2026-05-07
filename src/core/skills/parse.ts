@@ -1,21 +1,29 @@
 import { readFile } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 import YAML from "yaml";
+import { AgentPackError } from "../errors.js";
 
 export interface SkillMetadata {
   name: string;
   description?: string;
 }
 
-export async function extractSkillMetadata(filePath: string): Promise<SkillMetadata> {
+export async function extractSkillMetadata(
+  filePath: string,
+  strict = false,
+): Promise<SkillMetadata> {
   const content = await readFile(filePath, "utf8");
-  const frontmatter = parseFrontmatter(content);
+  const frontmatter = parseFrontmatter(content, filePath, strict);
   const name = frontmatter.name ?? firstHeading(content) ?? basename(dirname(filePath));
   const description = frontmatter.description ?? firstParagraph(content);
   return { name, description };
 }
 
-function parseFrontmatter(content: string): Record<string, string> {
+function parseFrontmatter(
+  content: string,
+  filePath: string,
+  strict: boolean,
+): Partial<Record<"name" | "description", string>> {
   if (!content.startsWith("---\n")) {
     return {};
   }
@@ -24,7 +32,27 @@ function parseFrontmatter(content: string): Record<string, string> {
     return {};
   }
   const parsed = YAML.parse(content.slice(4, end));
-  return typeof parsed === "object" && parsed ? parsed : {};
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    if (strict) {
+      throw new AgentPackError(`skill frontmatter must be a YAML object: ${filePath}`);
+    }
+    return {};
+  }
+  const raw = parsed as Record<string, unknown>;
+  if (strict) {
+    validateOptionalString(raw.name, "name", filePath);
+    validateOptionalString(raw.description, "description", filePath);
+  }
+  return {
+    name: typeof raw.name === "string" ? raw.name : undefined,
+    description: typeof raw.description === "string" ? raw.description : undefined,
+  };
+}
+
+function validateOptionalString(value: unknown, field: string, filePath: string): void {
+  if (value !== undefined && typeof value !== "string") {
+    throw new AgentPackError(`skill frontmatter ${field} must be a string: ${filePath}`);
+  }
 }
 
 function firstHeading(content: string): string | undefined {

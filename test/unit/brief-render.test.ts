@@ -1,0 +1,114 @@
+import { describe, expect, it } from "vitest";
+import { renderBrief, renderSummary } from "../../src/core/brief/render.js";
+import type { PackState } from "../../src/core/types.js";
+
+describe("brief rendering", () => {
+  it("renders every agent-facing brief section", () => {
+    const brief = renderBrief(pack(), "ap");
+
+    expect(brief).toContain("You are working from pack review-pack.");
+    expect(brief).toContain("Name: Review Pack");
+    expect(brief).toContain("Prompt:\nReview the implementation.");
+    expect(brief).toContain("Instructions:\nRead references first.");
+    expect(brief).toContain("[pending] t001 - Inspect API");
+    expect(brief).toContain("  Check request handling.");
+    expect(brief).toContain("  Done when:");
+    expect(brief).toContain("  - Notes cite files.");
+    expect(brief).toContain("References:");
+    expect(brief).toContain("- design");
+    expect(brief).toContain("  Path: ./docs/design.md");
+    expect(brief).toContain("- source glob");
+    expect(brief).toContain("  Files:");
+    expect(brief).toContain("  - ./src/index.ts");
+    expect(brief).toContain("Skills:");
+    expect(brief).toContain("Use these supplemental skills");
+    expect(brief).toContain("- fresh-eyes");
+    expect(brief).toContain("- fresh-eyes (2)");
+    expect(brief).toContain("Contract:");
+    expect(brief).toContain("Do:");
+    expect(brief).toContain("- Run tests.");
+    expect(brief).toContain("Don't:");
+    expect(brief).toContain("- Skip evidence.");
+    expect(brief).toContain("  ap start t001 --id review-pack");
+    expect(brief).toContain('  ap note t001 --id review-pack "evidence"');
+    expect(brief).toContain('  ap done t001 --id review-pack --note "completion evidence"');
+  });
+
+  it("renders empty task packs and blocked summary entries", () => {
+    const [task] = pack().tasks;
+    const state = pack({
+      taskCounts: { total: 1, pending: 0, inProgress: 0, completed: 0, blocked: 1 },
+      tasks: task ? [{ ...task, status: "blocked" }] : [],
+      references: [],
+      skills: [],
+    });
+
+    expect(renderBrief(pack({ tasks: [], references: [], skills: [] }))).toContain(
+      "- No tasks in this pack.",
+    );
+    expect(renderSummary(state)).toContain("Tasks: 0/1 completed, 1 blocked");
+    expect(renderSummary(state)).toContain("Blocked:\n- t001 - Inspect API");
+  });
+});
+
+function pack(overrides: Partial<PackState> = {}): PackState {
+  return {
+    schemaVersion: 1,
+    id: "review-pack",
+    name: "Review Pack",
+    status: "pending",
+    createdAt: "2026-05-07T00:00:00.000Z",
+    updatedAt: "2026-05-07T00:00:00.000Z",
+    repoRoot: ".",
+    prompt: "Review the implementation.",
+    instructions: "Read references first.",
+    taskCounts: { total: 1, pending: 1, inProgress: 0, completed: 0, blocked: 0 },
+    tasks: [
+      {
+        id: "t001",
+        sourceId: "inspect-api",
+        title: "Inspect API",
+        body: "Check request handling.",
+        doneWhen: ["Notes cite files."],
+        status: "pending",
+        notes: [],
+      },
+    ],
+    references: [
+      {
+        id: "r001",
+        name: "design",
+        description: "Design document.",
+        source: { kind: "file", path: "./docs/design.md" },
+        path: "./docs/design.md",
+      },
+      {
+        id: "r002",
+        name: "source glob",
+        source: { kind: "glob", path: "./src/**/*.ts" },
+        files: ["./src/index.ts"],
+      },
+    ],
+    skills: [
+      {
+        id: "s001",
+        name: "fresh-eyes",
+        description: "Review changed code.",
+        source: { kind: "file", path: "./skills/fresh-eyes/SKILL.md" },
+        path: "./skills/fresh-eyes/SKILL.md",
+      },
+      {
+        id: "s002",
+        name: "fresh-eyes (2)",
+        description: "Review again.",
+        source: { kind: "file", path: "./skills/other/SKILL.md" },
+        path: "./skills/other/SKILL.md",
+      },
+    ],
+    contract: {
+      do: ["Run tests."],
+      dont: ["Skip evidence."],
+    },
+    ...overrides,
+  };
+}

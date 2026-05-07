@@ -221,6 +221,50 @@ tasks:
     ).rejects.toThrow("tasks[0].name");
   });
 
+  it("rejects unknown task file fields in strict mode", async () => {
+    await writeFile(
+      "task.yaml",
+      `title: Inspect
+unknown: true`,
+    );
+
+    await expect(
+      initPack({
+        id: "strict-task-file",
+        includes: [{ type: "taskRef", ref: "./task.yaml" }],
+        gitRefresh: "auto",
+        strict: true,
+      }),
+    ).rejects.toThrow("task.unknown");
+  });
+
+  it("rejects ambiguous instructions YAML in strict mode", async () => {
+    await writeFile("instructions.yaml", "note: Review carefully");
+
+    await expect(
+      initPack({
+        id: "strict-instructions",
+        includes: [{ type: "instructions", path: "./instructions.yaml" }],
+        gitRefresh: "auto",
+        strict: true,
+      }),
+    ).rejects.toThrow("instructions.note");
+  });
+
+  it("rejects invalid skill frontmatter in strict mode", async () => {
+    await mkdir("skills/bad", { recursive: true });
+    await writeFile("skills/bad/SKILL.md", "---\nname: 123\n---\n# Bad\n");
+
+    await expect(
+      initPack({
+        id: "strict-skill",
+        includes: [{ type: "skill", ref: { ref: "./skills/bad/SKILL.md" } }],
+        gitRefresh: "auto",
+        strict: true,
+      }),
+    ).rejects.toThrow("frontmatter name must be a string");
+  });
+
   it("rejects git manifest refs without a file path", async () => {
     await expect(
       initPack({

@@ -30,46 +30,65 @@ export async function readManifest(filePath: string, strict = false): Promise<Pa
   return parsed as PackManifest;
 }
 
-export async function readInstructions(filePath: string): Promise<string> {
+export async function readInstructions(filePath: string, strict = false): Promise<string> {
   const content = await readText(filePath, "instructions");
   if (/\.(ya?ml)$/i.test(filePath)) {
     const parsed = parseYaml(content, filePath);
     if (parsed && typeof parsed === "object") {
       const raw = parsed as Record<string, unknown>;
+      if (strict) {
+        assertKnownKeys(raw, new Set(["instructions"]), "instructions");
+      }
       if (typeof raw.instructions === "string") {
         return raw.instructions;
+      }
+      if (strict) {
+        throw new AgentPackError(`instructions YAML must define instructions: ${filePath}`);
       }
     }
   }
   return content;
 }
 
-export async function readTaskFile(filePath: string): Promise<ManifestTask[]> {
+export async function readTaskFile(filePath: string, strict = false): Promise<ManifestTask[]> {
   const content = await readText(filePath, "task file");
   const parsed = parseYaml(content, filePath);
   if (Array.isArray(parsed)) {
-    return parsed.map(normalizeTask);
+    return parsed.map((task, index) => normalizeTask(task, strict, `tasks[${index}]`));
   }
   if (parsed && typeof parsed === "object") {
     const raw = parsed as Record<string, unknown>;
     if (Array.isArray(raw.tasks)) {
-      return raw.tasks.map(normalizeTask);
+      if (strict) {
+        assertKnownKeys(raw, new Set(["tasks"]), "taskFile");
+      }
+      return raw.tasks.map((task, index) => normalizeTask(task, strict, `tasks[${index}]`));
     }
   }
   if (parsed && typeof parsed === "object") {
-    return [normalizeTask(parsed)];
+    return [normalizeTask(parsed, strict, "task")];
   }
   throw new AgentPackError(`task file must contain a task or tasks: ${filePath}`);
 }
 
-export function normalizeTask(task: unknown): ManifestTask {
+export function normalizeTask(task: unknown, strict = false, label = "task"): ManifestTask {
   if (!task || typeof task !== "object") {
     throw new AgentPackError("task must be an object");
   }
   const raw = task as Record<string, unknown>;
+  if (strict) {
+    assertKnownKeys(raw, taskKeys, label);
+  }
   const title = stringValue(raw.title) ?? stringValue(raw.name) ?? stringValue(raw.id);
   if (!title) {
     throw new AgentPackError("task requires title, name, or id");
+  }
+  if (
+    raw.doneWhen !== undefined &&
+    (!Array.isArray(raw.doneWhen) ||
+      raw.doneWhen.some((entry) => typeof entry !== "string" || !entry.trim()))
+  ) {
+    throw new AgentPackError(`${label}.doneWhen must be an array of strings`);
   }
   const doneWhen = Array.isArray(raw.doneWhen)
     ? raw.doneWhen.map((entry) => String(entry))

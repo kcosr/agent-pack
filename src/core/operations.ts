@@ -60,7 +60,7 @@ export async function initPack(input: InitInput): Promise<PackState> {
         break;
       }
       case "instructions":
-        instructions.push(await readInstructions(include.path));
+        instructions.push(await readInstructions(include.path, input.strict));
         break;
       case "taskRef":
       case "adHocTask":
@@ -78,9 +78,9 @@ export async function initPack(input: InitInput): Promise<PackState> {
   }
 
   const packId = assertValidPackId(input.id ?? slug(name ?? "pack"));
-  const tasks = await loadTasks(taskInputs, paths, input.gitRefresh);
+  const tasks = await loadTasks(taskInputs, paths, input.gitRefresh, input.strict);
   const references = await resolveReferences(referenceRefs, paths, input.gitRefresh);
-  const skills = await resolveSkills(skillRefs, paths, input.gitRefresh);
+  const skills = await resolveSkills(skillRefs, paths, input.gitRefresh, input.strict);
   const now = new Date().toISOString();
   const pack: PackState = {
     schemaVersion: 1,

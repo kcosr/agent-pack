@@ -23,12 +23,13 @@ export async function loadTasks(
   inputs: TaskInput[],
   paths: RuntimePaths,
   refresh: GitRefresh,
+  strict = false,
 ): Promise<PackTask[]> {
   const tasks: Array<{ task: ManifestTask; source?: SourceInfo }> = [];
   for (const input of inputs) {
     switch (input.type) {
       case "taskRef":
-        tasks.push(...(await loadTaskRef(input.ref, paths, refresh)));
+        tasks.push(...(await loadTaskRef(input.ref, paths, refresh, strict)));
         break;
       case "adHocTask":
         tasks.push({ task: taskTitleFromText(input.text) });
@@ -61,13 +62,17 @@ async function loadTaskRef(
   ref: string,
   paths: RuntimePaths,
   refresh: GitRefresh,
+  strict: boolean,
 ): Promise<Array<{ task: ManifestTask; source?: SourceInfo }>> {
-  return isGitRef(ref) ? loadGitTaskRef(ref, paths, refresh) : loadLocalTaskRef(ref, paths);
+  return isGitRef(ref)
+    ? loadGitTaskRef(ref, paths, refresh, strict)
+    : loadLocalTaskRef(ref, paths, strict);
 }
 
 async function loadLocalTaskRef(
   ref: string,
   paths: RuntimePaths,
+  strict: boolean,
 ): Promise<Array<{ task: ManifestTask; source?: SourceInfo }>> {
   const files = hasGlobMagic(ref)
     ? await fg(ref, { cwd: paths.repoRoot, onlyFiles: true, dot: true, unique: true })
@@ -78,7 +83,7 @@ async function loadLocalTaskRef(
   const loaded = await Promise.all(
     files.map(async (file) => {
       const absPath = resolveInputPath(file, paths.repoRoot);
-      const tasks = await readTaskFile(absPath);
+      const tasks = await readTaskFile(absPath, strict);
       return tasks.map((task) => ({
         task,
         source: { kind: "file" as const, path: toDisplayPath(absPath, paths.repoRoot) },
@@ -92,6 +97,7 @@ async function loadGitTaskRef(
   ref: string,
   paths: RuntimePaths,
   refresh: GitRefresh,
+  strict: boolean,
 ): Promise<Array<{ task: ManifestTask; source?: SourceInfo }>> {
   const materialized = await materializeGitRef(ref, paths, refresh);
   if (!materialized.pathInRepo) {
@@ -111,7 +117,7 @@ async function loadGitTaskRef(
   const loaded = await Promise.all(
     files.map(async (file) => {
       const absPath = path.join(materialized.snapshotRootAbs, file);
-      const tasks = await readTaskFile(absPath);
+      const tasks = await readTaskFile(absPath, strict);
       return tasks.map((task) => ({
         task,
         source: { ...materialized.source, path: file },
