@@ -12,8 +12,8 @@ describe("agent-pack CLI git smoke", () => {
     expect(result.stdout).toContain("Resources:");
     expect(result.stdout).toContain("README");
     expect(result.stdout).toContain("README.md");
-    expect(result.stdout).toContain("Docs");
-    expect(result.stdout).toContain("docs");
+    expect(result.stdout).toContain("Usage");
+    expect(result.stdout).toContain("docs/usage.md");
     expect(result.stdout).toContain("Examples");
     expect(result.stdout).toContain("examples");
   });

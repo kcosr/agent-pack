@@ -329,7 +329,7 @@ function printJson(value: unknown): void {
 function packageHelpText(): string {
   const resources = [
     ["README", "README.md"],
-    ["Docs", "docs"],
+    ["Usage", "docs/usage.md"],
     ["Examples", "examples"],
   ]
     .map(([label, relativePath]) => ({ label, path: path.join(packageRoot(), relativePath) }))
