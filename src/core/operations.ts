@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import fg from "fast-glob";
@@ -84,7 +85,7 @@ export async function initPack(input: InitInput): Promise<PackState> {
     }
   }
 
-  const packId = assertValidPackId(input.id ?? slug(name ?? "pack"));
+  const packId = await resolveInitPackId(store, input.id, name);
   const tasks = await loadTasks(taskInputs, paths, input.gitRefresh);
   const references = await resolveReferences(referenceRefs, paths, input.gitRefresh);
   const skills = await resolveSkills(skillRefs, paths, input.gitRefresh);
@@ -124,6 +125,32 @@ function mergeContract(
     do: [...(current?.do ?? []), ...(next.do ?? [])],
     dont: [...(current?.dont ?? []), ...(next.dont ?? [])],
   };
+}
+
+async function resolveInitPackId(
+  store: StateStore,
+  explicitId: string | undefined,
+  name: string | undefined,
+): Promise<string> {
+  if (explicitId || process.env.AGENT_PACK_ID) {
+    return assertValidPackId(explicitId ?? process.env.AGENT_PACK_ID);
+  }
+  return generatePackId(store, slug(name ?? "pack"));
+}
+
+async function generatePackId(store: StateStore, base: string): Promise<string> {
+  const trimmedBase = base.slice(0, 57).replace(/-$/g, "") || "pack";
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const candidate = assertValidPackId(`${trimmedBase}-${randomSuffix()}`);
+    if (!(await pathExists(store.packPath(candidate)))) {
+      return candidate;
+    }
+  }
+  throw new AgentPackError(`generated pack id already exists for ${trimmedBase}`);
+}
+
+function randomSuffix(): string {
+  return randomBytes(3).toString("hex");
 }
 
 function assertNever(value: never): never {

@@ -24,6 +24,17 @@ describe("agent-pack CLI git smoke", () => {
     expect(result.stdout.trim()).toBe("0.0.0");
   });
 
+  it("generates a suffixed pack id when init has no explicit id", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-generated-id-smoke-"));
+    await writeFile(path.join(workspace, "pack.yaml"), "name: code-review\n");
+
+    const result = await runCli(["init", "--manifest", "./pack.yaml"], { cwd: workspace });
+    const match = result.stdout.match(/Created pack (code-review-[a-f0-9]{6})/);
+
+    expect(match?.[1]).toBeDefined();
+    expect(result.stdout).toContain(`Run: agent-pack brief --id ${match?.[1]}`);
+  });
+
   it("preserves command line source order within each section", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-order-smoke-"));
     await mkdir(path.join(workspace, "docs"), { recursive: true });

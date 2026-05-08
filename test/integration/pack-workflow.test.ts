@@ -88,6 +88,43 @@ contract:
     expect((loaded as typeof updated).taskCounts.completed).toBe(1);
   });
 
+  it("generates a unique pack id when none is provided", async () => {
+    await writeFile(
+      "pack.yaml",
+      `schemaVersion: 1
+name: code-review
+tasks:
+  - id: inspect
+    title: Inspect changes
+`,
+    );
+
+    const first = await initPack({
+      includes: [{ type: "manifest", ref: "./pack.yaml" }],
+      gitRefresh: "auto",
+    });
+    const second = await initPack({
+      includes: [{ type: "manifest", ref: "./pack.yaml" }],
+      gitRefresh: "auto",
+    });
+
+    expect(first.id).toMatch(/^code-review-[a-f0-9]{6}$/);
+    expect(second.id).toMatch(/^code-review-[a-f0-9]{6}$/);
+    expect(second.id).not.toBe(first.id);
+    expect(first.name).toBe("code-review");
+  });
+
+  it("uses AGENT_PACK_ID for init when --id is omitted", async () => {
+    vi.stubEnv("AGENT_PACK_ID", "env-review");
+
+    const pack = await initPack({
+      includes: [{ type: "adHocTask", text: "Inspect env-selected pack." }],
+      gitRefresh: "auto",
+    });
+
+    expect(pack.id).toBe("env-review");
+  });
+
   it("preserves source order within each brief section", async () => {
     await mkdir("docs", { recursive: true });
     await mkdir("skills/first", { recursive: true });
@@ -204,7 +241,8 @@ skills:
       gitRefresh: "auto",
     });
 
-    expect(pack.id).toBe("catalog-review");
+    expect(pack.id).toMatch(/^catalog-review-[a-f0-9]{6}$/);
+    expect(pack.name).toBe("catalog-review");
     expect(pack.tasks[0]).toMatchObject({
       sourceId: "security",
       title: "Review security posture",

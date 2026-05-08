@@ -22,9 +22,11 @@ agent-pack init \
 Set the generated pack id before asking an agent to work:
 
 ```bash
-export AGENT_PACK_ID=demo
+export AGENT_PACK_ID=<generated-id>
 agent-pack brief
 ```
+
+`init` uses `--id` when provided, then `AGENT_PACK_ID` when set, and otherwise generates an id from the pack name plus a short random suffix.
 
 List packs in the current state directory:
 

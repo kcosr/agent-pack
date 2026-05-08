@@ -11,14 +11,14 @@ agent-pack init \
   --manifest ./examples/demo.yaml \
   "Run the demo task and record evidence."
 
-export AGENT_PACK_ID=demo
+export AGENT_PACK_ID=<generated-id>
 agent-pack brief
 ```
 
 Then paste a handoff like this into your agent CLI:
 
 ```text
-AGENT_PACK_ID is demo. Run agent-pack brief and work the pack. Update task status as you go.
+AGENT_PACK_ID is <generated-id>. Run agent-pack brief and work the pack. Update task status as you go.
 ```
 
 ## Why Use It
@@ -207,21 +207,23 @@ agent-pack init \
 Expected output:
 
 ```text
-Created pack demo
-Run: agent-pack brief --id demo
+Created pack demo-a1b2c3
+Run: agent-pack brief --id demo-a1b2c3
 ```
 
 Set the generated pack id in your shell before asking an agent to work. Commands can then omit `--id`:
 
 ```bash
-export AGENT_PACK_ID=demo
+export AGENT_PACK_ID=demo-a1b2c3
 agent-pack brief
 ```
+
+`init` uses `--id` when provided, then `AGENT_PACK_ID` when set, and otherwise generates an id from the pack name plus a short random suffix.
 
 Abbreviated output:
 
 ```text
-You are working from pack demo.
+You are working from pack demo-a1b2c3.
 Name: demo
 
 Prompt:
@@ -268,7 +270,7 @@ Common options:
 
 | Option | Purpose |
 |---|---|
-| `--id <id>` | Use a specific pack ID. Must start with `A-Z`, `a-z`, or `0-9`; may contain `A-Z`, `a-z`, `0-9`, `.`, `_`, `-`; max 64 characters |
+| `--id <id>` | Use a specific pack ID. If omitted, `AGENT_PACK_ID` is used when set; otherwise `agent-pack` generates `<name>-<suffix>` |
 | `--name <name>` | Set a display name |
 | `--manifest <ref>` | Load one catalog manifest, local manifest YAML file, or git ref |
 | `--manifests <ref>` | Alias for `--manifest`; useful when passing several manifests |
@@ -832,7 +834,7 @@ Pack state lock filenames are prefixed with a 16-character hash of the state dir
 
 ### Reinitializing a Pack
 
-`agent-pack init` fails if the pack id already exists. To recreate a scratch pack, remove `.agent-pack/state/packs/<id>.json` and `.agent-pack/state/events/<id>.jsonl`, then run `agent-pack init --id <id> ...` again. Pack listings ignore stale index entries whose pack files were removed.
+`agent-pack init --id <id>` fails if the pack id already exists. To recreate a scratch pack, remove `.agent-pack/state/packs/<id>.json` and `.agent-pack/state/events/<id>.jsonl`, then run `agent-pack init --id <id> ...` again. Pack listings ignore stale index entries whose pack files were removed.
 
 ## Reusable Examples
 
@@ -846,7 +848,7 @@ agent-pack init \
   --reference . \
   "Review scope: unstaged changes."
 
-export AGENT_PACK_ID=code-review
+export AGENT_PACK_ID=<generated-id>
 agent-pack brief
 ```
 
@@ -858,11 +860,11 @@ agent-pack init \
   --reference . \
   "Review the repository documentation against the current code."
 
-export AGENT_PACK_ID=docs-review
+export AGENT_PACK_ID=<generated-id>
 agent-pack brief
 ```
 
-Use `--id <id>` when you want a deterministic pack id that differs from the manifest name, or when scripting commands from a shell where `AGENT_PACK_ID` is not set.
+Use the generated id printed by `init`, or pass `--id <id>` when you want a deterministic pack id. Setting `AGENT_PACK_ID` before `init` also provides the pack id for that new pack.
 
 ## More Documentation
 
