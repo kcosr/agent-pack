@@ -563,6 +563,27 @@ cp "$EXAMPLES_DIR"/*.yaml "$CATALOG_DIR/manifests/"
 agent-pack init --manifest code-review "Review scope: unstaged changes."
 ```
 
+### `completion`
+
+Print shell completion setup instructions. No shell startup files are written.
+
+```bash
+agent-pack completion
+agent-pack completion bash
+agent-pack completion zsh
+agent-pack completion fish
+```
+
+To enable completion only for the current shell:
+
+```bash
+source <(agent-pack completion script bash)
+source <(agent-pack completion script zsh)
+agent-pack completion script fish | source
+```
+
+Completions suggest catalog names for `--manifest`, `--task`, `--reference`, and `--skill`, plus `catalog show|path` names. When the current word starts with `/`, `./`, `../`, `~`, or `~/`, catalog completion returns no candidates so normal shell file completion can be used.
+
 ## Manifests
 
 Manifests are YAML files that define reusable pack content. A manifest ref can be a catalog name, a local file, or a git file ref:

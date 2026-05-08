@@ -128,6 +128,16 @@ cp "$EXAMPLES_DIR"/*.yaml "$CATALOG_DIR/manifests/"
 agent-pack init --manifest code-review "Review scope: unstaged changes."
 ```
 
+Enable shell completion for the current shell session:
+
+```bash
+source <(agent-pack completion script bash)
+source <(agent-pack completion script zsh)
+agent-pack completion script fish | source
+```
+
+Run `agent-pack completion` for detected-shell instructions. Completion suggests catalog names for `--manifest`, `--task`, `--reference`, and `--skill`; explicit path prefixes fall back to normal file completion.
+
 Git refs use this shape. See the README for the full list of supported URL forms:
 
 ```text

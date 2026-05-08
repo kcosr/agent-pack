@@ -8,6 +8,7 @@
 - Catalog refs and `agent-pack catalog list|show|path` for reusable manifests, tasks, references, and skills under the config directory.
 - Manifest string refs for tasks, references, and skills, matching the CLI ref semantics.
 - Generated pack IDs when neither `--id` nor `AGENT_PACK_ID` is provided.
+- Shell completion scripts for catalog-backed manifest, task, reference, and skill refs.
 
 ### Changed
 

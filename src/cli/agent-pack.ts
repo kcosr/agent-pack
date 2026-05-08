@@ -24,6 +24,7 @@ import {
   updateTask,
 } from "../core/operations.js";
 import type {
+  CatalogType,
   GitRefresh,
   InitInclude,
   PackState,
@@ -108,6 +109,7 @@ program
 
 configureTaskCommands(program);
 configureCatalogCommands(program);
+configureCompletionCommands(program);
 
 program
   .command("status")
@@ -163,6 +165,38 @@ program.parseAsync(process.argv).catch((error) => {
   }
   throw error;
 });
+
+function configureCompletionCommands(root: Command): void {
+  const completion = root
+    .command("completion")
+    .description("Print shell completion setup instructions.")
+    .argument("[shell]", "shell to configure: bash, zsh, or fish")
+    .action(async (shell) => {
+      await run(async () => {
+        process.stdout.write(completionInstructions(normalizeShell(shell)));
+      });
+    });
+
+  completion
+    .command("script")
+    .description("Print a shell completion script.")
+    .argument("<shell>", "shell script to print: bash, zsh, or fish")
+    .action(async (shell) => {
+      await run(async () => {
+        process.stdout.write(completionScript(normalizeShell(shell)));
+      });
+    });
+
+  root
+    .command("__complete", { hidden: true })
+    .argument("<type>", "catalog entry type")
+    .argument("[prefix]", "current word prefix", "")
+    .action(async (type, prefix) => {
+      await run(async () => {
+        process.stdout.write(await completionCandidates(type, prefix));
+      });
+    });
+}
 
 function configureInitCommand(root: Command): void {
   const includes: InitInclude[] = [];
@@ -414,6 +448,190 @@ function defaultGitRefresh(): GitRefresh {
   }
   startupError = new AgentPackError(`invalid AGENT_PACK_GIT_REFRESH value: ${value}`);
   return "auto";
+}
+
+type CompletionShell = "bash" | "zsh" | "fish";
+
+function normalizeShell(value: unknown): CompletionShell {
+  if (value === "bash" || value === "zsh" || value === "fish") {
+    return value;
+  }
+  if (value === undefined) {
+    const detected = path.basename(process.env.SHELL ?? "");
+    if (detected === "bash" || detected === "zsh" || detected === "fish") {
+      return detected;
+    }
+    throw new AgentPackError("could not detect shell; pass bash, zsh, or fish");
+  }
+  throw new AgentPackError(`unsupported shell: ${String(value)}; expected bash, zsh, or fish`);
+}
+
+function completionInstructions(shell: CompletionShell): string {
+  const command =
+    shell === "fish"
+      ? "agent-pack completion script fish | source"
+      : `source <(agent-pack completion script ${shell})`;
+  const rcFile =
+    shell === "bash" ? "~/.bashrc" : shell === "zsh" ? "~/.zshrc" : "~/.config/fish/config.fish";
+  return [
+    `Detected shell: ${shell}`,
+    "",
+    "For this shell only:",
+    `  ${command}`,
+    "",
+    `To enable permanently, add this to ${rcFile}:`,
+    `  ${command}`,
+    "",
+  ].join("\n");
+}
+
+function completionScript(shell: CompletionShell): string {
+  switch (shell) {
+    case "bash":
+      return bashCompletionScript();
+    case "zsh":
+      return zshCompletionScript();
+    case "fish":
+      return fishCompletionScript();
+    default:
+      throw new AgentPackError(`unsupported shell: ${shell}`);
+  }
+}
+
+async function completionCandidates(type: string, prefix: string): Promise<string> {
+  if (!isCatalogType(type)) {
+    throw new AgentPackError(`unsupported completion type: ${type}`);
+  }
+  if (isExplicitCompletionPath(prefix)) {
+    return "";
+  }
+  const entries = await catalogList(type);
+  const matches = entries
+    .map((entry) => entry.name)
+    .filter((name) => name.startsWith(prefix))
+    .join("\n");
+  return matches ? `${matches}\n` : "";
+}
+
+function isCatalogType(value: string): value is CatalogType {
+  return catalogTypes.includes(value as CatalogType);
+}
+
+function isExplicitCompletionPath(value: string): boolean {
+  return (
+    value.startsWith("/") ||
+    value.startsWith("./") ||
+    value.startsWith("../") ||
+    value === "~" ||
+    value.startsWith("~/")
+  );
+}
+
+function bashCompletionScript(): string {
+  return `_agent_pack_completion() {
+  local cur prev sub kind
+  COMPREPLY=()
+  cur="\${COMP_WORDS[COMP_CWORD]}"
+  prev="\${COMP_WORDS[COMP_CWORD-1]}"
+
+  case "$prev" in
+    --manifest|--manifests) kind="manifest" ;;
+    --task|--tasks) kind="task" ;;
+    --reference|--references) kind="reference" ;;
+    --skill|--skills) kind="skill" ;;
+  esac
+
+  if [[ -n "$kind" ]]; then
+    COMPREPLY=( $(compgen -W "$(agent-pack __complete "$kind" "$cur" 2>/dev/null)" -- "$cur") )
+    return 0
+  fi
+
+  sub="\${COMP_WORDS[1]}"
+  if [[ "$sub" == "catalog" && ( "\${COMP_WORDS[2]}" == "show" || "\${COMP_WORDS[2]}" == "path" ) ]]; then
+    if [[ "$COMP_CWORD" -eq 3 ]]; then
+      COMPREPLY=( $(compgen -W "manifest task reference skill" -- "$cur") )
+      return 0
+    fi
+    if [[ "$COMP_CWORD" -eq 4 ]]; then
+      COMPREPLY=( $(compgen -W "$(agent-pack __complete "\${COMP_WORDS[3]}" "$cur" 2>/dev/null)" -- "$cur") )
+      return 0
+    fi
+  fi
+}
+
+complete -o default -o bashdefault -F _agent_pack_completion agent-pack
+`;
+}
+
+function zshCompletionScript(): string {
+  return `#compdef agent-pack
+
+_agent_pack_catalog_names() {
+  local kind="$1"
+  local current="\${words[CURRENT]}"
+  if [[ "$current" == /* || "$current" == ./* || "$current" == ../* || "$current" == "~" || "$current" == "~/"* ]]; then
+    _files
+    return
+  fi
+  local -a names
+  names=("\${(@f)$(agent-pack __complete "$kind" "$current" 2>/dev/null)}")
+  compadd -a names
+}
+
+_agent_pack() {
+  local -a catalog_types
+  catalog_types=(manifest task reference skill)
+
+  case "\${words[CURRENT-1]}" in
+    --manifest|--manifests) _agent_pack_catalog_names manifest; return ;;
+    --task|--tasks) _agent_pack_catalog_names task; return ;;
+    --reference|--references) _agent_pack_catalog_names reference; return ;;
+    --skill|--skills) _agent_pack_catalog_names skill; return ;;
+  esac
+
+  if [[ "\${words[2]}" == "catalog" && ( "\${words[3]}" == "show" || "\${words[3]}" == "path" ) ]]; then
+    if (( CURRENT == 4 )); then
+      _describe 'catalog type' catalog_types
+      return
+    fi
+    if (( CURRENT == 5 )); then
+      _agent_pack_catalog_names "\${words[4]}"
+      return
+    fi
+  fi
+
+  _arguments '*: :_files'
+}
+
+_agent_pack "$@"
+`;
+}
+
+function fishCompletionScript(): string {
+  return `function __agent_pack_catalog_names
+  set -l kind $argv[1]
+  set -l current (commandline -ct)
+  switch $current
+    case '/*' './*' '../*' '~' '~/*'
+      return
+  end
+  agent-pack __complete $kind $current 2>/dev/null
+end
+
+complete -c agent-pack -n '__fish_seen_subcommand_from init; and __fish_prev_arg_in --manifest --manifests' -a '(__agent_pack_catalog_names manifest)'
+complete -c agent-pack -n '__fish_seen_subcommand_from init; and __fish_prev_arg_in --task --tasks' -a '(__agent_pack_catalog_names task)'
+complete -c agent-pack -n '__fish_seen_subcommand_from init; and __fish_prev_arg_in --reference --references' -a '(__agent_pack_catalog_names reference)'
+complete -c agent-pack -n '__fish_seen_subcommand_from init; and __fish_prev_arg_in --skill --skills' -a '(__agent_pack_catalog_names skill)'
+complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from show path; and not __fish_seen_subcommand_from manifest task reference skill' -a 'manifest task reference skill'
+complete -c agent-pack -n '__fish_seen_subcommand_from catalog show manifest' -a '(__agent_pack_catalog_names manifest)'
+complete -c agent-pack -n '__fish_seen_subcommand_from catalog show task' -a '(__agent_pack_catalog_names task)'
+complete -c agent-pack -n '__fish_seen_subcommand_from catalog show reference' -a '(__agent_pack_catalog_names reference)'
+complete -c agent-pack -n '__fish_seen_subcommand_from catalog show skill' -a '(__agent_pack_catalog_names skill)'
+complete -c agent-pack -n '__fish_seen_subcommand_from catalog path manifest' -a '(__agent_pack_catalog_names manifest)'
+complete -c agent-pack -n '__fish_seen_subcommand_from catalog path task' -a '(__agent_pack_catalog_names task)'
+complete -c agent-pack -n '__fish_seen_subcommand_from catalog path reference' -a '(__agent_pack_catalog_names reference)'
+complete -c agent-pack -n '__fish_seen_subcommand_from catalog path skill' -a '(__agent_pack_catalog_names skill)'
+`;
 }
 
 function renderSystemStatus(result: SystemStatus): string {

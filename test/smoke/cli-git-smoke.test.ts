@@ -230,6 +230,42 @@ references:
     expect(init.stdout).toContain("Created pack code-review");
   });
 
+  it("prints shell completion setup and catalog candidates", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-completion-smoke-"));
+    const configDir = path.join(workspace, "config");
+    await mkdir(path.join(configDir, "manifests/review"), { recursive: true });
+    await mkdir(path.join(configDir, "tasks/review"), { recursive: true });
+    await writeFile(path.join(configDir, "manifests/review/code-review.yaml"), "tasks: []\n");
+    await writeFile(path.join(configDir, "tasks/review/security.yaml"), "title: Security\n");
+    const env = { AGENT_PACK_CONFIG_DIR: configDir };
+
+    const instructions = await runCli(["completion", "bash"], { cwd: workspace, env });
+    expect(instructions.stdout).toContain("For this shell only:");
+    expect(instructions.stdout).toContain("source <(agent-pack completion script bash)");
+
+    const script = await runCli(["completion", "script", "bash"], { cwd: workspace, env });
+    expect(script.stdout).toContain("complete -o default -o bashdefault -F");
+    expect(script.stdout).toContain("agent-pack __complete");
+
+    const manifestCandidates = await runCli(["__complete", "manifest", "review/"], {
+      cwd: workspace,
+      env,
+    });
+    expect(manifestCandidates.stdout).toBe("review/code-review\n");
+
+    const taskCandidates = await runCli(["__complete", "task", "review/s"], {
+      cwd: workspace,
+      env,
+    });
+    expect(taskCandidates.stdout).toBe("review/security\n");
+
+    const pathCandidates = await runCli(["__complete", "task", "./tasks"], {
+      cwd: workspace,
+      env,
+    });
+    expect(pathCandidates.stdout).toBe("");
+  });
+
   it("clones git sources, materializes snapshots, syncs missing cache, and renders brief", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "agent-pack-smoke-"));
     const repo = path.join(root, "fixture");
