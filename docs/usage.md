@@ -11,11 +11,14 @@ Requirements:
 
 ## Quick Start
 
-Create a pack from the demo manifest:
+Create a pack from the packaged demo manifest:
 
 ```bash
+EXAMPLES_DIR="$(agent-pack --help | awk '$1 == "Examples" {print $2}')"
+export AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR"
+
 agent-pack init \
-  --manifest ./examples/manifests/demo.yaml \
+  --manifest demo \
   "Run the demo task and record the result."
 ```
 
