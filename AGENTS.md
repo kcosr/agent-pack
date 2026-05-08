@@ -36,8 +36,8 @@ This file is a lightweight internal onboarding note for agents working in this r
 ## Changelog
 
 - Add user-facing changes to `CHANGELOG.md` under `## [Unreleased]`.
-- Use the existing subsections: Breaking Changes, Added, Changed, Fixed, Removed.
-- Append to existing subsections; do not create duplicate subsection headings.
+- Use these subsections when applicable: Breaking Changes, Added, Changed, Fixed, Removed.
+- Add the needed subsection under `## [Unreleased]` if it is missing; do not create duplicate subsection headings.
 - Include PR links when available.
 
 ## Release

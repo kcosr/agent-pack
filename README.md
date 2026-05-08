@@ -1,6 +1,6 @@
 # agent-pack
 
-`agent-pack` writes a durable brief and task state for a coding agent to read from disk. It is for developers using an LLM coding CLI or editor agent who want tasks, references, instructions, and progress to survive beyond one chat thread.
+`agent-pack` saves your tasks, references, instructions, and progress to disk, then renders a brief for a coding agent to read. It is for developers using an LLM coding CLI or editor agent who want work to survive beyond one chat thread.
 
 `agent-pack` does not run the agent. It prepares the work, renders the agent-facing brief, and records task progress while you run your agent CLI separately.
 
@@ -28,11 +28,23 @@ Without `agent-pack`, the typical handoff is a long prompt or chat thread. Tasks
 Use it when you want to:
 
 - hand an agent a structured set of tasks
-- include specific docs, directories, globs, URLs, or git-hosted references
+- include specific docs, directories, globs, URLs, or git-backed references
 - provide supplemental `SKILL.md` files with extracted descriptions
 - keep task progress, notes, blockers, and completion evidence in one place
 - resume work later from committed state
 - avoid relying on a long chat thread as the only source of truth
+
+## Contents
+
+- [Installation](#installation)
+- [Core Concepts](#core-concepts)
+- [Quick Start](#quick-start)
+- [Command Reference](#command-reference)
+- [Manifests](#manifests)
+- [Git Sources](#git-sources)
+- [Environment Variables](#environment-variables)
+- [State and Portability](#state-and-portability)
+- [More Documentation](#more-documentation)
 
 ## Installation
 
@@ -45,9 +57,11 @@ agent-pack --help
 
 Requirements:
 
-- Node.js 20 or newer
-- Git on `PATH` for git-backed references and skills
+- Node.js 20 or newer. Node.js includes `npm`; use your package manager's equivalent if you prefer `pnpm` or `yarn`.
+- Git and `tar` on `PATH` for git-backed references and skills
 - Git authentication for private repositories. `agent-pack` shells out to `git`, so SSH agent, credential helper, netrc, platform keychain, GitHub CLI, or configured askpass can work.
+
+`agent-pack` works with any agent CLI or editor agent that can read a text prompt and run shell commands in your workspace. The examples use POSIX shell syntax; on Windows PowerShell, use backticks for line continuations or write commands on one line, and prefer double-quoted globs such as `"./skills/**"`.
 
 ## Core Concepts
 
@@ -159,6 +173,8 @@ That command scans broadly but only includes matching `SKILL.md` files.
 
 A `SKILL.md` may include YAML frontmatter with `name` and `description` fields. Other frontmatter fields are ignored. Without frontmatter, the name falls back to the first `#` heading and then the parent directory name; the description falls back to the first paragraph, capped at 300 characters.
 
+If multiple skills resolve to the same name, `agent-pack` appends `(2)`, `(3)`, and so on in the brief. Use distinct `name` values for predictable labels.
+
 ```markdown
 ---
 name: fresh-eyes
@@ -211,11 +227,15 @@ Tasks:
 
 Progress commands:
   agent-pack list --id quickstart
+  agent-pack show <task-id> --id quickstart
   agent-pack start <task-id> --id quickstart
   agent-pack note <task-id> --id quickstart "evidence"
+  agent-pack done <task-id> --id quickstart --note "completion evidence"
+  agent-pack block <task-id> --id quickstart --note "blocker"
+  ...
 ```
 
-Tell the agent:
+In your agent CLI or editor agent, paste a handoff like this:
 
 ```text
 Run agent-pack brief --id quickstart and work the pack. Update task status as you go.
@@ -293,12 +313,15 @@ The brief includes the prompt, instructions, task list, references, skills, cont
 
 ### `sync`
 
-Hydrate missing git cache material for a pack.
+Fetch and unpack missing git-backed material for a pack.
 
 ```bash
 agent-pack sync --id reviewer-001
 agent-pack sync --all --git-refresh always
+agent-pack sync --all --json
 ```
+
+With `--json`, `sync` emits the synced pack or packs as JSON. `--all --json` emits an array.
 
 `sync` is explicit. Other commands do not fetch or clone git sources. If a pack is resumed on a new host, run `sync` before `brief`:
 
@@ -342,7 +365,7 @@ agent-pack report --id reviewer-001 --json
 agent-pack summary --id reviewer-001
 ```
 
-`status --all` prints tab-separated columns: pack id, pack name, status, completed/total task count, and blocked count. Use `status --all --json` for scripts.
+`status --all` prints tab-separated columns: pack id, pack name, status, completed/total task count, and a `blocked:N` field. Use `status --all --json` for scripts.
 
 Derived pack statuses:
 
@@ -557,7 +580,7 @@ export AGENT_PACK_ID=reviewer-001
 agent-pack brief
 ```
 
-Local paths are intentionally live. If a local reference or skill changes after pack creation, the agent reads the current file at that path. HTTP/HTTPS references are rendered as URLs for the agent to read. Git references resolve to a commit and read from exported snapshots. Git snapshots reject symlinks instead of extracting them into the cache.
+`agent-pack` does not snapshot local files. If a local reference or skill changes after pack creation, the agent reads the current file at that path. HTTP/HTTPS references are rendered as URLs for the agent to read. Git references resolve to a commit and read from exported snapshots. Git snapshots reject symlinks instead of extracting them into the cache.
 
 ### Event Log
 

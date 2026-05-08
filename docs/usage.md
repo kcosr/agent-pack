@@ -7,9 +7,9 @@ Run commands from the repository or workspace that contains the files you want t
 Requirements:
 
 - Node.js 20 or newer
-- Git on `PATH` for git-backed inputs
+- Git and `tar` on `PATH` for git-backed inputs
 
-## Basic Flow
+## Quick Start
 
 Create a pack:
 
@@ -74,5 +74,6 @@ On a new host, rebuild git-backed material:
 
 ```bash
 agent-pack sync --id demo-pack
+agent-pack sync --id demo-pack --json
 agent-pack brief --id demo-pack
 ```
