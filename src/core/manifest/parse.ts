@@ -191,7 +191,7 @@ function normalizeIncludeObject(
 }
 
 function validateIncludeString(value: unknown, label: string, filePath: string): void {
-  if (value !== undefined && typeof value !== "string") {
+  if (value !== undefined && (typeof value !== "string" || !value.trim())) {
     throw new AgentPackError(`${label} must be a string: ${filePath}`);
   }
 }

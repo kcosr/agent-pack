@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import fg from "fast-glob";
 import { AgentPackError } from "./errors.js";
-import { ensureDir, pathExists } from "./fs.js";
+import { ensureDir, errorMessage, pathExists } from "./fs.js";
 import { fileGlobOptions } from "./sources/glob.js";
 import type { CatalogEntry, CatalogType, RuntimePaths } from "./types.js";
 
@@ -54,7 +54,11 @@ export async function readCatalogEntry(
   paths: RuntimePaths,
 ): Promise<{ path: string; content: string }> {
   const entryPath = await resolveCatalogPath(type, name, paths);
-  return { path: entryPath, content: await readFile(entryPath, "utf8") };
+  try {
+    return { path: entryPath, content: await readFile(entryPath, "utf8") };
+  } catch (error) {
+    throw new AgentPackError(`failed to read catalog ${type} ${name}: ${errorMessage(error)}`);
+  }
 }
 
 function assertCatalogName(name: string): void {

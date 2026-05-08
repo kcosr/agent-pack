@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   brief,
   catalogList,
+  catalogShow,
   cleanCache,
   initPack,
   listPacks,
@@ -283,6 +284,16 @@ skills:
     await expectPathPresent(path.join(configDir, "skills"));
   });
 
+  it("wraps catalog show read failures", async () => {
+    const configDir = path.join(cwd, "config");
+    vi.stubEnv("AGENT_PACK_CONFIG_DIR", configDir);
+    await mkdir(path.join(configDir, "manifests/bad-entry.yaml"), { recursive: true });
+
+    await expect(catalogShow("manifest", "bad-entry")).rejects.toThrow(
+      "failed to read catalog manifest bad-entry",
+    );
+  });
+
   it("rejects ambiguous local refs that are missing an explicit path prefix", async () => {
     await writeFile("pack.yaml", "tasks: []\n");
 
@@ -350,6 +361,45 @@ references:
         gitRefresh: "auto",
       }),
     ).rejects.toThrow("references[0].name must be a string");
+  });
+
+  it("rejects empty manifest include metadata", async () => {
+    await writeFile(
+      "pack.yaml",
+      `schemaVersion: 1
+references:
+  - name: " "
+    ref: ./README.md
+skills:
+  - description: ""
+    ref: ./skills/fresh-eyes/SKILL.md`,
+    );
+
+    await expect(
+      initPack({
+        id: "empty-include-metadata",
+        includes: [{ type: "manifest", ref: "./pack.yaml" }],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow("references[0].name must be a string");
+  });
+
+  it("rejects empty manifest skill metadata", async () => {
+    await writeFile(
+      "pack.yaml",
+      `schemaVersion: 1
+skills:
+  - description: ""
+    ref: ./skills/fresh-eyes/SKILL.md`,
+    );
+
+    await expect(
+      initPack({
+        id: "empty-skill-metadata",
+        includes: [{ type: "manifest", ref: "./pack.yaml" }],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow("skills[0].description must be a string");
   });
 
   it("rejects invalid contract shapes", async () => {

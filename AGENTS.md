@@ -44,4 +44,4 @@ This file is a lightweight internal onboarding note for agents working in this r
 
 - Run `npm run check`.
 - Run `node scripts/release.mjs patch`, `minor`, or `major` from `main`.
-- The release script bumps versions, promotes changelog entries, tags, pushes, creates a GitHub prerelease, and opens a fresh `## [Unreleased]` section.
+- The release script bumps versions, promotes changelog entries, tags, pushes, creates a standard GitHub release, and opens a fresh `## [Unreleased]` section.
