@@ -20,7 +20,7 @@ This file is a lightweight internal onboarding note for agents working in this r
 - Keep pack state, manifest parsing, source resolution, git cache, and brief rendering in `src/core/`.
 - Prefer explicit contracts over fallback parsing or heuristic shape detection.
 - Local reference and skill paths are read in place.
-- Git sources resolve to a commit and read from ignored snapshots under `.agent-pack/cache`.
+- Git sources resolve to a commit and read from ignored snapshots under the cache root.
 - Skills must resolve to files named exactly `SKILL.md`.
 
 ## Testing

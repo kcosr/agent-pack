@@ -17,9 +17,14 @@ export async function runCli(
   options: { cwd: string; reject?: boolean; env?: NodeJS.ProcessEnv } = { cwd: process.cwd() },
 ): Promise<CliResult> {
   try {
+    const env = {
+      ...process.env,
+      AGENT_PACK_CACHE_DIR: path.join(options.cwd, ".agent-pack/cache"),
+      ...options.env,
+    };
     const { stdout, stderr } = await execFileAsync(process.execPath, [cliPath, ...args], {
       cwd: options.cwd,
-      env: { ...process.env, ...options.env },
+      env,
     });
     return { stdout, stderr };
   } catch (error) {

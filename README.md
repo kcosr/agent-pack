@@ -28,7 +28,7 @@ Without `agent-pack`, the typical handoff is a long prompt or chat thread. Tasks
 Use it when you want to:
 
 - hand an agent a structured set of tasks
-- include specific docs, directories, globs, or git-hosted references
+- include specific docs, directories, globs, URLs, or git-hosted references
 - provide supplemental `SKILL.md` files with extracted descriptions
 - keep task progress, notes, blockers, and completion evidence in one place
 - resume work later from committed state
@@ -66,17 +66,18 @@ That state contains pack definitions, task status, notes, and event history. Com
 Git-backed source material is cached separately:
 
 ```text
-.agent-pack/cache/
+$XDG_CACHE_HOME/agent-pack/
 ```
 
-The cache can always be rebuilt with `agent-pack sync`. Keep cache and locks out of git:
+If `XDG_CACHE_HOME` is unset, the cache defaults to `~/.cache/agent-pack/`. The cache can always be rebuilt with `agent-pack sync`; locks also live under this cache root.
+
+If you explicitly point `AGENT_PACK_CACHE_DIR` inside the repository, keep that cache out of git. For example, with `AGENT_PACK_CACHE_DIR=.agent-pack/cache`:
 
 ```gitignore
 .agent-pack/cache/
-.agent-pack/locks/
 ```
 
-If you do not want pack instances committed to the repo, either ignore all of `.agent-pack/` or point state and cache at an external directory:
+If you do not want pack instances committed to the repo, either ignore all of `.agent-pack/` or point state at an external directory:
 
 ```gitignore
 .agent-pack/
@@ -84,7 +85,6 @@ If you do not want pack instances committed to the repo, either ignore all of `.
 
 ```bash
 export AGENT_PACK_STATE_DIR="$HOME/.local/state/agent-pack/my-repo"
-export AGENT_PACK_CACHE_DIR="$HOME/.cache/agent-pack/my-repo"
 ```
 
 ### Brief
@@ -128,7 +128,7 @@ agent-pack done t001 --id quickstart --note "Recorded findings in task notes."
 
 ### References
 
-References are named pointers to read-only context the agent should inspect. They can be local files, local directories, globs, git paths, or whole git repo snapshots.
+References are named pointers to read-only context the agent should inspect. They can be local files, local directories, globs, HTTP/HTTPS URLs, git paths, or whole git repo snapshots.
 
 Examples:
 
@@ -136,6 +136,7 @@ Examples:
 ./docs/usage.md
 ../some-dir
 ./docs/**/*.md
+https://example.com/design-notes.md
 git+https://github.com/org/repo.git//docs/reference.md#main
 git+https://github.com/org/repo.git//docs/**/*.md#v1.2.0
 git+https://github.com/org/repo.git#main
@@ -250,7 +251,7 @@ Common options:
 | `--add-task <text>` | Add one ad hoc task |
 | `--task <ref>` | Add one task YAML file, glob, or git ref |
 | `--tasks <ref>` | Alias for `--task`; useful when passing several task sources |
-| `--reference <ref>` | Add one reference |
+| `--reference <ref>` | Add one reference file, directory, glob, URL, or git ref |
 | `--references <ref>` | Alias for `--reference`; useful when passing several references |
 | `--skill <ref>` | Add one `SKILL.md` file |
 | `--skills <ref>` | Alias for `--skill`; useful when passing several skills |
@@ -270,6 +271,7 @@ agent-pack init \
   --task git+https://github.com/example/agent-packs.git//tasks/security-review.yaml#main \
   --task ./tasks/*.yaml \
   --reference git+https://github.com/example/product.git//docs/**/*.md#main \
+  --reference https://example.com/design-notes.md \
   --reference git+https://github.com/example/product.git//adr#main \
   --references './docs/**/*.md' \
   --skill git+https://github.com/example/agent-skills.git//review/fresh-eyes/SKILL.md#v1.0.0 \
@@ -277,7 +279,7 @@ agent-pack init \
   "Use the included docs and skills to complete the review."
 ```
 
-That command composes content across types: the manifest can contribute instructions, tasks, references, skills, and contract rules; task flags add more tasks; reference flags add both remote and local reading material; skill flags add supplemental `SKILL.md` files.
+That command composes content across types: the manifest can contribute instructions, tasks, references, skills, and contract rules; task flags add more tasks; reference flags add git, URL, and local reading material; skill flags add supplemental `SKILL.md` files.
 
 ### `brief`
 
@@ -410,6 +412,10 @@ references:
     description: Related docs from an external repository.
     ref: git+https://github.com/org/repo.git//docs/**/*.md#main
 
+  - name: published guidance
+    description: A public HTTP reference for the agent to read.
+    ref: https://example.com/guidance.md
+
 skills:
   - ref: ./skills/fresh-eyes/SKILL.md
 ```
@@ -466,12 +472,11 @@ Authentication is delegated to normal `git` behavior: SSH agent, credential help
 |---|---|---|
 | `AGENT_PACK_ID` | Default pack target | unset |
 | `AGENT_PACK_STATE_DIR` | Pack state directory | `<repo>/.agent-pack/state` |
-| `AGENT_PACK_CACHE_DIR` | Cache root | `<repo>/.agent-pack/cache` |
-| `AGENT_PACK_GIT_CACHE_DIR` | Git mirror cache root | `$AGENT_PACK_CACHE_DIR/git` |
+| `AGENT_PACK_CACHE_DIR` | Cache root | `$XDG_CACHE_HOME/agent-pack`, or `~/.cache/agent-pack` when `XDG_CACHE_HOME` is unset |
 | `AGENT_PACK_GIT_REFRESH` | Default git fetch policy for `init` and `sync` | `auto` |
 | `AGENT_PACK_CMD` | Command name rendered in brief progress commands; set when invoking through a wrapper | `agent-pack` |
 
-Relative path values resolve from the current working directory. For `AGENT_PACK_GIT_CACHE_DIR`, a relative value resolves under `AGENT_PACK_CACHE_DIR`; an absolute value overrides the cache root.
+Relative path values resolve from the current working directory.
 
 Set a default pack ID when working on one pack for a while:
 
@@ -495,11 +500,14 @@ Default layout:
       reviewer-001.json
     events/
       reviewer-001.jsonl
-  cache/
-    git/
-    snapshots/
+
+<cache root>/
+  git/
+  snapshots/
   locks/
 ```
+
+The cache root is `AGENT_PACK_CACHE_DIR` when set, otherwise `$XDG_CACHE_HOME/agent-pack` or `~/.cache/agent-pack`.
 
 Choose one of two common state policies.
 
@@ -522,8 +530,8 @@ agent-pack brief --id reviewer-001
 Recommended `.gitignore`:
 
 ```gitignore
+# Only needed if AGENT_PACK_CACHE_DIR is pointed inside the repo.
 .agent-pack/cache/
-.agent-pack/locks/
 ```
 
 ### Keep Pack State Local
@@ -536,11 +544,10 @@ Option 1: ignore the whole default directory:
 .agent-pack/
 ```
 
-Option 2: store state and cache outside the repo:
+Option 2: store state outside the repo:
 
 ```bash
 export AGENT_PACK_STATE_DIR="$HOME/.local/state/agent-pack/reviewer-001"
-export AGENT_PACK_CACHE_DIR="$HOME/.cache/agent-pack/reviewer-001"
 ```
 
 With external state, set `AGENT_PACK_ID` or pass `--id` so commands target the intended pack:
@@ -550,7 +557,7 @@ export AGENT_PACK_ID=reviewer-001
 agent-pack brief
 ```
 
-Local paths are intentionally live. If a local reference or skill changes after pack creation, the agent reads the current file at that path. Git references resolve to a commit and read from exported snapshots. Git snapshots reject symlinks instead of extracting them into the cache.
+Local paths are intentionally live. If a local reference or skill changes after pack creation, the agent reads the current file at that path. HTTP/HTTPS references are rendered as URLs for the agent to read. Git references resolve to a commit and read from exported snapshots. Git snapshots reject symlinks instead of extracting them into the cache.
 
 ### Event Log
 
@@ -558,7 +565,7 @@ Each pack has an append-only JSONL event log under `.agent-pack/state/events/<id
 
 ### Locking
 
-State mutations are serialized with lock directories under `.agent-pack/locks/`. Stale locks whose holder process is gone are recovered automatically. If a command reports a stuck lock and no `agent-pack` process is running, remove the reported lock directory.
+State mutations are serialized with lock directories under the cache root's `locks/` directory. Stale locks whose holder process is gone are recovered automatically. If a command reports a stuck lock and no `agent-pack` process is running, remove the reported lock directory.
 
 ### Reinitializing a Pack
 

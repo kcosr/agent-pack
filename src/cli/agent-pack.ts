@@ -238,13 +238,13 @@ function configureInitCommand(root: Command): void {
     )
     .option(
       "--reference <ref>",
-      "add one reference",
+      "add one reference file, directory, glob, URL, or git ref",
       collectInclude(includes, (ref) => ({ type: "reference", ref: { ref } })),
       [],
     )
     .option(
       "--references <ref>",
-      "add a reference file, directory, glob, or repo",
+      "add one reference file, directory, glob, URL, or git ref",
       collectInclude(includes, (ref) => ({ type: "reference", ref: { ref } })),
       [],
     )

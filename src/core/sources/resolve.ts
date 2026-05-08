@@ -25,9 +25,7 @@ export async function resolveReferences(
 ): Promise<PackReference[]> {
   const references: PackReference[] = [];
   for (const entry of refs) {
-    const resolved = isGitRef(entry.ref)
-      ? await resolveGitReference(entry, paths, refresh)
-      : await resolveLocalReference(entry, paths);
+    const resolved = await resolveReference(entry, paths, refresh);
     references.push({ ...resolved, id: `r${String(references.length + 1).padStart(3, "0")}` });
   }
   return references;
@@ -96,6 +94,52 @@ async function resolveLocalReference(
     source: { kind: "file", path: toDisplayPath(absPath, paths.repoRoot) },
     path: toDisplayPath(absPath, paths.repoRoot),
   };
+}
+
+async function resolveReference(
+  entry: ManifestReference,
+  paths: RuntimePaths,
+  refresh: GitRefresh,
+): Promise<Omit<PackReference, "id">> {
+  if (isGitRef(entry.ref)) {
+    return resolveGitReference(entry, paths, refresh);
+  }
+  if (isHttpUrl(entry.ref)) {
+    return resolveUrlReference(entry);
+  }
+  return resolveLocalReference(entry, paths);
+}
+
+function resolveUrlReference(entry: ManifestReference): Omit<PackReference, "id"> {
+  const url = parseReferenceUrl(entry.ref);
+  const pathName = url.pathname.replace(/\/+$/, "");
+  const inferredName = path.basename(pathName) || url.hostname;
+  return {
+    name: entry.name ?? inferredName,
+    description: entry.description,
+    source: { kind: "url", url: url.toString() },
+    path: url.toString(),
+  };
+}
+
+function isHttpUrl(ref: string): boolean {
+  try {
+    const url = new URL(ref);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function parseReferenceUrl(ref: string): URL {
+  const url = new URL(ref);
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new AgentPackError(`unsupported reference URL protocol: ${ref}`);
+  }
+  if (url.username || url.password) {
+    throw new AgentPackError(`URL references must not include credentials: ${ref}`);
+  }
+  return url;
 }
 
 async function resolveGitReference(

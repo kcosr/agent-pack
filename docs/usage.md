@@ -41,7 +41,7 @@ Use these flags with `agent-pack init`:
 - `--manifest <ref>`: one manifest YAML file, local or git-backed
 - `--add-task <text>`: one inline task
 - `--task <ref>`: task YAML file, glob, or git-backed task file
-- `--reference <ref>`: file, directory, glob, git path, or whole git repo
+- `--reference <ref>`: file, directory, glob, HTTP/HTTPS URL, git path, or whole git repo
 - `--skill <ref>`: one `SKILL.md` file or a glob/directory scan for `SKILL.md`
 - `--instructions <path>`: raw text instructions file
 
@@ -65,10 +65,10 @@ Pack state is durable:
 Git cache material is rebuildable:
 
 ```text
-.agent-pack/cache/
+$XDG_CACHE_HOME/agent-pack/
 ```
 
-Commit `.agent-pack/state/` if you want pack progress to travel with the repository. Ignore `.agent-pack/cache/` and `.agent-pack/locks/`.
+If `XDG_CACHE_HOME` is unset, the cache defaults to `~/.cache/agent-pack/`. Commit `.agent-pack/state/` if you want pack progress to travel with the repository. Ignore the cache only if you explicitly place `AGENT_PACK_CACHE_DIR` inside the repo.
 
 On a new host, rebuild git-backed material:
 

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync, readlinkSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -44,6 +45,7 @@ const referenceFields = new Set([
 ]);
 const skillFields = new Set(["id", "name", "description", "source", "path"]);
 const fileSourceFields = new Set(["kind", "path"]);
+const urlSourceFields = new Set(["kind", "url"]);
 const taskCountFields = new Set(["total", "pending", "inProgress", "completed", "blocked"]);
 const gitSourceFields = new Set([
   "kind",
@@ -210,7 +212,10 @@ export class StateStore {
   }
 
   private async withLock<T>(name: string, fn: () => Promise<T>): Promise<T> {
-    const lockPath = path.join(this.paths.lockDir, `${name}.lock`);
+    const lockPath = path.join(
+      this.paths.lockDir,
+      `${lockNamespace(this.paths.stateDir)}-${name}.lock`,
+    );
     await this.acquireLock(lockPath);
     try {
       return await fn();
@@ -516,7 +521,8 @@ function validateSource(value: unknown, label: string, filePath: string): void {
     value.kind !== "file" &&
     value.kind !== "directory" &&
     value.kind !== "glob" &&
-    value.kind !== "git"
+    value.kind !== "git" &&
+    value.kind !== "url"
   ) {
     throw new AgentPackError(`invalid pack source field '${label}.kind': ${filePath}`);
   }
@@ -530,11 +536,37 @@ function validateSource(value: unknown, label: string, filePath: string): void {
     validateOptionalString(value.path, `${label}.path`, filePath);
     return;
   }
+  if (value.kind === "url") {
+    validateKnownFields(value, urlSourceFields, label, filePath);
+    const sourceUrl = value.url;
+    validateRequiredString(sourceUrl, `${label}.url`, filePath);
+    validateHttpUrl(sourceUrl, `${label}.url`, filePath);
+    return;
+  }
   validateKnownFields(value, fileSourceFields, label, filePath);
   validateRequiredString(value.path, `${label}.path`, filePath);
 }
 
-function validateRequiredString(value: unknown, label: string, filePath: string): void {
+function validateHttpUrl(value: string, label: string, filePath: string): void {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new AgentPackError(`invalid pack state field '${label}': ${filePath}`);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new AgentPackError(`invalid pack state field '${label}': ${filePath}`);
+  }
+  if (url.username || url.password) {
+    throw new AgentPackError(`invalid pack state field '${label}': ${filePath}`);
+  }
+}
+
+function validateRequiredString(
+  value: unknown,
+  label: string,
+  filePath: string,
+): asserts value is string {
   if (typeof value !== "string" || !value.trim()) {
     throw new AgentPackError(`invalid pack state field '${label}': ${filePath}`);
   }
@@ -561,4 +593,8 @@ function validateKnownFields(
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function lockNamespace(stateDir: string): string {
+  return createHash("sha256").update(path.resolve(stateDir)).digest("hex").slice(0, 16);
 }

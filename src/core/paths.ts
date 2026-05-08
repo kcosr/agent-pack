@@ -10,8 +10,8 @@ export function resolveRuntimePaths(
     cwd,
     options.stateDir ?? process.env.AGENT_PACK_STATE_DIR ?? ".agent-pack/state",
   );
-  const cacheDir = path.resolve(cwd, process.env.AGENT_PACK_CACHE_DIR ?? ".agent-pack/cache");
-  const gitCacheDir = path.resolve(cacheDir, process.env.AGENT_PACK_GIT_CACHE_DIR ?? "git");
+  const cacheDir = path.resolve(cwd, process.env.AGENT_PACK_CACHE_DIR ?? defaultCacheDir(cwd));
+  const gitCacheDir = path.join(cacheDir, "git");
   return {
     cwd,
     repoRoot,
@@ -20,9 +20,19 @@ export function resolveRuntimePaths(
     gitCacheDir,
     packDir: path.join(stateDir, "packs"),
     eventDir: path.join(stateDir, "events"),
-    lockDir: path.join(path.dirname(cacheDir), "locks"),
+    lockDir: path.join(cacheDir, "locks"),
     indexPath: path.join(stateDir, "index.json"),
   };
+}
+
+function defaultCacheDir(cwd: string): string {
+  if (process.env.XDG_CACHE_HOME) {
+    return path.join(process.env.XDG_CACHE_HOME, "agent-pack");
+  }
+  if (process.env.HOME) {
+    return path.join(process.env.HOME, ".cache", "agent-pack");
+  }
+  return path.resolve(cwd, ".agent-pack/cache");
 }
 
 export function toDisplayPath(absPath: string, root: string): string {

@@ -1,8 +1,10 @@
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, symlink, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { brief, initPack, status, updateTask } from "../../src/core/operations.js";
+import { resolveRuntimePaths } from "../../src/core/paths.js";
 
 describe("pack workflow", () => {
   let cwd: string;
@@ -12,10 +14,12 @@ describe("pack workflow", () => {
     originalCwd = process.cwd();
     cwd = await mkdtemp(path.join(os.tmpdir(), "agent-pack-workflow-"));
     process.chdir(cwd);
+    vi.stubEnv("AGENT_PACK_CACHE_DIR", path.join(cwd, ".agent-pack/cache"));
   });
 
   afterEach(() => {
     process.chdir(originalCwd);
+    vi.unstubAllEnvs();
   });
 
   it("creates a pack from manifest inputs and updates task status", async () => {
@@ -54,7 +58,7 @@ contract:
     });
 
     expect(pack.tasks).toHaveLength(1);
-    expect(pack.tasks[0]?.source?.path).toBe("./pack.yaml");
+    expect(pack.tasks[0]?.source).toMatchObject({ path: "./pack.yaml" });
     expect(pack.references[0]?.path).toBe("./docs/design.md");
     expect(pack.skills[0]?.name).toBe("fresh-eyes");
     expect(pack.contract).toEqual({
@@ -491,9 +495,10 @@ unknown: true`,
       includes: [{ type: "adHocTask", text: "Inspect" }],
       gitRefresh: "auto",
     });
-    await mkdir(".agent-pack/locks/pack-stale-lock.lock", { recursive: true });
+    const lockPath = packLockPath("stale-lock");
+    await mkdir(lockPath, { recursive: true });
     await writeFile(
-      ".agent-pack/locks/pack-stale-lock.lock/holder.json",
+      path.join(lockPath, "holder.json"),
       JSON.stringify({ pid: 99999999, createdAt: new Date().toISOString() }),
     );
 
@@ -508,9 +513,9 @@ unknown: true`,
       includes: [{ type: "adHocTask", text: "Inspect" }],
       gitRefresh: "auto",
     });
-    const lockPath = ".agent-pack/locks/pack-corrupt-lock.lock";
+    const lockPath = packLockPath("corrupt-lock");
     await mkdir(lockPath, { recursive: true });
-    await writeFile(`${lockPath}/holder.json`, "{bad json");
+    await writeFile(path.join(lockPath, "holder.json"), "{bad json");
     const old = new Date(Date.now() - 10_000);
     await utimes(lockPath, old, old);
 
@@ -568,19 +573,50 @@ unknown: true`,
         skills: [],
       }),
     );
-    const originalCacheDir = process.env.AGENT_PACK_CACHE_DIR;
-    process.env.AGENT_PACK_CACHE_DIR = "external-cache";
-    try {
-      await expect(brief("runtime-cache-path")).resolves.toContain(
-        "Path: ./external-cache/snapshots/repohash/commit/docs/design.md",
-      );
-    } finally {
-      if (originalCacheDir === undefined) {
-        process.env.AGENT_PACK_CACHE_DIR = undefined;
-      } else {
-        process.env.AGENT_PACK_CACHE_DIR = originalCacheDir;
-      }
-    }
+    vi.stubEnv("AGENT_PACK_CACHE_DIR", "external-cache");
+    await expect(brief("runtime-cache-path")).resolves.toContain(
+      "Path: ./external-cache/snapshots/repohash/commit/docs/design.md",
+    );
+  });
+
+  it("stores bare HTTP and HTTPS references as URL sources", async () => {
+    const pack = await initPack({
+      id: "url-reference",
+      includes: [
+        { type: "reference", ref: { ref: "https://example.com/docs/design.md" } },
+        {
+          type: "reference",
+          ref: { name: "remote guide", ref: "http://example.com/guide/" },
+        },
+      ],
+      gitRefresh: "auto",
+    });
+
+    expect(pack.references).toMatchObject([
+      {
+        name: "design.md",
+        source: { kind: "url", url: "https://example.com/docs/design.md" },
+        path: "https://example.com/docs/design.md",
+      },
+      {
+        name: "remote guide",
+        source: { kind: "url", url: "http://example.com/guide/" },
+        path: "http://example.com/guide/",
+      },
+    ]);
+    await expect(brief("url-reference")).resolves.toContain(
+      "Path: https://example.com/docs/design.md",
+    );
+  });
+
+  it("rejects URL references that include credentials", async () => {
+    await expect(
+      initPack({
+        id: "credential-url",
+        includes: [{ type: "reference", ref: { ref: "https://user:secret@example.com/doc.md" } }],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow("URL references must not include credentials");
   });
 
   it("reports clear errors for missing local task inputs", async () => {
@@ -615,3 +651,12 @@ unknown: true`,
     ).rejects.toThrow("malformed YAML");
   });
 });
+
+function packLockPath(id: string): string {
+  const paths = resolveRuntimePaths();
+  const namespace = createHash("sha256")
+    .update(path.resolve(paths.stateDir))
+    .digest("hex")
+    .slice(0, 16);
+  return path.join(paths.lockDir, `${namespace}-pack-${id}.lock`);
+}
