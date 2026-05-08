@@ -434,6 +434,9 @@ Text output is tab-separated: pack id, pack name, status, completed/total task c
 
 ```bash
 agent-pack task list --id reviewer-001
+agent-pack task add "Review auth flow" --id reviewer-001
+agent-pack task add "Review auth flow" --id reviewer-001 --category review --body "Inspect session handling." --done-when "Findings cite files" --done-when "Test gaps are noted"
+agent-pack task add "Review auth flow" --id reviewer-001 --json
 agent-pack task show t001 --id reviewer-001
 agent-pack task show t001 --id reviewer-001 --json
 agent-pack task start t001 --id reviewer-001 --note "Starting review."
@@ -443,6 +446,8 @@ agent-pack task block t002 --id reviewer-001 --note "Need user decision."
 ```
 
 `agent-pack task show` prints a human-readable task detail by default, including status, body, `doneWhen`, and notes. Add `--json` when a script needs the task state object.
+
+`agent-pack task add` appends a pending ad hoc task to an existing pack. The title is required and must not be empty after trimming. Optional `--category`, `--body`, and repeatable `--done-when` values must also be non-empty when provided. With `--json`, it prints the added task plus the updated pack summary.
 
 `agent-pack task note` takes the note text as a positional argument. `agent-pack task start`, `agent-pack task done`, and `agent-pack task block` take optional note text with `--note`.
 
@@ -474,6 +479,7 @@ JSON output shapes:
 | `list --json` | Array of status objects |
 | `status --json` | Resolved paths and current defaults |
 | `summary --json` | `{ id, name, status, tasks, references, skills }` |
+| `task add <title> --json` | `{ task, summary }` |
 | `task show <task-id> --json` | Task state object |
 | `report --json` | Full pack state object |
 
@@ -896,6 +902,17 @@ Create a documentation-review pack:
 agent-pack init \
   --manifest ./examples/manifests/docs-review.yaml \
   "Review the repository documentation against the current code."
+
+export AGENT_PACK_ID=<generated-id>
+agent-pack brief
+```
+
+Create a feature design-summary pack:
+
+```bash
+agent-pack init \
+  --manifest ./examples/manifests/feature-design-summary.yaml \
+  "Design summary for: add a dry-run flag to the import command."
 
 export AGENT_PACK_ID=<generated-id>
 agent-pack brief

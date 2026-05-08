@@ -49,6 +49,7 @@ Then ask an agent to run the brief and update task status as it works:
 
 ```bash
 agent-pack task show t001
+agent-pack task add "Review follow-up"
 agent-pack task start t001
 agent-pack task note t001 "date output: Thu May 7 ..."
 agent-pack task done t001 --note "Recorded date output."
@@ -56,7 +57,7 @@ agent-pack summary
 agent-pack report
 ```
 
-`task show`, `summary`, and `report` print text for humans and agents by default. Use `task show <task-id> --json`, `summary --json`, or `report --json` for scripts that need saved state objects.
+`task show`, `summary`, and `report` print text for humans and agents by default. Use `task add <title> --json`, `task show <task-id> --json`, `summary --json`, or `report --json` for scripts that need saved state objects.
 
 Inspect resolved paths and defaults:
 
@@ -75,6 +76,8 @@ Use these flags with `agent-pack init`:
 - `--reference <ref>`: catalog reference, local file, directory, glob, HTTP/HTTPS URL, git path, or whole git repo
 - `--skill <ref>`: catalog skill, local `SKILL.md` file, directory scan, glob, or git-backed skill source
 - `--instructions <path>`: raw text instructions file
+
+After a pack exists, use `agent-pack task add <title>` to append an ad hoc pending task. It accepts optional `--category`, `--body`, repeatable `--done-when`, and `--json`.
 
 Manifest `tasks`, `references`, and `skills` arrays can use the same refs as these CLI flags:
 
@@ -130,6 +133,10 @@ The npm package includes an `examples/` directory that is already laid out as a 
 EXAMPLES_DIR="$(agent-pack --help | sed -n 's/^[[:space:]]*Examples[[:space:]][[:space:]]*//p')"
 AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR" agent-pack init --manifest code-review "Review scope: unstaged changes."
 ```
+
+Other bundled manifests include `docs-review` for documentation review and
+`feature-design-summary` for creating a repository-grounded feature design
+summary markdown file from a feature brief.
 
 Enable shell completion for the current shell session:
 

@@ -6,6 +6,10 @@
 
 ### Added
 
+- Added `agent-pack task add <title>` for appending ad hoc tasks to existing packs.
+- Added a bundled `feature-design-summary` example manifest for creating a
+  repository-grounded feature design summary markdown file.
+
 ### Changed
 
 ### Fixed
