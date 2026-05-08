@@ -306,7 +306,7 @@ agent-pack init \
 
 That command composes content across types: the manifest can contribute instructions, tasks, references, skills, and contract rules; task flags add more tasks; reference flags add git, URL, and local reading material; skill flags add supplemental `SKILL.md` files.
 
-For a similar pack expressed mostly as one manifest, save this YAML as `reviewer-pack.yaml`. Task file and glob inputs become inline task entries in the manifest; keep `--task` flags alongside `--manifest` when you want to load external task files directly.
+For a similar pack expressed mostly as one manifest, save this YAML as `reviewer-pack.yaml`. String entries use the same ref syntax as the corresponding CLI flag; object entries add inline task content or reference/skill metadata.
 
 ```yaml
 schemaVersion: 1
@@ -315,26 +315,20 @@ instructions: Use the included docs and skills to complete the review.
 
 tasks:
   - title: Check local unstaged changes
-  - id: security-review
-    title: Run the shared security review task
-    body: Follow the security review checklist for this repository.
-  - id: local-task-review
-    title: Run the local task review checklist
-    body: Covers the work that would otherwise live in ./tasks/*.yaml.
+  - git+https://github.com/example/agent-packs.git//tasks/security-review.yaml#main
+  - ./tasks/*.yaml
 
 references:
   - name: product docs
     ref: git+https://github.com/example/product.git//docs/**/*.md#main
-  - name: design notes
-    ref: https://example.com/design-notes.md
+  - https://example.com/design-notes.md
   - name: architecture decisions
     ref: git+https://github.com/example/product.git//adr#main
-  - name: local docs
-    ref: ./docs/**/*.md
+  - ./docs/**/*.md
 
 skills:
   - ref: git+https://github.com/example/agent-skills.git//review/fresh-eyes/SKILL.md#v1.0.0
-  - ref: ./skills
+  - ./skills
 ```
 
 Then initialize with the manifest and a one-off prompt:
@@ -495,23 +489,27 @@ Manifest parsing is strict. Unknown fields are rejected.
 | Location | Allowed fields |
 |---|---|
 | Manifest | `schemaVersion`, `name`, `instructions`, `tasks`, `references`, `skills`, `contract` |
-| Task | `id`, `title`, `category`, `body`, `doneWhen` |
-| Reference or skill include | `name`, `description`, `ref` |
+| Inline task object | `id`, `title`, `category`, `body`, `doneWhen` |
+| Reference or skill object | `name`, `description`, `ref` |
 | Contract | `do`, `dont` |
 
 Rules:
 
 - `schemaVersion`, when present, must be `1`.
-- Each task must have `id` or `title`.
+- `tasks`, `references`, and `skills` are arrays. Each entry may be either a string ref or an object.
+- A string entry in `tasks` is equivalent to `--task <ref>`.
+- A string entry in `references` is equivalent to `--reference <ref>`.
+- A string entry in `skills` is equivalent to `--skill <ref>`.
+- Each inline task object must have `id` or `title`.
 - `doneWhen`, `contract.do`, and `contract.dont` are arrays of non-empty strings.
-- Reference and skill `ref` values are non-empty strings.
+- Reference and skill object `ref` values are non-empty strings.
 - `contract` must include at least one `do` or `dont` entry.
 - Manifest task `id` is preserved as `sourceId`; task commands use the runtime ID (`t001`, `t002`, ...) shown by `agent-pack task list`.
 - `category` is stored as task metadata but is not currently rendered in the brief.
 
 ### Task Files
 
-`--task` and `--tasks` load standalone YAML task files. Task files use the same fields as manifest `tasks` entries: `id`, `title`, `category`, `body`, and `doneWhen`.
+`--task` and `--tasks` load standalone YAML task files. Task objects use these fields: `id`, `title`, `category`, `body`, and `doneWhen`.
 
 A task file may contain one task object:
 
@@ -548,6 +546,8 @@ instructions: |
   Update task notes with concrete evidence.
 
 tasks:
+  - ./tasks/preflight.yaml
+  - ./tasks/review/*.yaml
   - id: inspect
     title: Inspect implementation
     body: Check the implementation against the included design.
@@ -556,6 +556,7 @@ tasks:
       - Findings are recorded or the task says no issues found.
 
 references:
+  - ./docs/**/*.md
   - name: design
     description: Initial product design.
     ref: ./docs/usage.md
@@ -570,6 +571,7 @@ references:
 
 skills:
   - ref: ./skills/fresh-eyes/SKILL.md
+  - ./skills/review
 ```
 
 CLI flags and manifests can be combined. Merge order is deterministic and source-order based:

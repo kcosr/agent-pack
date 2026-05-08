@@ -127,9 +127,9 @@ export interface PackManifest {
   schemaVersion?: number;
   name?: string;
   instructions?: string;
-  tasks?: ManifestTask[];
-  references?: ManifestReference[];
-  skills?: ManifestSkill[];
+  tasks?: Array<ManifestTask | string>;
+  references?: Array<ManifestReference | string>;
+  skills?: Array<ManifestSkill | string>;
   contract?: PackContract;
 }
 

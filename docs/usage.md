@@ -64,6 +64,19 @@ Use these flags with `agent-pack init`:
 - `--skill <ref>`: one `SKILL.md` file, directory scan, glob, or git-backed skill source
 - `--instructions <path>`: raw text instructions file
 
+Manifest `tasks`, `references`, and `skills` arrays can use the same refs as these CLI flags:
+
+```yaml
+tasks:
+  - ./tasks/*.yaml
+  - id: inline-check
+    title: Check local state
+references:
+  - ./docs/**/*.md
+skills:
+  - ./skills
+```
+
 Git refs use this shape. See the README for the full list of supported URL forms:
 
 ```text

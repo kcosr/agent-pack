@@ -32,7 +32,9 @@ describe("pack workflow", () => {
   it("creates a pack from manifest inputs and updates task status", async () => {
     await mkdir("docs", { recursive: true });
     await mkdir("skills/fresh-eyes", { recursive: true });
+    await mkdir("tasks", { recursive: true });
     await writeFile("docs/design.md", "# Design\n");
+    await writeFile("tasks/referenced.yaml", "id: referenced\ntitle: Inspect referenced task\n");
     await writeFile(
       "skills/fresh-eyes/SKILL.md",
       "---\nname: fresh-eyes\ndescription: Re-read changed code.\n---\n",
@@ -43,13 +45,13 @@ describe("pack workflow", () => {
 name: design-review
 instructions: Review carefully.
 tasks:
+  - ./tasks/referenced.yaml
   - id: inspect
     title: Inspect the design
 references:
-  - name: design
-    ref: ./docs/design.md
+  - ./docs/design.md
 skills:
-  - ref: ./skills/**
+  - ./skills/**
 contract:
   do:
     - Record concrete evidence.
@@ -64,9 +66,14 @@ contract:
       gitRefresh: "auto",
     });
 
-    expect(pack.tasks).toHaveLength(1);
-    expect(pack.tasks[0]?.source).toMatchObject({ path: "./pack.yaml" });
-    expect(pack.references[0]?.path).toBe("./docs/design.md");
+    expect(pack.tasks).toHaveLength(2);
+    expect(pack.tasks.map((task) => task.title)).toEqual([
+      "Inspect referenced task",
+      "Inspect the design",
+    ]);
+    expect(pack.tasks[0]?.source).toMatchObject({ path: "./tasks/referenced.yaml" });
+    expect(pack.tasks[1]?.source).toMatchObject({ path: "./pack.yaml" });
+    expect(pack.references[0]).toMatchObject({ name: "design.md", path: "./docs/design.md" });
     expect(pack.skills[0]?.name).toBe("fresh-eyes");
     expect(pack.contract).toEqual({
       do: ["Record concrete evidence."],
@@ -74,7 +81,7 @@ contract:
     });
 
     const updated = await updateTask("t001", "completed", "Done.", "design-review");
-    expect(updated.status).toBe("completed");
+    expect(updated.status).toBe("in_progress");
     const loaded = await status("design-review");
     expect(Array.isArray(loaded)).toBe(false);
     expect((loaded as typeof updated).taskCounts.completed).toBe(1);

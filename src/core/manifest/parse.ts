@@ -122,8 +122,11 @@ function validateTasks(value: unknown, filePath: string): void {
     throw new AgentPackError(`manifest tasks must be an array: ${filePath}`);
   }
   for (const [index, task] of value.entries()) {
+    if (isNonEmptyString(task)) {
+      continue;
+    }
     if (!isObject(task)) {
-      throw new AgentPackError(`manifest tasks[${index}] must be an object: ${filePath}`);
+      throw new AgentPackError(`manifest tasks[${index}] must be a string or object: ${filePath}`);
     }
     assertKnownKeys(task, taskKeys, `tasks[${index}]`);
     validateTaskString(task.id, `tasks[${index}].id`, filePath);
@@ -145,8 +148,13 @@ function validateIncludes(value: unknown, label: "references" | "skills", filePa
     throw new AgentPackError(`manifest ${label} must be an array: ${filePath}`);
   }
   for (const [index, entry] of value.entries()) {
+    if (isNonEmptyString(entry)) {
+      continue;
+    }
     if (!isObject(entry)) {
-      throw new AgentPackError(`manifest ${label}[${index}] must be an object: ${filePath}`);
+      throw new AgentPackError(
+        `manifest ${label}[${index}] must be a string or object: ${filePath}`,
+      );
     }
     assertKnownKeys(entry, includeKeys, `${label}[${index}]`);
     if (typeof entry.ref !== "string" || !entry.ref.trim()) {
@@ -200,6 +208,10 @@ function assertKnownKeys(
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && Boolean(value.trim());
 }
 
 async function readText(filePath: string, label: string): Promise<string> {

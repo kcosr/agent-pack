@@ -57,15 +57,9 @@ export async function initPack(input: InitInput): Promise<PackState> {
         if (manifest.instructions) {
           instructions.push(manifest.instructions);
         }
-        taskInputs.push(
-          ...(manifest.tasks ?? []).map((task) => ({
-            type: "manifestTask" as const,
-            task,
-            source: manifestSource,
-          })),
-        );
-        referenceRefs.push(...(manifest.references ?? []));
-        skillRefs.push(...(manifest.skills ?? []));
+        taskInputs.push(...manifestTaskInputs(manifest, manifestSource));
+        referenceRefs.push(...manifestReferenceRefs(manifest));
+        skillRefs.push(...manifestSkillRefs(manifest));
         contract = mergeContract(contract, manifest.contract);
         break;
       }
@@ -131,6 +125,26 @@ function mergeContract(
 
 function assertNever(value: never): never {
   throw new AgentPackError(`unsupported init include: ${JSON.stringify(value)}`);
+}
+
+function manifestTaskInputs(manifest: PackManifest, source: SourceInfo): TaskInput[] {
+  return (manifest.tasks ?? []).map((task) =>
+    typeof task === "string"
+      ? { type: "taskRef" as const, ref: task }
+      : { type: "manifestTask" as const, task, source },
+  );
+}
+
+function manifestReferenceRefs(manifest: PackManifest): ManifestReference[] {
+  return (manifest.references ?? []).map((reference) =>
+    typeof reference === "string" ? { ref: reference } : reference,
+  );
+}
+
+function manifestSkillRefs(manifest: PackManifest): ManifestSkill[] {
+  return (manifest.skills ?? []).map((skill) =>
+    typeof skill === "string" ? { ref: skill } : skill,
+  );
 }
 
 async function readManifestRef(
