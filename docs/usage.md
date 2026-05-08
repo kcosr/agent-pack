@@ -15,7 +15,7 @@ Create a pack from the demo manifest:
 
 ```bash
 agent-pack init \
-  --manifest ./examples/demo.yaml \
+  --manifest ./examples/manifests/demo.yaml \
   "Run the demo task and record the result."
 ```
 
@@ -116,14 +116,11 @@ agent-pack catalog show manifest review/code-review
 agent-pack catalog path skill engineering/fresh-eyes
 ```
 
-The npm package includes example manifests. Copy them into the catalog if you want reusable bare refs:
+The npm package includes an `examples/` directory that is already laid out as a catalog root. Point `AGENT_PACK_CONFIG_DIR` at that directory when you want reusable bare refs:
 
 ```bash
 EXAMPLES_DIR="$(agent-pack --help | awk '$1 == "Examples" {print $2}')"
-CATALOG_DIR="$(agent-pack status --json | node -e 'console.log(JSON.parse(require("fs").readFileSync(0, "utf8")).configDir)')"
-
-mkdir -p "$CATALOG_DIR/manifests"
-cp "$EXAMPLES_DIR"/*.yaml "$CATALOG_DIR/manifests/"
+export AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR"
 
 agent-pack init --manifest code-review "Review scope: unstaged changes."
 ```

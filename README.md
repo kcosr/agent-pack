@@ -8,7 +8,7 @@ A minimal handoff looks like this:
 
 ```bash
 agent-pack init \
-  --manifest ./examples/demo.yaml \
+  --manifest ./examples/manifests/demo.yaml \
   "Run the demo task and record evidence."
 
 export AGENT_PACK_ID=<generated-id>
@@ -200,7 +200,7 @@ Create a pack from the demo manifest:
 
 ```bash
 agent-pack init \
-  --manifest ./examples/demo.yaml \
+  --manifest ./examples/manifests/demo.yaml \
   "Run the demo task and record evidence."
 ```
 
@@ -551,14 +551,11 @@ agent-pack catalog path task review/security
 
 Text `catalog list` output is tab-separated: type, catalog name, and absolute path. `catalog list` creates the catalog directories when they do not exist.
 
-Installed npm packages include sample manifests in their `examples/` directory. `agent-pack --help` prints the installed examples path. Copy any examples you want to reuse by bare catalog name into the catalog `manifests/` directory:
+Installed npm packages include an `examples/` directory that is already laid out as a catalog root. `agent-pack --help` prints the installed examples path. Point `AGENT_PACK_CONFIG_DIR` at that directory when you want to try the packaged examples by bare catalog name:
 
 ```bash
 EXAMPLES_DIR="$(agent-pack --help | awk '$1 == "Examples" {print $2}')"
-CATALOG_DIR="$(agent-pack status --json | node -e 'console.log(JSON.parse(require("fs").readFileSync(0, "utf8")).configDir)')"
-
-mkdir -p "$CATALOG_DIR/manifests"
-cp "$EXAMPLES_DIR"/*.yaml "$CATALOG_DIR/manifests/"
+export AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR"
 
 agent-pack init --manifest code-review "Review scope: unstaged changes."
 ```
@@ -882,7 +879,7 @@ Create a code-review pack:
 
 ```bash
 agent-pack init \
-  --manifest ./examples/code-review.yaml \
+  --manifest ./examples/manifests/code-review.yaml \
   "Review scope: unstaged changes."
 
 export AGENT_PACK_ID=<generated-id>
@@ -893,7 +890,7 @@ Create a documentation-review pack:
 
 ```bash
 agent-pack init \
-  --manifest ./examples/docs-review.yaml \
+  --manifest ./examples/manifests/docs-review.yaml \
   "Review the repository documentation against the current code."
 
 export AGENT_PACK_ID=<generated-id>
@@ -902,14 +899,11 @@ agent-pack brief
 
 Use the generated id printed by `init`, or pass `--id <id>` when you want a deterministic pack id. Setting `AGENT_PACK_ID` before `init` also provides the pack id for that new pack.
 
-To use examples as catalog refs, copy them into the catalog manifest directory:
+To use examples as catalog refs, point the catalog config directory at the examples root:
 
 ```bash
 EXAMPLES_DIR="$(agent-pack --help | awk '$1 == "Examples" {print $2}')"
-CATALOG_DIR="$(agent-pack status --json | node -e 'console.log(JSON.parse(require("fs").readFileSync(0, "utf8")).configDir)')"
-
-mkdir -p "$CATALOG_DIR/manifests"
-cp "$EXAMPLES_DIR"/*.yaml "$CATALOG_DIR/manifests/"
+export AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR"
 
 agent-pack init --manifest docs-review "Review the docs."
 ```

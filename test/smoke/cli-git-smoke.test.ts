@@ -24,6 +24,19 @@ describe("agent-pack CLI git smoke", () => {
     expect(result.stdout.trim()).toBe("0.0.0");
   });
 
+  it("uses packaged examples as a catalog root", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-examples-catalog-smoke-"));
+    const env = { AGENT_PACK_CONFIG_DIR: path.resolve("examples") };
+
+    const list = await runCli(["catalog", "list", "--type", "manifest"], { cwd: workspace, env });
+    expect(list.stdout).toContain("manifest\tcode-review\t");
+    expect(list.stdout).toContain("manifest\tdemo\t");
+    expect(list.stdout).toContain("manifest\tdocs-review\t");
+
+    const candidates = await runCli(["__complete", "manifest", "do"], { cwd: workspace, env });
+    expect(candidates.stdout).toBe("docs-review\n");
+  });
+
   it("generates a suffixed pack id when init has no explicit id", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-generated-id-smoke-"));
     await writeFile(path.join(workspace, "pack.yaml"), "name: code-review\n");
