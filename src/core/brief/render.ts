@@ -188,8 +188,125 @@ export function renderSummary(pack: PackState): string {
   return `${lines.join("\n")}\n`;
 }
 
+export function renderReport(pack: PackState): string {
+  const lines = [renderSummary(pack).trimEnd()];
+  lines.push("", "Tasks:");
+  if (pack.tasks.length === 0) {
+    lines.push("- No tasks in this pack.");
+  } else {
+    pack.tasks.forEach((task, index) => {
+      if (index > 0) {
+        lines.push("");
+      }
+      lines.push(formatTaskReportEntry(task));
+    });
+  }
+
+  lines.push("", "References:");
+  if (pack.references.length === 0) {
+    lines.push("- No references in this pack.");
+  } else {
+    pack.references.forEach((reference, index) => {
+      if (index > 0) {
+        lines.push("");
+      }
+      lines.push(`- ${reference.id} - ${reference.name}`);
+      if (reference.description) {
+        lines.push(`  Description: ${reference.description}`);
+      }
+      if (reference.path) {
+        lines.push(`  Path: ${reference.path}`);
+      }
+      if (reference.rootPath) {
+        lines.push(`  Root path: ${reference.rootPath}`);
+      }
+      if (reference.files?.length) {
+        lines.push("  Files:");
+        for (const file of reference.files) {
+          lines.push(`  - ${file}`);
+        }
+      }
+    });
+  }
+
+  lines.push("", "Skills:");
+  if (pack.skills.length === 0) {
+    lines.push("- No skills in this pack.");
+  } else {
+    pack.skills.forEach((skill, index) => {
+      if (index > 0) {
+        lines.push("");
+      }
+      lines.push(`- ${skill.id} - ${skill.name}`);
+      if (skill.description) {
+        lines.push(`  Description: ${skill.description}`);
+      }
+      lines.push(`  Path: ${skill.path}`);
+    });
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
+export function renderTask(task: PackTask): string {
+  const lines = [`Task: ${task.id}`, `Title: ${task.title}`, `Status: ${task.status}`];
+  if (task.category) {
+    lines.push(`Category: ${task.category}`);
+  }
+  if (task.startedAt) {
+    lines.push(`Started: ${task.startedAt}`);
+  }
+  if (task.completedAt) {
+    lines.push(`Completed: ${task.completedAt}`);
+  }
+  if (task.blockedAt) {
+    lines.push(`Blocked: ${task.blockedAt}`);
+  }
+  if (task.body) {
+    lines.push("", "Body:", task.body);
+  }
+  if (task.doneWhen?.length) {
+    lines.push("", "Done when:");
+    for (const condition of task.doneWhen) {
+      lines.push(`- ${condition}`);
+    }
+  }
+  lines.push("", "Notes:");
+  if (task.notes.length === 0) {
+    lines.push("- none");
+  } else {
+    for (const note of task.notes) {
+      lines.push(`- ${note}`);
+    }
+  }
+  return `${lines.join("\n")}\n`;
+}
+
 function formatTaskSummary(task: PackTask): string {
   return `- [${task.status}] ${task.id} - ${task.title}`;
+}
+
+function formatTaskReportEntry(task: PackTask): string {
+  const lines = [`- ${task.id} [${task.status}] ${task.title}`];
+  if (task.category) {
+    lines.push(`  Category: ${task.category}`);
+  }
+  if (task.startedAt) {
+    lines.push(`  Started: ${task.startedAt}`);
+  }
+  if (task.completedAt) {
+    lines.push(`  Completed: ${task.completedAt}`);
+  }
+  if (task.blockedAt) {
+    lines.push(`  Blocked: ${task.blockedAt}`);
+  }
+  if (task.notes.length) {
+    lines.push("  Notes:");
+    for (const note of task.notes) {
+      lines.push(`  - ${note}`);
+    }
+  }
+  return lines.join("\n");
 }
 
 function taskCommand(

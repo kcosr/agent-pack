@@ -105,6 +105,38 @@ references:
     );
     expect(done.stdout).toContain("Tasks: 1/1 completed, 0 blocked");
 
+    const shown = await runCli(["task", "show", "t001", "--id", "task-pack"], {
+      cwd: workspace,
+    });
+    expect(shown.stdout).toContain("Task: t001");
+    expect(shown.stdout).toContain("Status: completed");
+    expect(shown.stdout).toContain("Notes:\n- ");
+    expect(shown.stdout).toContain("Completed");
+    expect(shown.stdout).not.toContain('"id":');
+
+    const shownJson = await runCli(["task", "show", "t001", "--id", "task-pack", "--json"], {
+      cwd: workspace,
+    });
+    expect(JSON.parse(shownJson.stdout)).toMatchObject({
+      id: "t001",
+      status: "completed",
+      title: "Inspect task commands",
+    });
+
+    const report = await runCli(["report", "--id", "task-pack"], { cwd: workspace });
+    expect(report.stdout).toContain("Pack: task-pack");
+    expect(report.stdout).toContain("Tasks:\n- t001 [completed] Inspect task commands");
+    expect(report.stdout).toContain("Notes:\n  - ");
+    expect(report.stdout).not.toContain('"tasks":');
+
+    const reportJson = await runCli(["report", "--id", "task-pack", "--json"], {
+      cwd: workspace,
+    });
+    expect(JSON.parse(reportJson.stdout)).toMatchObject({
+      id: "task-pack",
+      tasks: [{ id: "t001", status: "completed" }],
+    });
+
     const oldTopLevel = await runCli(["done", "t001", "--id", "task-pack"], {
       cwd: workspace,
       reject: false,

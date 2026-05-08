@@ -221,11 +221,10 @@ export async function listTasks(id?: string): Promise<string> {
   return `${pack.tasks.map((task) => `[${task.status}] ${task.id} - ${task.title}`).join("\n")}\n`;
 }
 
-export async function showTask(taskId: string, id?: string): Promise<string> {
+export async function showTask(taskId: string, id?: string): Promise<PackTask> {
   const store = new StateStore();
   const pack = await store.loadPack(id);
-  const task = getTask(pack, taskId);
-  return `${JSON.stringify(task, null, 2)}\n`;
+  return getTask(pack, taskId);
 }
 
 export async function updateTask(

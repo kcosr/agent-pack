@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command, Option } from "commander";
-import { renderSummary } from "../core/brief/render.js";
+import { renderReport, renderSummary, renderTask } from "../core/brief/render.js";
 import { AgentPackError } from "../core/errors.js";
 import {
   brief,
@@ -124,7 +124,7 @@ program
       if (options.json) {
         printJson(pack);
       } else {
-        process.stdout.write(`${JSON.stringify(pack, null, 2)}\n`);
+        process.stdout.write(renderReport(pack));
       }
     });
   });
@@ -255,12 +255,18 @@ function configureTaskCommands(root: Command): void {
 
   task
     .command("show")
-    .description("Show a task as JSON.")
+    .description("Show a task.")
     .argument("<taskId>", "task ID")
     .option("--id <id>", "pack ID")
+    .option("--json", "emit machine-readable output")
     .action(async (taskId, options) => {
       await run(async () => {
-        process.stdout.write(await showTask(taskId, options.id));
+        const task = await showTask(taskId, options.id);
+        if (options.json) {
+          printJson(task);
+        } else {
+          process.stdout.write(renderTask(task));
+        }
       });
     });
 

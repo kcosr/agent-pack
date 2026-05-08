@@ -44,10 +44,14 @@ The compact brief tells the agent to run `agent-pack task show <task-id>` before
 Then ask an agent to run the brief and update task status as it works:
 
 ```bash
+agent-pack task show t001
 agent-pack task start t001
 agent-pack task note t001 "date output: Thu May 7 ..."
 agent-pack task done t001 --note "Recorded date output."
+agent-pack report
 ```
+
+`task show` and `report` print text for humans and agents by default. Use `task show <task-id> --json` or `report --json` for scripts that need saved state objects.
 
 ## Source Types
 

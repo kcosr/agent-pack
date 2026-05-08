@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { renderBrief, renderSummary } from "../../src/core/brief/render.js";
+import {
+  renderBrief,
+  renderReport,
+  renderSummary,
+  renderTask,
+} from "../../src/core/brief/render.js";
 import type { PackState } from "../../src/core/types.js";
 
 describe("brief rendering", () => {
@@ -85,6 +90,43 @@ describe("brief rendering", () => {
     expect(brief).toContain("  ap task show <task-id>");
     expect(brief).toContain('  ap task note <task-id> "evidence"');
     expect(brief).not.toContain("--id review-pack");
+  });
+
+  it("renders human-readable task and report output without raw source metadata", () => {
+    const state = pack({
+      tasks: [
+        {
+          ...pack().tasks[0],
+          status: "completed",
+          completedAt: "2026-05-07T01:00:00.000Z",
+          notes: ["2026-05-07T01:00:00.000Z Checked src/index.ts."],
+          source: { kind: "file", path: "./tasks/review.yaml" },
+        },
+      ],
+    });
+    const task = state.tasks[0];
+
+    const renderedTask = renderTask(task);
+    expect(renderedTask).toContain("Task: t001");
+    expect(renderedTask).toContain("Status: completed");
+    expect(renderedTask).toContain("Body:\nCheck request handling.");
+    expect(renderedTask).toContain("Done when:\n- Notes cite files.");
+    expect(renderedTask).toContain("Notes:\n- 2026-05-07T01:00:00.000Z Checked src/index.ts.");
+    expect(renderedTask).not.toContain('"source"');
+    expect(renderedTask).not.toContain("./tasks/review.yaml");
+
+    const renderedReport = renderReport(state);
+    expect(renderedReport).toContain("Pack: review-pack");
+    expect(renderedReport).toContain("- t001 [completed] Inspect API");
+    expect(renderedReport).toContain("Notes:\n  - 2026-05-07T01:00:00.000Z Checked src/index.ts.");
+    expect(renderedReport).toContain(
+      "References:\n- r001 - design\n  Description: Design document.\n  Path: ./docs/design.md\n\n- r002 - source glob",
+    );
+    expect(renderedReport).toContain(
+      "Skills:\n- s001 - fresh-eyes\n  Description: Review changed code.\n  Path: ./skills/fresh-eyes/SKILL.md\n\n- s002 - fresh-eyes (2)",
+    );
+    expect(renderedReport).not.toContain('"source"');
+    expect(renderedReport).not.toContain("./tasks/review.yaml");
   });
 });
 

@@ -428,11 +428,14 @@ Text output is tab-separated: pack id, pack name, status, completed/total task c
 ```bash
 agent-pack task list --id reviewer-001
 agent-pack task show t001 --id reviewer-001
+agent-pack task show t001 --id reviewer-001 --json
 agent-pack task start t001 --id reviewer-001 --note "Starting review."
 agent-pack task note t001 --id reviewer-001 "Read the design."
 agent-pack task done t001 --id reviewer-001 --note "Completed with evidence in notes."
 agent-pack task block t002 --id reviewer-001 --note "Need user decision."
 ```
+
+`agent-pack task show` prints a human-readable task detail by default, including status, body, `doneWhen`, and notes. Add `--json` when a script needs the task state object.
 
 `agent-pack task note` takes the note text as a positional argument. `agent-pack task start`, `agent-pack task done`, and `agent-pack task block` take optional note text with `--note`.
 
@@ -448,6 +451,8 @@ agent-pack summary --id reviewer-001
 
 Use `agent-pack list` to discover packs, then run `status --id <pack>` for the pack you want to inspect.
 
+`report` prints a human-readable pack report by default, including task status and notes. Add `--json` for the full saved pack state.
+
 JSON output shapes:
 
 | Command | JSON shape |
@@ -457,6 +462,7 @@ JSON output shapes:
 | `clean --json` | `{ packIds, repoHashes, removed }` |
 | `list --json` | Array of status objects |
 | `status --json` | `{ id, name, status, tasks, references, skills }` |
+| `task show <task-id> --json` | Task state object |
 | `report --json` | Full pack state object |
 
 Derived pack statuses:
