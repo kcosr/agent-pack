@@ -551,6 +551,18 @@ agent-pack catalog path task review/security
 
 Text `catalog list` output is tab-separated: type, catalog name, and absolute path. `catalog list` creates the catalog directories when they do not exist.
 
+Installed npm packages include sample manifests in their `examples/` directory. `agent-pack --help` prints the installed examples path. Copy any examples you want to reuse by bare catalog name into the catalog `manifests/` directory:
+
+```bash
+EXAMPLES_DIR="$(agent-pack --help | awk '$1 == "Examples" {print $2}')"
+CATALOG_DIR="$(agent-pack status --json | node -e 'console.log(JSON.parse(require("fs").readFileSync(0, "utf8")).configDir)')"
+
+mkdir -p "$CATALOG_DIR/manifests"
+cp "$EXAMPLES_DIR"/*.yaml "$CATALOG_DIR/manifests/"
+
+agent-pack init --manifest code-review "Review scope: unstaged changes."
+```
+
 ## Manifests
 
 Manifests are YAML files that define reusable pack content. A manifest ref can be a catalog name, a local file, or a git file ref:
@@ -843,14 +855,13 @@ Pack state lock filenames are prefixed with a 16-character hash of the state dir
 
 ## Reusable Examples
 
-The `examples/` directory includes reusable manifests for common workflows.
+The npm package includes an `examples/` directory with reusable manifests for common workflows. Run `agent-pack --help` to see the installed examples path.
 
 Create a code-review pack:
 
 ```bash
 agent-pack init \
   --manifest ./examples/code-review.yaml \
-  --reference ./ \
   "Review scope: unstaged changes."
 
 export AGENT_PACK_ID=<generated-id>
@@ -862,7 +873,6 @@ Create a documentation-review pack:
 ```bash
 agent-pack init \
   --manifest ./examples/docs-review.yaml \
-  --reference ./ \
   "Review the repository documentation against the current code."
 
 export AGENT_PACK_ID=<generated-id>
@@ -870,6 +880,18 @@ agent-pack brief
 ```
 
 Use the generated id printed by `init`, or pass `--id <id>` when you want a deterministic pack id. Setting `AGENT_PACK_ID` before `init` also provides the pack id for that new pack.
+
+To use examples as catalog refs, copy them into the catalog manifest directory:
+
+```bash
+EXAMPLES_DIR="$(agent-pack --help | awk '$1 == "Examples" {print $2}')"
+CATALOG_DIR="$(agent-pack status --json | node -e 'console.log(JSON.parse(require("fs").readFileSync(0, "utf8")).configDir)')"
+
+mkdir -p "$CATALOG_DIR/manifests"
+cp "$EXAMPLES_DIR"/*.yaml "$CATALOG_DIR/manifests/"
+
+agent-pack init --manifest docs-review "Review the docs."
+```
 
 ## More Documentation
 
