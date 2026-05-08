@@ -187,6 +187,15 @@ skills:
     expect(restored.stdout).toContain("Inspect git material");
     expect(restored.stdout).toContain("Inspect plural task source");
     expect(restored.stdout).toContain("Inspect ad hoc material");
+
+    const clean = await runCli(["clean", "--id", "git-pack"], { cwd: workspace });
+    expect(clean.stdout).toContain("Cleaned 2 cache paths");
+
+    const cleaned = await runCli(["brief", "--id", "git-pack"], { cwd: workspace, reject: false });
+    expect(cleaned.stderr).toContain("agent-pack sync --id git-pack");
+
+    const resync = await runCli(["sync", "--id", "git-pack"], { cwd: workspace });
+    expect(resync.stdout).toContain("Synced pack git-pack");
   });
 
   it.skipIf(process.env.AGENT_PACK_SMOKE_LIVE_GIT !== "1")(

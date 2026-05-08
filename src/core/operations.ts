@@ -1,3 +1,4 @@
+import { rm } from "node:fs/promises";
 import path from "node:path";
 import fg from "fast-glob";
 import { renderBrief, renderSummary } from "./brief/render.js";
@@ -18,6 +19,7 @@ import { StateStore, assertValidPackId } from "./state/store.js";
 import { loadTasks } from "./tasks/load.js";
 import type { TaskInput } from "./tasks/load.js";
 import type {
+  CleanResult,
   GitRefresh,
   GitSourceInfo,
   InitInput,
@@ -181,6 +183,31 @@ export async function syncAll(refresh: GitRefresh): Promise<PackState[]> {
   return packs;
 }
 
+export async function cleanCache(id?: string): Promise<CleanResult> {
+  const store = new StateStore();
+  const packs = id ? [await store.loadPack(id)] : await store.listPacks();
+  const repoHashes = new Set<string>();
+  for (const pack of packs) {
+    for (const source of gitSources(pack)) {
+      repoHashes.add(validGitCacheKey(source.repoHash, pack.id));
+    }
+  }
+  const removed: string[] = [];
+  for (const repoHash of [...repoHashes].sort()) {
+    for (const target of gitCacheTargets(repoHash, store.paths)) {
+      if (await pathExists(target.absPath)) {
+        await rm(target.absPath, { recursive: true, force: true });
+        removed.push(target.displayPath);
+      }
+    }
+  }
+  return {
+    packIds: packs.map((pack) => pack.id),
+    repoHashes: [...repoHashes].sort(),
+    removed,
+  };
+}
+
 export async function brief(id?: string): Promise<string> {
   const store = new StateStore();
   const pack = await store.loadPack(id);
@@ -289,6 +316,27 @@ function gitCacheValidationPath(source: GitSourceInfo, paths: RuntimePaths): str
     return gitSourceTargetPath(source, paths).displayPath;
   }
   return toDisplayPath(gitSnapshotRoot(source, paths), paths.repoRoot);
+}
+
+function gitCacheTargets(
+  repoHash: string,
+  paths: RuntimePaths,
+): Array<{ absPath: string; displayPath: string }> {
+  const targets = [
+    path.join(paths.gitCacheDir, repoHash),
+    path.join(paths.cacheDir, "snapshots", repoHash),
+  ];
+  return targets.map((absPath) => ({
+    absPath,
+    displayPath: toDisplayPath(absPath, paths.repoRoot),
+  }));
+}
+
+function validGitCacheKey(repoHash: string, packId: string): string {
+  if (!/^[a-f0-9]{16}$/.test(repoHash)) {
+    throw new AgentPackError(`invalid git cache key in pack ${packId}: ${repoHash}`);
+  }
+  return repoHash;
 }
 
 async function existsDisplayPath(displayPath: string, paths: RuntimePaths): Promise<boolean> {

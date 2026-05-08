@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, symlink, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { brief, initPack, status, updateTask } from "../../src/core/operations.js";
+import { brief, cleanCache, initPack, status, updateTask } from "../../src/core/operations.js";
 import { resolveRuntimePaths } from "../../src/core/paths.js";
 
 describe("pack workflow", () => {
@@ -579,6 +579,49 @@ unknown: true`,
     );
   });
 
+  it("cleans git cache material for one pack or all current packs", async () => {
+    await writeGitPackState("first-clean-pack", "aaaaaaaaaaaaaaaa");
+    await writeGitPackState("second-clean-pack", "bbbbbbbbbbbbbbbb");
+    await mkdir(".agent-pack/cache/git/aaaaaaaaaaaaaaaa/mirror.git", { recursive: true });
+    await mkdir(".agent-pack/cache/snapshots/aaaaaaaaaaaaaaaa/commit", { recursive: true });
+    await mkdir(".agent-pack/cache/git/bbbbbbbbbbbbbbbb/mirror.git", { recursive: true });
+    await mkdir(".agent-pack/cache/snapshots/bbbbbbbbbbbbbbbb/commit", { recursive: true });
+
+    const scoped = await cleanCache("first-clean-pack");
+
+    expect(scoped).toMatchObject({
+      packIds: ["first-clean-pack"],
+      repoHashes: ["aaaaaaaaaaaaaaaa"],
+    });
+    expect(scoped.removed).toEqual([
+      ".agent-pack/cache/git/aaaaaaaaaaaaaaaa",
+      ".agent-pack/cache/snapshots/aaaaaaaaaaaaaaaa",
+    ]);
+    await expectPathMissing(".agent-pack/cache/git/aaaaaaaaaaaaaaaa");
+    await expectPathMissing(".agent-pack/cache/snapshots/aaaaaaaaaaaaaaaa");
+    await expectPathPresent(".agent-pack/cache/git/bbbbbbbbbbbbbbbb");
+    await expectPathPresent(".agent-pack/cache/snapshots/bbbbbbbbbbbbbbbb");
+
+    const all = await cleanCache();
+
+    expect(all.packIds).toEqual(["first-clean-pack", "second-clean-pack"]);
+    expect(all.repoHashes).toEqual(["aaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbb"]);
+    expect(all.removed).toEqual([
+      ".agent-pack/cache/git/bbbbbbbbbbbbbbbb",
+      ".agent-pack/cache/snapshots/bbbbbbbbbbbbbbbb",
+    ]);
+    await expectPathMissing(".agent-pack/cache/git/bbbbbbbbbbbbbbbb");
+    await expectPathMissing(".agent-pack/cache/snapshots/bbbbbbbbbbbbbbbb");
+    await expectPathPresent(".agent-pack/state/packs/first-clean-pack.json");
+    await expectPathPresent(".agent-pack/state/packs/second-clean-pack.json");
+  });
+
+  it("rejects unsafe git cache keys while cleaning", async () => {
+    await writeGitPackState("bad-clean-pack", "../escape");
+
+    await expect(cleanCache("bad-clean-pack")).rejects.toThrow("invalid git cache key");
+  });
+
   it("stores bare HTTP and HTTPS references as URL sources", async () => {
     const pack = await initPack({
       id: "url-reference",
@@ -659,4 +702,44 @@ function packLockPath(id: string): string {
     .digest("hex")
     .slice(0, 16);
   return path.join(paths.lockDir, `${namespace}-pack-${id}.lock`);
+}
+
+async function writeGitPackState(id: string, repoHash: string): Promise<void> {
+  await mkdir(".agent-pack/state/packs", { recursive: true });
+  await writeFile(
+    `.agent-pack/state/packs/${id}.json`,
+    JSON.stringify({
+      schemaVersion: 1,
+      id,
+      status: "no_tasks",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      repoRoot: ".",
+      taskCounts: { total: 0, pending: 0, inProgress: 0, completed: 0, blocked: 0 },
+      tasks: [],
+      references: [
+        {
+          id: "r001",
+          name: "repo",
+          source: {
+            kind: "git",
+            url: "file:///repo.git",
+            resolvedRef: "main",
+            resolvedCommit: "commit",
+            repoHash,
+          },
+          rootPath: `./.agent-pack/cache/snapshots/${repoHash}/commit`,
+        },
+      ],
+      skills: [],
+    }),
+  );
+}
+
+async function expectPathPresent(pathName: string): Promise<void> {
+  await expect(stat(pathName)).resolves.toBeTruthy();
+}
+
+async function expectPathMissing(pathName: string): Promise<void> {
+  await expect(stat(pathName)).rejects.toMatchObject({ code: "ENOENT" });
 }

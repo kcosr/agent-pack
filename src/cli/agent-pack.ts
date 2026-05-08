@@ -7,6 +7,7 @@ import { renderSummary } from "../core/brief/render.js";
 import { AgentPackError } from "../core/errors.js";
 import {
   brief,
+  cleanCache,
   initPack,
   listTasks,
   report,
@@ -42,7 +43,7 @@ program
 
 program
   .command("sync")
-  .description("Hydrate missing git cache material for a pack.")
+  .description("Fetch and unpack missing git cache material for a pack.")
   .option("--id <id>", "pack ID")
   .option("--all", "sync all packs")
   .addOption(gitRefreshOption())
@@ -58,6 +59,26 @@ program
         process.stdout.write(`Synced ${result.length} packs\n`);
       } else {
         process.stdout.write(`Synced pack ${result.id}\n`);
+      }
+    });
+  });
+
+program
+  .command("clean")
+  .description("Remove rebuildable git cache material for current pack state.")
+  .option("--id <id>", "limit cleanup to one pack ID")
+  .option("--json", "emit machine-readable output")
+  .action(async (options) => {
+    await run(async () => {
+      const result = await cleanCache(options.id);
+      if (options.json) {
+        printJson(result);
+      } else {
+        const repoLabel = result.repoHashes.length === 1 ? "git repo" : "git repos";
+        const packLabel = result.packIds.length === 1 ? "pack" : "packs";
+        process.stdout.write(
+          `Cleaned ${result.removed.length} cache paths for ${result.repoHashes.length} ${repoLabel} across ${result.packIds.length} ${packLabel}\n`,
+        );
       }
     });
   });
@@ -214,7 +235,7 @@ function configureInitCommand(root: Command): void {
     )
     .option(
       "--instructions <path>",
-      "load instructions from Markdown or YAML",
+      "load raw instructions from a text or Markdown file",
       collectInclude(includes, (path) => ({ type: "instructions", path })),
       [],
     )

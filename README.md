@@ -83,7 +83,7 @@ Git-backed source material is cached separately:
 $XDG_CACHE_HOME/agent-pack/
 ```
 
-If `XDG_CACHE_HOME` is unset, the cache defaults to `~/.cache/agent-pack/`. The cache can always be rebuilt with `agent-pack sync`; locks also live under this cache root.
+If `XDG_CACHE_HOME` is unset, the cache defaults to `~/.cache/agent-pack/`. The cache can always be rebuilt with `agent-pack sync`; locks also live under this cache root. Use `agent-pack clean` to remove rebuildable git cache material for the current state directory.
 
 If you explicitly point `AGENT_PACK_CACHE_DIR` inside the repository, keep that cache out of git. For example, with `AGENT_PACK_CACHE_DIR=.agent-pack/cache`:
 
@@ -341,6 +341,20 @@ With `auto`, a branch ref such as `main` continues resolving from the cached mir
 
 Local references and skills are not affected by `sync`; they are read from their paths when the agent uses them.
 
+### `clean`
+
+Remove rebuildable git cache material for packs in the current state directory.
+
+```bash
+agent-pack clean
+agent-pack clean --id reviewer-001
+agent-pack clean --json
+```
+
+By default, `clean` reads all packs in the current state directory and removes matching `git/<repoHash>` mirrors and `snapshots/<repoHash>` directories from the cache root. `--id` limits cleanup to one pack. Pack state, event logs, local references, HTTP/HTTPS references, and locks are not removed.
+
+After cleaning, run `agent-pack sync --all` or `agent-pack sync --id <pack>` before rendering briefs for packs with git-backed material. Resync can fail if the original remote, ref, or credentials are no longer available.
+
 ### Task Commands
 
 ```bash
@@ -581,6 +595,8 @@ agent-pack brief
 ```
 
 `agent-pack` does not snapshot local files. If a local reference or skill changes after pack creation, the agent reads the current file at that path. HTTP/HTTPS references are rendered as URLs for the agent to read. Git references resolve to a commit and read from exported snapshots. Git snapshots reject symlinks instead of extracting them into the cache.
+
+`agent-pack clean` removes git cache directories referenced by current pack state and leaves `.agent-pack/state/` untouched. The removed cache can be rebuilt with `agent-pack sync` while the upstream git sources remain accessible.
 
 ### Event Log
 

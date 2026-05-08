@@ -162,3 +162,9 @@ export interface RuntimePaths {
   lockDir: string;
   indexPath: string;
 }
+
+export interface CleanResult {
+  packIds: string[];
+  repoHashes: string[];
+  removed: string[];
+}

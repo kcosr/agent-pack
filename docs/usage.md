@@ -77,3 +77,11 @@ agent-pack sync --id demo-pack
 agent-pack sync --id demo-pack --json
 agent-pack brief --id demo-pack
 ```
+
+Clean rebuildable git cache material without removing pack state:
+
+```bash
+agent-pack clean
+agent-pack clean --id demo-pack
+agent-pack sync --id demo-pack
+```
