@@ -1,47 +1,89 @@
 # agent-pack
 
-`agent-pack` saves your tasks, references, instructions, and progress to disk, then renders a brief for a coding agent to read. It is for developers using an LLM coding CLI or editor agent who want work to survive beyond one chat thread.
+`agent-pack` pre-packs context for coding agents: references to read, supplemental skills to apply, instructions to follow, and executable task lists that keep the work on track.
 
 `agent-pack` does not run the agent. It prepares the work, renders the agent-facing brief, and records task progress while you run your agent CLI separately.
 
-A minimal handoff looks like this:
+## Quick Start
+
+Create a pack from the demo manifest:
 
 ```bash
-EXAMPLES_DIR="$(agent-pack --help | awk '$1 == "Examples" {print $2}')"
-export AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR"
-
 agent-pack init \
-  --manifest demo \
+  --manifest ./examples/manifests/demo.yaml \
   "Run the demo task and record evidence."
+```
 
-export AGENT_PACK_ID=<generated-id>
+Expected output:
+
+```text
+Created pack demo-a1b2c3
+Run: agent-pack brief --id demo-a1b2c3
+```
+
+Set the generated pack id in your shell before asking an agent to work. Commands can then omit `--id`:
+
+```bash
+export AGENT_PACK_ID=demo-a1b2c3
 agent-pack brief
 ```
 
-Then paste a handoff like this into your agent CLI:
+`init` uses `--id` when provided, then `AGENT_PACK_ID` when set, and otherwise generates an id from the pack name plus a short random suffix.
+
+Abbreviated output:
 
 ```text
-AGENT_PACK_ID is <generated-id>. Run agent-pack brief and work the pack. Update task status as you go.
+You are working from pack demo-a1b2c3.
+Name: demo
+
+Prompt:
+Run the demo task and record evidence.
+
+Commands:
+  agent-pack task list
+  agent-pack task show <task-id>
+  agent-pack task start <task-id>
+  agent-pack task note <task-id> "evidence"
+  agent-pack task done <task-id> --note "completion evidence"
+  agent-pack task block <task-id> --note "blocker"
+  ...
+
+Tasks:
+- [pending] t001 - Run date and record the output
+```
+
+In your agent CLI or editor agent, paste a handoff like this:
+
+```text
+AGENT_PACK_ID is demo-a1b2c3. Run agent-pack brief and work the pack. Update task status as you go.
+```
+
+Check progress:
+
+```bash
+agent-pack task list
+agent-pack summary
+agent-pack report
 ```
 
 ## Why Use It
 
-Without `agent-pack`, the typical handoff is a long prompt or chat thread. Tasks, references, and progress are not separately addressable. With `agent-pack`, the user and agent share a state file, a stable brief, and simple task commands.
+Without `agent-pack`, important context tends to be scattered across prompts, local files, repo links, and ad hoc instructions. With `agent-pack`, the user and agent share a stable brief, named references and skills, and task commands that make progress explicit.
 
 Use it when you want to:
 
-- hand an agent a structured set of tasks
+- pre-pack the context an agent should use before it starts work
 - include specific docs, directories, globs, URLs, or git-backed references
 - provide supplemental `SKILL.md` files with extracted descriptions
+- hand an agent an executable task list with concrete status commands
 - keep task progress, notes, blockers, and completion evidence in one place
 - resume work later from committed state
-- avoid relying on a long chat thread as the only source of truth
 
 ## Contents
 
+- [Quick Start](#quick-start)
 - [Installation](#installation)
 - [Core Concepts](#core-concepts)
-- [Quick Start](#quick-start)
 - [Command Reference](#command-reference)
 - [Manifests](#manifests)
 - [Git Sources](#git-sources)
@@ -196,71 +238,6 @@ Review the changed files again before finalizing.
 ### Contract
 
 A contract is manifest-only guidance rendered in the brief for the agent to follow. It has `do` and `dont` string lists. If multiple manifests contribute contracts, entries are concatenated in source order.
-
-## Quick Start
-
-Create a pack from the packaged demo manifest:
-
-```bash
-EXAMPLES_DIR="$(agent-pack --help | awk '$1 == "Examples" {print $2}')"
-export AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR"
-
-agent-pack init \
-  --manifest demo \
-  "Run the demo task and record evidence."
-```
-
-Expected output:
-
-```text
-Created pack demo-a1b2c3
-Run: agent-pack brief --id demo-a1b2c3
-```
-
-Set the generated pack id in your shell before asking an agent to work. Commands can then omit `--id`:
-
-```bash
-export AGENT_PACK_ID=demo-a1b2c3
-agent-pack brief
-```
-
-`init` uses `--id` when provided, then `AGENT_PACK_ID` when set, and otherwise generates an id from the pack name plus a short random suffix.
-
-Abbreviated output:
-
-```text
-You are working from pack demo-a1b2c3.
-Name: demo
-
-Prompt:
-Run the demo task and record evidence.
-
-Commands:
-  agent-pack task list
-  agent-pack task show <task-id>
-  agent-pack task start <task-id>
-  agent-pack task note <task-id> "evidence"
-  agent-pack task done <task-id> --note "completion evidence"
-  agent-pack task block <task-id> --note "blocker"
-  ...
-
-Tasks:
-- [pending] t001 - Run date and record the output
-```
-
-In your agent CLI or editor agent, paste a handoff like this:
-
-```text
-AGENT_PACK_ID is demo-a1b2c3. Run agent-pack brief and work the pack. Update task status as you go.
-```
-
-Check progress:
-
-```bash
-agent-pack task list
-agent-pack summary
-agent-pack report
-```
 
 ## Command Reference
 
