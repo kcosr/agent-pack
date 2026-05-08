@@ -29,6 +29,7 @@ describe("brief rendering", () => {
     expect(brief).toContain("- Run tests.");
     expect(brief).toContain("Don't:");
     expect(brief).toContain("- Skip evidence.");
+    expect(brief).toContain("Commands:");
     expect(brief).toContain("  ap list --id review-pack");
     expect(brief).toContain("  ap show <task-id> --id review-pack");
     expect(brief).toContain("  ap start <task-id> --id review-pack");
@@ -40,6 +41,10 @@ describe("brief rendering", () => {
     );
     expect(brief).toContain("  ap note <task-id> --id review-pack \"$(cat <<'EOF'");
     expect(brief).toContain("multi-line evidence\nEOF\n)");
+    expect(brief).not.toContain("Progress commands:");
+    expect(brief.indexOf("Commands:")).toBeLessThan(brief.indexOf("References:"));
+    expect(brief.indexOf("References:")).toBeLessThan(brief.indexOf("Skills:"));
+    expect(brief.indexOf("Skills:")).toBeLessThan(brief.indexOf("Tasks:"));
   });
 
   it("renders empty task packs and blocked summary entries", () => {
@@ -51,11 +56,22 @@ describe("brief rendering", () => {
       skills: [],
     });
 
-    expect(renderBrief(pack({ tasks: [], references: [], skills: [] }))).toContain(
-      "- No tasks in this pack.",
-    );
+    const brief = renderBrief(pack({ tasks: [], references: [], skills: [] }));
+    expect(brief).toContain("- No tasks in this pack.");
+    expect(brief).not.toContain("Commands:");
     expect(renderSummary(state)).toContain("Tasks: 0/1 completed, 1 blocked");
     expect(renderSummary(state)).toContain("Blocked:\n- t001 - Inspect API");
+  });
+
+  it("can render only task ids and titles without task content", () => {
+    const brief = renderBrief(pack(), "ap", { includeTaskContent: false });
+
+    expect(brief).toContain("[pending] t001 - Inspect API");
+    expect(brief).not.toContain("  Check request handling.");
+    expect(brief).not.toContain("  Done when:");
+    expect(brief).toContain(
+      "Task content is omitted from this brief. Run `ap show <task-id> --id review-pack` before working a task.",
+    );
   });
 });
 

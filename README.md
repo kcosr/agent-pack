@@ -23,7 +23,7 @@ Run agent-pack brief --id quickstart and work the pack. Update task status as yo
 
 ## Why Use It
 
-Without `agent-pack`, the typical handoff is a long prompt or chat thread. Tasks, references, and progress are not separately addressable. With `agent-pack`, the user and agent share a state file, a stable brief, and simple progress commands.
+Without `agent-pack`, the typical handoff is a long prompt or chat thread. Tasks, references, and progress are not separately addressable. With `agent-pack`, the user and agent share a state file, a stable brief, and simple task commands.
 
 Use it when you want to:
 
@@ -83,7 +83,7 @@ Git-backed source material is cached separately:
 $XDG_CACHE_HOME/agent-pack/
 ```
 
-If `XDG_CACHE_HOME` is unset, the cache defaults to `~/.cache/agent-pack/`. The cache can always be rebuilt with `agent-pack sync`; locks also live under this cache root. Use `agent-pack clean` to remove rebuildable git cache material for the current state directory.
+If `XDG_CACHE_HOME` is unset, the cache defaults to `~/.cache/agent-pack/`. If neither `XDG_CACHE_HOME` nor `HOME` is set, it falls back to `.agent-pack/cache` in the current working directory. The cache can always be rebuilt with `agent-pack sync`; locks also live under this cache root. Use `agent-pack clean` to remove rebuildable git cache material for the current state directory.
 
 If you explicitly point `AGENT_PACK_CACHE_DIR` inside the repository, keep that cache out of git. For example, with `AGENT_PACK_CACHE_DIR=.agent-pack/cache`:
 
@@ -105,7 +105,9 @@ export AGENT_PACK_STATE_DIR="$HOME/.local/state/agent-pack/my-repo"
 
 The brief is the text document rendered by `agent-pack brief`. It is meant to be pasted into an agent or read by an agent from the shell.
 
-When present, the brief renders sections in this order: prompt, instructions, tasks, references, skills, contract, and progress commands. `agent-pack` lists reference paths in the brief; it does not paste referenced file contents into the brief.
+When present, the brief renders sections in this order: prompt, instructions, contract, commands, references, skills, and tasks. `agent-pack` lists reference paths in the brief; it does not paste referenced file contents into the brief.
+
+By default, task entries include the task body and `doneWhen` checklist. For very large task lists, set `AGENT_PACK_BRIEF_TASK_CONTENT=false` when rendering the brief to show only task status, ID, and title; the brief will tell the agent to run `agent-pack show <task-id> --id <pack-id>` before working a task.
 
 ### Manifest
 
@@ -129,7 +131,7 @@ Use instructions for reusable workflow guidance such as review standards, eviden
 
 ### Tasks
 
-Tasks are mutable work items. Each task gets an auto-generated runtime ID (`t001`, `t002`, ...). If a manifest task has its own `id`, that value is preserved as `sourceId` for traceability, but progress commands use the runtime ID shown by `agent-pack list`.
+Tasks are mutable work items. Each task gets an auto-generated runtime ID (`t001`, `t002`, ...). If a manifest task has its own `id`, that value is preserved as `sourceId` for traceability, but task commands use the runtime ID shown by `agent-pack list`.
 
 Agents update task state as they work:
 
@@ -222,10 +224,7 @@ You are working from pack quickstart.
 Prompt:
 Run the demo task and record evidence.
 
-Tasks:
-[pending] t001 - Run date and record the output.
-
-Progress commands:
+Commands:
   agent-pack list --id quickstart
   agent-pack show <task-id> --id quickstart
   agent-pack start <task-id> --id quickstart
@@ -233,6 +232,9 @@ Progress commands:
   agent-pack done <task-id> --id quickstart --note "completion evidence"
   agent-pack block <task-id> --id quickstart --note "blocker"
   ...
+
+Tasks:
+[pending] t001 - Run date and record the output.
 ```
 
 In your agent CLI or editor agent, paste a handoff like this:
@@ -301,7 +303,7 @@ agent-pack init \
 
 That command composes content across types: the manifest can contribute instructions, tasks, references, skills, and contract rules; task flags add more tasks; reference flags add git, URL, and local reading material; skill flags add supplemental `SKILL.md` files.
 
-Alternatively, put the reusable content in a manifest. Task file and glob inputs become inline task entries in the manifest; keep `--task` flags alongside `--manifest` when you want to load external task files directly.
+For a similar pack expressed mostly as one manifest, put the reusable content in YAML. Task file and glob inputs become inline task entries in the manifest; keep `--task` flags alongside `--manifest` when you want to load external task files directly.
 
 ```yaml
 schemaVersion: 1
@@ -349,7 +351,15 @@ Print the agent-facing brief.
 agent-pack brief --id reviewer-001
 ```
 
-The brief includes the prompt, instructions, task list, references, skills, contract if defined, and progress commands.
+The brief includes the prompt, instructions, contract if defined, task commands when tasks exist, references, skills, and task list.
+
+For long task lists, render a compact task section:
+
+```bash
+AGENT_PACK_BRIEF_TASK_CONTENT=false agent-pack brief --id reviewer-001
+```
+
+Compact briefs omit task bodies and `doneWhen` checklists, but keep task status, ID, and title. The agent can run `agent-pack show <task-id> --id reviewer-001` for the full task detail when starting a task.
 
 ### `sync`
 
@@ -394,6 +404,10 @@ agent-pack clean --json
 By default, `clean` reads all packs in the current state directory and removes matching `git/<repoHash>` mirrors and `snapshots/<repoHash>` directories from the cache root. `--id` limits cleanup to one pack. Pack state, event logs, local references, HTTP/HTTPS references, and locks are not removed.
 
 After cleaning, run `agent-pack sync --all` or `agent-pack sync --id <pack>` before rendering briefs for packs with git-backed material. Resync can fail if the original remote, ref, or credentials are no longer available.
+
+The cache root is shared by default across projects for the same user account. If two state directories reference the same git repository, `agent-pack clean` in one project can remove cache material another project will need to rebuild with `sync`. Do not run `clean` while another `agent-pack` process is reading from or writing to the same cache root.
+
+With `--json`, `clean` emits `{ packIds, repoHashes, removed }`: pack IDs scanned, unique git repository cache keys targeted, and cache paths actually removed.
 
 ### Task Commands
 
@@ -444,7 +458,7 @@ agent-pack init --manifest ./pack.yaml
 agent-pack init --manifests git+https://github.com/org/packs.git//review.yaml#main
 ```
 
-Treat remote manifests as trusted inputs. A manifest can reference any local path readable by the user running `agent-pack`; a malicious manifest could direct the agent to inspect sensitive local files. Only load manifests from sources you trust.
+Treat remote manifests as trusted inputs. A manifest can reference any local path readable by the user running `agent-pack`, plus arbitrary HTTP/HTTPS URLs that the agent may fetch from the host's network. A malicious manifest could direct the agent to inspect sensitive local files or call internal endpoints reachable from the agent. Only load manifests from sources you trust.
 
 Manifest parsing is strict. Unknown fields are rejected.
 
@@ -462,7 +476,7 @@ Rules:
 - `doneWhen`, `contract.do`, and `contract.dont` are arrays of non-empty strings.
 - Reference and skill `ref` values are non-empty strings.
 - `contract` must include at least one `do` or `dont` entry.
-- Manifest task `id` is preserved as `sourceId`; progress commands use the runtime ID (`t001`, `t002`, ...) shown by `agent-pack list`.
+- Manifest task `id` is preserved as `sourceId`; task commands use the runtime ID (`t001`, `t002`, ...) shown by `agent-pack list`.
 - `category` is stored as task metadata but is not currently rendered in the brief.
 
 ```yaml
@@ -549,9 +563,10 @@ Authentication is delegated to normal `git` behavior: SSH agent, credential help
 |---|---|---|
 | `AGENT_PACK_ID` | Default pack target | unset |
 | `AGENT_PACK_STATE_DIR` | Pack state directory | `<repo>/.agent-pack/state` |
-| `AGENT_PACK_CACHE_DIR` | Cache root | `$XDG_CACHE_HOME/agent-pack`, or `~/.cache/agent-pack` when `XDG_CACHE_HOME` is unset |
+| `AGENT_PACK_CACHE_DIR` | Cache root | `$XDG_CACHE_HOME/agent-pack`, or `~/.cache/agent-pack` when `XDG_CACHE_HOME` is unset, or `<cwd>/.agent-pack/cache` when neither `XDG_CACHE_HOME` nor `HOME` is set |
 | `AGENT_PACK_GIT_REFRESH` | Default git fetch policy for `init` and `sync` | `auto` |
-| `AGENT_PACK_CMD` | Command name rendered in brief progress commands; set when invoking through a wrapper | `agent-pack` |
+| `AGENT_PACK_CMD` | Command name rendered in brief task commands; set when invoking through a wrapper | `agent-pack` |
+| `AGENT_PACK_BRIEF_TASK_CONTENT` | Include task body and `doneWhen` checklist in rendered briefs; set to `false` to render only task status, ID, and title | `true` |
 
 Relative path values resolve from the current working directory.
 
@@ -584,7 +599,7 @@ Default layout:
   locks/
 ```
 
-The cache root is `AGENT_PACK_CACHE_DIR` when set, otherwise `$XDG_CACHE_HOME/agent-pack` or `~/.cache/agent-pack`.
+The cache root is `AGENT_PACK_CACHE_DIR` when set, otherwise `$XDG_CACHE_HOME/agent-pack`, `~/.cache/agent-pack`, or `.agent-pack/cache` in the current working directory if neither `XDG_CACHE_HOME` nor `HOME` is set.
 
 Choose one of two common state policies.
 
@@ -645,6 +660,8 @@ Each pack has an append-only JSONL event log under `.agent-pack/state/events/<id
 ### Locking
 
 State mutations are serialized with lock directories under the cache root's `locks/` directory. Stale locks whose holder process is gone are recovered automatically. If a command reports a stuck lock and no `agent-pack` process is running, remove the reported lock directory.
+
+Lock filenames are prefixed with a 16-character hash of the state directory path so multiple state directories sharing the same cache root do not collide.
 
 ### Reinitializing a Pack
 

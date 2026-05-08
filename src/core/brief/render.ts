@@ -1,9 +1,15 @@
 import type { PackState, PackTask } from "../types.js";
 
+export interface BriefRenderOptions {
+  includeTaskContent?: boolean;
+}
+
 export function renderBrief(
   pack: PackState,
   commandName = process.env.AGENT_PACK_CMD ?? "agent-pack",
+  options: BriefRenderOptions = {},
 ): string {
+  const includeTaskContent = options.includeTaskContent ?? true;
   const lines: string[] = [];
   lines.push(`You are working from pack ${pack.id}.`);
   if (pack.name) {
@@ -15,22 +21,37 @@ export function renderBrief(
   if (pack.instructions) {
     lines.push("", "Instructions:", pack.instructions);
   }
-  lines.push("", "Tasks:");
-  if (pack.tasks.length === 0) {
-    lines.push("- No tasks in this pack.");
-  } else {
-    for (const task of pack.tasks) {
-      lines.push(formatTaskSummary(task));
-      if (task.body) {
-        lines.push(`  ${task.body}`);
-      }
-      if (task.doneWhen?.length) {
-        lines.push("  Done when:");
-        for (const condition of task.doneWhen) {
-          lines.push(`  - ${condition}`);
-        }
+  if (pack.contract) {
+    lines.push("", "Contract:", "Follow this contract while working this pack.");
+    if (pack.contract.do?.length) {
+      lines.push("Do:");
+      for (const entry of pack.contract.do) {
+        lines.push(`- ${entry}`);
       }
     }
+    if (pack.contract.dont?.length) {
+      lines.push("Don't:");
+      for (const entry of pack.contract.dont) {
+        lines.push(`- ${entry}`);
+      }
+    }
+  }
+  if (pack.tasks.length) {
+    lines.push("", "Commands:");
+    lines.push(`  ${commandName} list --id ${pack.id}`);
+    lines.push(`  ${commandName} show <task-id> --id ${pack.id}`);
+    lines.push(`  ${commandName} start <task-id> --id ${pack.id}`);
+    lines.push(`  ${commandName} note <task-id> --id ${pack.id} "evidence"`);
+    lines.push(`  ${commandName} done <task-id> --id ${pack.id} --note "completion evidence"`);
+    lines.push(`  ${commandName} block <task-id> --id ${pack.id} --note "blocker"`);
+    lines.push("Use `list` to see task status and `show` before working a task.");
+    lines.push(
+      "For multi-line notes, pass one shell argument with command substitution or a heredoc:",
+    );
+    lines.push(`  ${commandName} note <task-id> --id ${pack.id} "$(cat <<'EOF'`);
+    lines.push("multi-line evidence");
+    lines.push("EOF");
+    lines.push(')"');
   }
   if (pack.references.length) {
     lines.push("", "References:");
@@ -40,7 +61,7 @@ export function renderBrief(
         lines.push(`  Description: ${reference.description}`);
       }
       if (reference.path) {
-        lines.push(`  Path: ${reference.path}`);
+        lines.push(`  ${reference.source.kind === "url" ? "URL" : "Path"}: ${reference.path}`);
       }
       if (reference.rootPath) {
         lines.push(`  Root path: ${reference.rootPath}`);
@@ -68,35 +89,28 @@ export function renderBrief(
       lines.push(`  Path: ${skill.path}`);
     }
   }
-  if (pack.contract) {
-    lines.push("", "Contract:", "Follow this contract while working this pack.");
-    if (pack.contract.do?.length) {
-      lines.push("Do:");
-      for (const entry of pack.contract.do) {
-        lines.push(`- ${entry}`);
+  lines.push("", "Tasks:");
+  if (pack.tasks.length === 0) {
+    lines.push("- No tasks in this pack.");
+  } else {
+    for (const task of pack.tasks) {
+      lines.push(formatTaskSummary(task));
+      if (includeTaskContent && task.body) {
+        lines.push(`  ${task.body}`);
+      }
+      if (includeTaskContent && task.doneWhen?.length) {
+        lines.push("  Done when:");
+        for (const condition of task.doneWhen) {
+          lines.push(`  - ${condition}`);
+        }
       }
     }
-    if (pack.contract.dont?.length) {
-      lines.push("Don't:");
-      for (const entry of pack.contract.dont) {
-        lines.push(`- ${entry}`);
-      }
+    if (!includeTaskContent) {
+      lines.push(
+        `Task content is omitted from this brief. Run \`${commandName} show <task-id> --id ${pack.id}\` before working a task.`,
+      );
     }
   }
-  lines.push("", "Progress commands:");
-  lines.push(`  ${commandName} list --id ${pack.id}`);
-  lines.push(`  ${commandName} show <task-id> --id ${pack.id}`);
-  lines.push(`  ${commandName} start <task-id> --id ${pack.id}`);
-  lines.push(`  ${commandName} note <task-id> --id ${pack.id} "evidence"`);
-  lines.push(`  ${commandName} done <task-id> --id ${pack.id} --note "completion evidence"`);
-  lines.push(`  ${commandName} block <task-id> --id ${pack.id} --note "blocker"`);
-  lines.push(
-    "For multi-line notes, pass one shell argument with command substitution or a heredoc:",
-  );
-  lines.push(`  ${commandName} note <task-id> --id ${pack.id} "$(cat <<'EOF'`);
-  lines.push("multi-line evidence");
-  lines.push("EOF");
-  lines.push(')"');
   return `${lines.join("\n")}\n`;
 }
 

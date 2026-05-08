@@ -648,7 +648,7 @@ unknown: true`,
       },
     ]);
     await expect(brief("url-reference")).resolves.toContain(
-      "Path: https://example.com/docs/design.md",
+      "URL: https://example.com/docs/design.md",
     );
   });
 
@@ -660,6 +660,46 @@ unknown: true`,
         gitRefresh: "auto",
       }),
     ).rejects.toThrow("URL references must not include credentials");
+  });
+
+  it("can omit task content from rendered briefs through the environment", async () => {
+    await writeFile(
+      "task.yaml",
+      `id: inspect
+title: Inspect implementation
+body: Read the implementation carefully.
+doneWhen:
+  - Notes cite inspected files.
+`,
+    );
+    await initPack({
+      id: "compact-brief",
+      includes: [{ type: "taskRef", ref: "./task.yaml" }],
+      gitRefresh: "auto",
+    });
+
+    vi.stubEnv("AGENT_PACK_BRIEF_TASK_CONTENT", "false");
+    const rendered = await brief("compact-brief");
+
+    expect(rendered).toContain("[pending] t001 - Inspect implementation");
+    expect(rendered).not.toContain("Read the implementation carefully.");
+    expect(rendered).not.toContain("Done when:");
+    expect(rendered).toContain(
+      "Task content is omitted from this brief. Run `agent-pack show <task-id> --id compact-brief` before working a task.",
+    );
+  });
+
+  it("rejects invalid task content brief settings", async () => {
+    await initPack({
+      id: "invalid-brief-setting",
+      includes: [{ type: "adHocTask", text: "Inspect" }],
+      gitRefresh: "auto",
+    });
+    vi.stubEnv("AGENT_PACK_BRIEF_TASK_CONTENT", "sometimes");
+
+    await expect(brief("invalid-brief-setting")).rejects.toThrow(
+      "invalid AGENT_PACK_BRIEF_TASK_CONTENT",
+    );
   });
 
   it("reports clear errors for missing local task inputs", async () => {

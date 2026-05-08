@@ -26,6 +26,14 @@ Print the agent brief:
 agent-pack brief --id demo-pack
 ```
 
+For long task lists, render a compact brief that shows task status, ID, and title without task bodies:
+
+```bash
+AGENT_PACK_BRIEF_TASK_CONTENT=false agent-pack brief --id demo-pack
+```
+
+The compact brief tells the agent to run `agent-pack show <task-id> --id demo-pack` before working a task.
+
 Then ask an agent to run the brief and update task status as it works:
 
 ```bash
@@ -68,7 +76,7 @@ Git cache material is rebuildable:
 $XDG_CACHE_HOME/agent-pack/
 ```
 
-If `XDG_CACHE_HOME` is unset, the cache defaults to `~/.cache/agent-pack/`. Commit `.agent-pack/state/` if you want pack progress to travel with the repository. Ignore the cache only if you explicitly place `AGENT_PACK_CACHE_DIR` inside the repo.
+If `XDG_CACHE_HOME` is unset, the cache defaults to `~/.cache/agent-pack/`. If neither `XDG_CACHE_HOME` nor `HOME` is set, it falls back to `.agent-pack/cache` in the current working directory. Commit `.agent-pack/state/` if you want pack progress to travel with the repository. Ignore the cache only if you explicitly place `AGENT_PACK_CACHE_DIR` inside the repo.
 
 On a new host, rebuild git-backed material:
 

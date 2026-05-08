@@ -212,7 +212,9 @@ export async function brief(id?: string): Promise<string> {
   const store = new StateStore();
   const pack = await store.loadPack(id);
   await validateCachePaths(pack, store.paths);
-  return renderBrief(await packWithRuntimeGitPaths(pack, store.paths));
+  return renderBrief(await packWithRuntimeGitPaths(pack, store.paths), undefined, {
+    includeTaskContent: briefTaskContentEnabled(),
+  });
 }
 
 export async function summary(id?: string): Promise<string> {
@@ -413,4 +415,17 @@ function slug(value: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
   return result || `pack-${Date.now()}`;
+}
+
+function briefTaskContentEnabled(): boolean {
+  const value = process.env.AGENT_PACK_BRIEF_TASK_CONTENT;
+  if (!value || value === "true") {
+    return true;
+  }
+  if (value === "false") {
+    return false;
+  }
+  throw new AgentPackError(
+    `invalid AGENT_PACK_BRIEF_TASK_CONTENT value: ${value}; expected true or false`,
+  );
 }
