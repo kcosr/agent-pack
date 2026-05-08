@@ -6,11 +6,13 @@
 
 ## Quick Start
 
-Create a pack from the demo manifest:
+Create a pack from the included demo manifest:
 
 ```bash
+EXAMPLES_DIR="$(agent-pack --help | sed -n 's/^[[:space:]]*Examples[[:space:]][[:space:]]*//p')"
+
 agent-pack init \
-  --manifest ./examples/manifests/demo.yaml \
+  --manifest "$EXAMPLES_DIR/manifests/demo.yaml" \
   "Run the demo task and record evidence."
 ```
 
@@ -64,6 +66,27 @@ Check progress:
 agent-pack task list
 agent-pack summary
 agent-pack report
+```
+
+For day-to-day use, put your own reusable pack files in the catalog config directory and reference them by name:
+
+```bash
+CONFIG_DIR="$(agent-pack status --json | node -e 'console.log(JSON.parse(require("fs").readFileSync(0, "utf8")).configDir)')"
+mkdir -p "$CONFIG_DIR"/{manifests,tasks,references,skills}
+```
+
+```text
+$CONFIG_DIR/
+  manifests/review/code-review.yaml
+  tasks/review/security.yaml
+  references/product/api.yaml
+  skills/engineering/fresh-eyes/SKILL.md
+```
+
+Then run:
+
+```bash
+agent-pack init --manifest review/code-review "Review scope: unstaged changes."
 ```
 
 ## Why Use It
@@ -537,10 +560,8 @@ Text `catalog list` output is tab-separated: type, catalog name, and absolute pa
 Installed npm packages include an `examples/` directory that is already laid out as a catalog root. `agent-pack --help` prints the installed examples path. Point `AGENT_PACK_CONFIG_DIR` at that directory when you want to try the packaged examples by bare catalog name:
 
 ```bash
-EXAMPLES_DIR="$(agent-pack --help | awk '$1 == "Examples" {print $2}')"
-export AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR"
-
-agent-pack init --manifest code-review "Review scope: unstaged changes."
+EXAMPLES_DIR="$(agent-pack --help | sed -n 's/^[[:space:]]*Examples[[:space:]][[:space:]]*//p')"
+AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR" agent-pack init --manifest code-review "Review scope: unstaged changes."
 ```
 
 ### `completion`
@@ -885,10 +906,8 @@ Use the generated id printed by `init`, or pass `--id <id>` when you want a dete
 To use examples as catalog refs, point the catalog config directory at the examples root:
 
 ```bash
-EXAMPLES_DIR="$(agent-pack --help | awk '$1 == "Examples" {print $2}')"
-export AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR"
-
-agent-pack init --manifest docs-review "Review the docs."
+EXAMPLES_DIR="$(agent-pack --help | sed -n 's/^[[:space:]]*Examples[[:space:]][[:space:]]*//p')"
+AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR" agent-pack init --manifest docs-review "Review the docs."
 ```
 
 ## More Documentation

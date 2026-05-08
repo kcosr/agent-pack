@@ -539,6 +539,10 @@ function bashCompletionScript(): string {
     --task|--tasks) kind="task" ;;
     --reference|--references) kind="reference" ;;
     --skill|--skills) kind="skill" ;;
+    --type)
+      COMPREPLY=( $(compgen -W "manifest task reference skill" -- "$cur") )
+      return 0
+      ;;
   esac
 
   if [[ -n "$kind" ]]; then
@@ -587,6 +591,7 @@ _agent_pack() {
     --task|--tasks) _agent_pack_catalog_names task; return ;;
     --reference|--references) _agent_pack_catalog_names reference; return ;;
     --skill|--skills) _agent_pack_catalog_names skill; return ;;
+    --type) _describe 'catalog type' catalog_types; return ;;
   esac
 
   if [[ "\${words[2]}" == "catalog" && ( "\${words[3]}" == "show" || "\${words[3]}" == "path" ) ]]; then
@@ -603,7 +608,7 @@ _agent_pack() {
   _arguments '*: :_files'
 }
 
-_agent_pack "$@"
+compdef _agent_pack agent-pack
 `;
 }
 
@@ -622,15 +627,17 @@ complete -c agent-pack -n '__fish_seen_subcommand_from init; and __fish_prev_arg
 complete -c agent-pack -n '__fish_seen_subcommand_from init; and __fish_prev_arg_in --task --tasks' -a '(__agent_pack_catalog_names task)'
 complete -c agent-pack -n '__fish_seen_subcommand_from init; and __fish_prev_arg_in --reference --references' -a '(__agent_pack_catalog_names reference)'
 complete -c agent-pack -n '__fish_seen_subcommand_from init; and __fish_prev_arg_in --skill --skills' -a '(__agent_pack_catalog_names skill)'
-complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from show path; and not __fish_seen_subcommand_from manifest task reference skill' -a 'manifest task reference skill'
-complete -c agent-pack -n '__fish_seen_subcommand_from catalog show manifest' -a '(__agent_pack_catalog_names manifest)'
-complete -c agent-pack -n '__fish_seen_subcommand_from catalog show task' -a '(__agent_pack_catalog_names task)'
-complete -c agent-pack -n '__fish_seen_subcommand_from catalog show reference' -a '(__agent_pack_catalog_names reference)'
-complete -c agent-pack -n '__fish_seen_subcommand_from catalog show skill' -a '(__agent_pack_catalog_names skill)'
-complete -c agent-pack -n '__fish_seen_subcommand_from catalog path manifest' -a '(__agent_pack_catalog_names manifest)'
-complete -c agent-pack -n '__fish_seen_subcommand_from catalog path task' -a '(__agent_pack_catalog_names task)'
-complete -c agent-pack -n '__fish_seen_subcommand_from catalog path reference' -a '(__agent_pack_catalog_names reference)'
-complete -c agent-pack -n '__fish_seen_subcommand_from catalog path skill' -a '(__agent_pack_catalog_names skill)'
+complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from list; and __fish_prev_arg_in --type' -a 'manifest task reference skill'
+complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from show; and not __fish_seen_subcommand_from manifest task reference skill' -a 'manifest task reference skill'
+complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from path; and not __fish_seen_subcommand_from manifest task reference skill' -a 'manifest task reference skill'
+complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from show; and __fish_seen_subcommand_from manifest' -a '(__agent_pack_catalog_names manifest)'
+complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from show; and __fish_seen_subcommand_from task' -a '(__agent_pack_catalog_names task)'
+complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from show; and __fish_seen_subcommand_from reference' -a '(__agent_pack_catalog_names reference)'
+complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from show; and __fish_seen_subcommand_from skill' -a '(__agent_pack_catalog_names skill)'
+complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from path; and __fish_seen_subcommand_from manifest' -a '(__agent_pack_catalog_names manifest)'
+complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from path; and __fish_seen_subcommand_from task' -a '(__agent_pack_catalog_names task)'
+complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from path; and __fish_seen_subcommand_from reference' -a '(__agent_pack_catalog_names reference)'
+complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from path; and __fish_seen_subcommand_from skill' -a '(__agent_pack_catalog_names skill)'
 `;
 }
 

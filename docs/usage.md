@@ -11,14 +11,13 @@ Requirements:
 
 ## Quick Start
 
-Create a pack from the packaged demo manifest:
+Create a pack from the included demo manifest:
 
 ```bash
-EXAMPLES_DIR="$(agent-pack --help | awk '$1 == "Examples" {print $2}')"
-export AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR"
+EXAMPLES_DIR="$(agent-pack --help | sed -n 's/^[[:space:]]*Examples[[:space:]][[:space:]]*//p')"
 
 agent-pack init \
-  --manifest demo \
+  --manifest "$EXAMPLES_DIR/manifests/demo.yaml" \
   "Run the demo task and record the result."
 ```
 
@@ -111,6 +110,12 @@ references/product/api.yaml
 skills/engineering/fresh-eyes/SKILL.md
 ```
 
+Create your own reusable pack files in that directory, then reference them by name:
+
+```bash
+agent-pack init --manifest review/code-review "Review scope: unstaged changes."
+```
+
 Inspect catalog entries:
 
 ```bash
@@ -122,10 +127,8 @@ agent-pack catalog path skill engineering/fresh-eyes
 The npm package includes an `examples/` directory that is already laid out as a catalog root. Point `AGENT_PACK_CONFIG_DIR` at that directory when you want reusable bare refs:
 
 ```bash
-EXAMPLES_DIR="$(agent-pack --help | awk '$1 == "Examples" {print $2}')"
-export AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR"
-
-agent-pack init --manifest code-review "Review scope: unstaged changes."
+EXAMPLES_DIR="$(agent-pack --help | sed -n 's/^[[:space:]]*Examples[[:space:]][[:space:]]*//p')"
+AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR" agent-pack init --manifest code-review "Review scope: unstaged changes."
 ```
 
 Enable shell completion for the current shell session:

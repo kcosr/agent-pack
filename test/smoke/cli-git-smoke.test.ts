@@ -259,6 +259,17 @@ references:
     const script = await runCli(["completion", "script", "bash"], { cwd: workspace, env });
     expect(script.stdout).toContain("complete -o default -o bashdefault -F");
     expect(script.stdout).toContain("agent-pack __complete");
+    expect(script.stdout).toContain("--type)");
+
+    const zshScript = await runCli(["completion", "script", "zsh"], { cwd: workspace, env });
+    expect(zshScript.stdout).toContain("compdef _agent_pack agent-pack");
+    expect(zshScript.stdout).toContain("--type) _describe 'catalog type' catalog_types");
+
+    const fishScript = await runCli(["completion", "script", "fish"], { cwd: workspace, env });
+    expect(fishScript.stdout).toContain("__fish_prev_arg_in --type");
+    expect(fishScript.stdout).toContain(
+      "__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from show; and __fish_seen_subcommand_from manifest",
+    );
 
     const manifestCandidates = await runCli(["__complete", "manifest", "review/"], {
       cwd: workspace,
