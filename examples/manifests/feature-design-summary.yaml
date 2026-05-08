@@ -1,0 +1,274 @@
+schemaVersion: 1
+name: feature-design-summary
+instructions: |
+  Produce a human-facing feature design summary for the target repository. The
+  user should provide the feature brief in the pack prompt. You are planning and
+  summarizing, not implementing the feature.
+
+  Read the repository before writing the summary. Ground the summary in actual
+  files, commands, existing patterns, tests, and constraints from the target
+  repo. If the brief is ambiguous on a user-facing contract dimension, block
+  with targeted questions instead of guessing.
+
+  Create one markdown file as the deliverable. If the prompt names an output
+  path, use that path. Otherwise create
+  `docs/design/design-summary-<kebab-feature-slug>.md` when `docs/` exists, or
+  `design-summary-<kebab-feature-slug>.md` at the repo root when it does not.
+  Do not create task-runner assignments, task-runner attachments, worktrees,
+  implementation branches, commits, or PRs.
+
+  The summary must use these sections:
+
+      # <Feature short title>
+
+      ## Overview
+      ## Motivation
+      ## Scope
+      ## Contract
+      ## Surface Inventory
+      ## Schema
+      ## Impact Surface
+      ## Higher-Level Implementation Steps
+      ## Diagrams
+      ## Risks
+      ## Test Strategy
+      ## Open Assumptions
+
+  Use `_No schema changes._`, `_No diagrams applicable._`, or an explicit
+  "No user-visible surfaces are introduced, changed, or removed by this
+  feature." line when those sections are genuinely empty. Do not leave
+  placeholders in the final file.
+
+tasks:
+  - id: orient
+    title: Orient to the repository and conventions
+    category: planning
+    body: |
+      Read the high-signal entry points:
+        - AGENTS.md, CLAUDE.md, CONTRIBUTING.md at the repo root, if present
+        - README.md
+        - Build manifest such as package.json, Cargo.toml, go.mod, or pyproject.toml
+        - docs/ or other design / architecture notes
+        - Primary entry-point files relevant to the feature brief
+
+      Capture in notes:
+        - project purpose and major modules
+        - exact build, test, lint, and format commands
+        - test framework and relevant test locations
+        - changelog / documentation conventions
+        - repo-specific rules the summary must respect
+    doneWhen:
+      - Notes summarize the repository conventions and exact check commands.
+
+  - id: capture-feature
+    title: Capture the feature brief and resolve ambiguity
+    category: planning
+    body: |
+      Read the pack prompt in full and restate the feature in notes:
+        - What is the feature?
+        - What problem does it solve?
+        - What is explicitly in scope?
+        - What is explicitly out of scope?
+
+      Identify the feature type:
+        - CLI feature: command, subcommand, flag, argument, output, or exit code.
+        - API / library feature: exported function, endpoint, RPC method, or type.
+        - Data / schema feature: persisted shape, config file, database schema, or migration.
+        - UI feature: screen, flow, component, or interaction.
+        - Refactor: internal structure with intended behavior preservation.
+        - Other: infrastructure, tooling, build, or another shape.
+
+      Walk the relevant contract dimensions and mark each as answered or
+      ambiguous:
+        - CLI: names, args, defaults, text output, JSON output, exit codes, malformed input, duplicate / missing resources.
+        - API / library: signature, arguments, return shape, errors, auth, request / response schema, compatibility requirements.
+        - Data / schema: field names, types, nullability, defaults, indexes, migration direction, rollback, pre-existing data.
+        - UI: entry point, state transitions, loading, empty, error, keyboard, accessibility, responsive behavior.
+        - Refactor: files in scope, files out of scope, behavior-preservation criteria, rollback.
+
+      If any relevant contract dimension is ambiguous, mark this task blocked
+      with up to three targeted questions and do not continue. Otherwise record
+      the resolved contract dimensions and any non-contract assumptions.
+
+      Default contract posture: prefer the end-state shape directly. Do not add
+      fallback logic, heuristic detection, alias fields, bridge routes, or
+      dual-shape readers unless the prompt explicitly asks for compatibility or
+      migration support.
+    doneWhen:
+      - Notes restate the feature, scope, feature type, resolved dimensions, and assumptions.
+      - Ambiguous contract dimensions are either resolved or this task is blocked with targeted questions.
+
+  - id: survey-impact
+    title: Survey the impact surface
+    category: planning
+    body: |
+      Identify every likely area the feature would touch. For each area, record:
+        - repo-relative file paths
+        - responsible function, class, command, component, or module
+        - current behavior to preserve
+        - existing tests covering the area, if any
+        - shared paths the change would touch, such as parsers, dispatchers,
+          request / response builders, state reducers, serializers, config
+          loaders, lifecycle handlers, database layers, or UI state transitions
+
+      Read identified files in full where practical. Use file:line citations for
+      important observations so the summary has concrete evidence.
+    doneWhen:
+      - Notes list impacted files / modules, preserved behavior, tests, and shared paths.
+
+  - id: check-existing-code
+    title: Check existing code and duplication
+    category: planning
+    body: |
+      Search for:
+        - helpers or utilities the feature should reuse
+        - existing patterns the feature should match
+        - near-duplicates that suggest a pre-refactor or consolidation point
+        - fallback or compatibility machinery that would conflict with a direct hot-cut design
+
+      Cite reusable code and similar patterns with file:line references. If no
+      reusable code exists, say that explicitly.
+    doneWhen:
+      - Notes cite reusable code / patterns or explicitly state that none were found.
+
+  - id: produce-contract
+    title: Produce the feature contract
+    category: planning
+    body: |
+      Write a concrete feature contract in notes. Use the format that matches the
+      feature type:
+
+      CLI:
+        - synopsis
+        - args and flags with types, required / optional status, defaults, and descriptions
+        - exact text output and JSON output, if any
+        - exit codes and error behaviors
+        - examples
+
+      API / library:
+        - exact signature or method / path
+        - request / argument shape
+        - return / response shape
+        - error matrix
+        - auth / permissions
+        - migration / compatibility statement
+
+      Data / schema:
+        - before shape
+        - after shape
+        - migration direction
+        - behavior for pre-existing data
+
+      UI:
+        - entry points
+        - states and transitions
+        - loading, empty, and error states
+        - keyboard, screen-reader, and responsive requirements
+
+      Refactor:
+        - files in scope
+        - files out of scope
+        - behavior preserved
+        - rollback
+
+      Other:
+        - success criteria precise enough that two implementers would build the
+          same observable behavior.
+    doneWhen:
+      - Notes contain the full contract artifact to paste into the summary.
+
+  - id: produce-surface-inventory
+    title: Produce the surface inventory
+    category: planning
+    body: |
+      For every named user-facing entity introduced, changed, or removed, record:
+        - Name: the literal token the user sees, such as `--flag`, `POST /path`, `ENV_VAR`, `config.key`, or a UI label.
+        - Disposition: added, changed, or removed.
+        - Layers: where the value must enter, be consumed by business logic, and be tested end to end.
+        - Symmetric peers: related CLI / HTTP / RPC / UI / config surfaces that must stay aligned.
+        - Removal twin: old name being retired, if any.
+
+      If there are no user-visible surfaces, write exactly:
+
+          No user-visible surfaces are introduced, changed, or removed by this feature.
+
+      Do not invent surfaces for pure refactors.
+    doneWhen:
+      - Notes contain a complete surface inventory or the explicit no-surfaces statement.
+
+  - id: assess-risks-tests
+    title: Assess risks and test strategy
+    category: planning
+    body: |
+      For each impact area, record:
+        - concurrency, state-machine, lifecycle, or cleanup risks
+        - error paths and edge cases
+        - existing test coverage and gaps
+        - new unit, integration, end-to-end, or manual tests needed
+        - exact check commands the implementer should run
+
+      If the feature changes a persisted or user-facing contract, state whether
+      the intended landing is a hot cut or a compatibility-preserving migration.
+      Default to hot cut unless the prompt explicitly requires migration.
+    doneWhen:
+      - Notes list risks, edge cases, test coverage gaps, new tests, and check commands.
+
+  - id: write-summary
+    title: Write the design summary markdown file
+    category: deliverable
+    body: |
+      Create the markdown summary file. If the prompt names an output path, use
+      that path. Otherwise use `docs/design/design-summary-<kebab-feature-slug>.md`
+      when `docs/` exists, or `design-summary-<kebab-feature-slug>.md` at the
+      repo root when it does not.
+
+      Render the required sections from prior task notes:
+        - Overview: one paragraph describing the feature.
+        - Motivation: one or two sentences on the problem.
+        - Scope: in-scope and out-of-scope bullets.
+        - Contract: paste the contract artifact from `produce-contract`.
+        - Surface Inventory: paste the inventory from `produce-surface-inventory`.
+        - Schema: schema diff for data / schema features, otherwise `_No schema changes._`.
+        - Impact Surface: markdown table with `File | Responsibility | Existing tests`.
+        - Higher-Level Implementation Steps: 5 to 10 bullets at design level, not line-by-line coding instructions.
+        - Diagrams: Mermaid diagrams only when they add real signal, otherwise `_No diagrams applicable._`.
+        - Risks: bullet list from `assess-risks-tests`.
+        - Test Strategy: tests and commands from `assess-risks-tests`.
+        - Open Assumptions: non-contract assumptions from `capture-feature`.
+
+      Do not perform new analysis here. If evidence is missing, return to the
+      upstream task notes first. Do not leave placeholders.
+    doneWhen:
+      - The summary markdown file exists at the selected path.
+      - The file contains all required sections.
+      - Contract, Surface Inventory, and Open Assumptions match the earlier task notes.
+      - No placeholder markers remain.
+
+  - id: self-check
+    title: Self-check the summary
+    category: deliverable
+    body: |
+      Re-read the summary file and verify:
+        - every factual claim is supported by repository evidence or clearly marked as an assumption
+        - all file paths and commands are accurate
+        - the contract is concrete and not guesswork
+        - the surface inventory covers every user-visible name from the contract
+        - risks and test strategy cover the impacted shared paths
+        - no task-runner-specific handoff, attachment, run id, worktree, nested review, commit, PR, or implementation execution instructions were included
+
+      Record the final summary path and a concise quality note.
+    doneWhen:
+      - Notes include the final summary path.
+      - Notes confirm the summary was checked against the repository and contains no task-runner scaffolding.
+
+contract:
+  do:
+    - Ground the design summary in repository evidence and file paths.
+    - Block on unresolved contract ambiguity instead of inventing behavior.
+    - Create exactly one markdown summary file unless the user explicitly requests more artifacts.
+    - Keep the summary focused on design, scope, implementation shape, risks, and tests.
+  dont:
+    - Implement the feature.
+    - Create task-runner assignments, attachments, worktrees, runs, commits, branches, or PRs.
+    - Add compatibility fallbacks, alias fields, bridge routes, or dual-shape parsers unless the prompt explicitly requires them.
+    - Leave placeholders or unsupported claims in the final summary.

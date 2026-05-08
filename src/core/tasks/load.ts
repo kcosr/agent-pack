@@ -15,6 +15,7 @@ import type {
   RuntimePaths,
   SourceInfo,
 } from "../types.js";
+import { formatTaskId } from "./id.js";
 
 export type TaskInput =
   | { type: "manifestTask"; task: ManifestTask; source: SourceInfo }
@@ -42,7 +43,7 @@ export async function loadTasks(
     }
   }
   return tasks.map(({ task, source }, index) => ({
-    id: `t${String(index + 1).padStart(3, "0")}`,
+    id: formatTaskId(index + 1),
     sourceId: task.id,
     title: task.title ?? task.id ?? `Task ${index + 1}`,
     category: task.category,

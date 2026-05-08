@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, stat, symlink, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  addTask,
   brief,
   catalogList,
   catalogShow,
@@ -129,6 +130,117 @@ tasks:
     });
 
     expect(pack.id).toBe("env-review");
+  });
+
+  it("adds an ad hoc task to an existing pack", async () => {
+    await initPack({
+      id: "add-task-pack",
+      includes: [{ type: "adHocTask", text: "Inspect existing work" }],
+      gitRefresh: "auto",
+    });
+
+    const { pack, task } = await addTask({
+      packId: "add-task-pack",
+      title: "  Review auth flow  ",
+      category: " review ",
+      body: " Inspect request handling. ",
+      doneWhen: [" Findings cite files ", " Test gaps are noted "],
+    });
+
+    expect(task).toEqual({
+      id: "t002",
+      title: "Review auth flow",
+      category: "review",
+      body: "Inspect request handling.",
+      doneWhen: ["Findings cite files", "Test gaps are noted"],
+      status: "pending",
+      notes: [],
+    });
+    expect(pack.taskCounts).toMatchObject({ total: 2, pending: 2, completed: 0 });
+    expect(pack.status).toBe("pending");
+
+    const loaded = await summaryPack("add-task-pack");
+    expect(loaded.tasks[1]).toMatchObject(task);
+    await expect(brief("add-task-pack")).resolves.toContain("  Inspect request handling.");
+    await expect(brief("add-task-pack")).resolves.toContain("  - Findings cite files");
+    const events = await readEvents("add-task-pack");
+    expect(events.at(-1)).toMatchObject({
+      type: "task.added",
+      data: { taskId: "t002", title: "Review auth flow" },
+    });
+  });
+
+  it("generates the next task id from existing runtime ids", async () => {
+    await writePackState("task-id-sequence", [
+      { id: "t001", title: "First", status: "pending", notes: [] },
+      { id: "custom", title: "Custom", status: "pending", notes: [] },
+      { id: "t010", title: "Tenth", status: "pending", notes: [] },
+    ]);
+
+    const { task } = await addTask({ packId: "task-id-sequence", title: "Next task" });
+
+    expect(task.id).toBe("t011");
+  });
+
+  it("rejects task add for a missing pack", async () => {
+    await expect(addTask({ packId: "missing-pack", title: "New task" })).rejects.toThrow(
+      "pack not found: missing-pack",
+    );
+  });
+
+  it("rejects empty task add fields before mutating state", async () => {
+    await initPack({
+      id: "reject-empty-add",
+      includes: [{ type: "adHocTask", text: "Original task" }],
+      gitRefresh: "auto",
+    });
+
+    await expect(addTask({ packId: "reject-empty-add", title: " " })).rejects.toThrow(
+      "task title must not be empty",
+    );
+    await expect(
+      addTask({ packId: "reject-empty-add", title: "New task", category: " " }),
+    ).rejects.toThrow("task category must not be empty");
+    await expect(
+      addTask({ packId: "reject-empty-add", title: "New task", body: "" }),
+    ).rejects.toThrow("task body must not be empty");
+    await expect(
+      addTask({ packId: "reject-empty-add", title: "New task", doneWhen: ["Done", " "] }),
+    ).rejects.toThrow("task done-when must not be empty");
+
+    const loaded = await summaryPack("reject-empty-add");
+    expect(loaded.tasks).toHaveLength(1);
+  });
+
+  it("updates status and counts when adding to a completed pack", async () => {
+    await initPack({
+      id: "completed-add",
+      includes: [{ type: "adHocTask", text: "Original task" }],
+      gitRefresh: "auto",
+    });
+    await updateTask("t001", "completed", "Done.", "completed-add");
+
+    const { pack } = await addTask({ packId: "completed-add", title: "Follow-up task" });
+
+    expect(pack.status).toBe("in_progress");
+    expect(pack.taskCounts).toMatchObject({ total: 2, pending: 1, completed: 1 });
+  });
+
+  it("adds concurrent tasks with unique task ids", async () => {
+    await initPack({
+      id: "concurrent-adds",
+      includes: [{ type: "adHocTask", text: "Original task" }],
+      gitRefresh: "auto",
+    });
+
+    await Promise.all([
+      addTask({ packId: "concurrent-adds", title: "First added task" }),
+      addTask({ packId: "concurrent-adds", title: "Second added task" }),
+    ]);
+
+    const loaded = await summaryPack("concurrent-adds");
+    expect(loaded.tasks.map((task) => task.id).sort()).toEqual(["t001", "t002", "t003"]);
+    expect(new Set(loaded.tasks.map((task) => task.id)).size).toBe(3);
   });
 
   it("reports system status paths and default pack id", () => {
@@ -1067,6 +1179,43 @@ function packLockPath(id: string): string {
     .digest("hex")
     .slice(0, 16);
   return path.join(paths.lockDir, `${namespace}-pack-${id}.lock`);
+}
+
+async function readEvents(id: string): Promise<Array<{ type: string; data?: unknown }>> {
+  const content = await readFile(`.agent-pack/state/events/${id}.jsonl`, "utf8");
+  return content
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as { type: string; data?: unknown });
+}
+
+async function writePackState(
+  id: string,
+  tasks: Array<{ id: string; title: string; status: string; notes: string[] }>,
+): Promise<void> {
+  await mkdir(".agent-pack/state/packs", { recursive: true });
+  await writeFile(
+    `.agent-pack/state/packs/${id}.json`,
+    JSON.stringify({
+      schemaVersion: 1,
+      id,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      repoRoot: ".",
+      taskCounts: {
+        total: tasks.length,
+        pending: tasks.filter((task) => task.status === "pending").length,
+        inProgress: tasks.filter((task) => task.status === "in_progress").length,
+        completed: tasks.filter((task) => task.status === "completed").length,
+        blocked: tasks.filter((task) => task.status === "blocked").length,
+      },
+      tasks,
+      references: [],
+      skills: [],
+    }),
+  );
 }
 
 async function writeGitPackState(id: string, repoHash: string, sourcePath?: string): Promise<void> {

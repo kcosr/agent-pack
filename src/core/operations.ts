@@ -19,6 +19,7 @@ import { isExplicitPathRef, resolveInputPath, toDisplayPath } from "./paths.js";
 import { fileGlobOptions, hasGlobMagic } from "./sources/glob.js";
 import { resolveReferences, resolveSkills } from "./sources/resolve.js";
 import { StateStore, assertValidPackId } from "./state/store.js";
+import { formatTaskId } from "./tasks/id.js";
 import { loadTasks } from "./tasks/load.js";
 import type { TaskInput } from "./tasks/load.js";
 import type {
@@ -296,6 +297,50 @@ export async function showTask(taskId: string, id?: string): Promise<PackTask> {
   return getTask(pack, taskId);
 }
 
+export interface AddTaskInput {
+  packId?: string;
+  title: string;
+  category?: string;
+  body?: string;
+  doneWhen?: string[];
+}
+
+export async function addTask(input: AddTaskInput): Promise<{ pack: PackState; task: PackTask }> {
+  let addedTask: PackTask | undefined;
+  const eventData: { taskId?: string; title?: string } = {};
+  const store = new StateStore();
+  const pack = await store.updatePack(
+    input.packId,
+    (pack) => {
+      const title = requiredString(input.title, "task title");
+      const category = optionalString(input.category, "task category");
+      const body = optionalString(input.body, "task body");
+      const doneWhenValues = input.doneWhen?.map((entry) =>
+        requiredString(entry, "task done-when"),
+      );
+      const doneWhen = doneWhenValues?.length ? doneWhenValues : undefined;
+      addedTask = {
+        id: nextTaskId(pack.tasks),
+        title,
+        category,
+        body,
+        doneWhen,
+        status: "pending",
+        notes: [],
+      };
+      pack.tasks.push(addedTask);
+      eventData.taskId = addedTask.id;
+      eventData.title = title;
+    },
+    "task.added",
+    eventData,
+  );
+  if (!addedTask) {
+    throw new AgentPackError("failed to add task");
+  }
+  return { pack, task: addedTask };
+}
+
 export async function updateTask(
   taskId: string,
   status: TaskStatus | undefined,
@@ -489,6 +534,39 @@ function getTask(pack: PackState, taskId: string): PackTask {
     throw new AgentPackError(`task not found: ${taskId}`);
   }
   return task;
+}
+
+function nextTaskId(tasks: PackTask[]): string {
+  const usedIds = new Set(tasks.map((task) => task.id));
+  let next = 1;
+  for (const task of tasks) {
+    const match = /^t(\d+)$/.exec(task.id);
+    if (!match) {
+      continue;
+    }
+    next = Math.max(next, Number(match[1]) + 1);
+  }
+  let candidate = formatTaskId(next);
+  while (usedIds.has(candidate)) {
+    next += 1;
+    candidate = formatTaskId(next);
+  }
+  return candidate;
+}
+
+function requiredString(value: string, label: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new AgentPackError(`${label} must not be empty`);
+  }
+  return trimmed;
+}
+
+function optionalString(value: string | undefined, label: string): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return requiredString(value, label);
 }
 
 function gitSources(pack: PackState) {

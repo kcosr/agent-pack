@@ -20,6 +20,10 @@ export async function runCli(
     const env = {
       ...process.env,
       AGENT_PACK_CACHE_DIR: path.join(options.cwd, ".agent-pack/cache"),
+      AGENT_PACK_CONFIG_DIR: undefined,
+      AGENT_PACK_GIT_REFRESH: undefined,
+      AGENT_PACK_ID: undefined,
+      AGENT_PACK_STATE_DIR: undefined,
       ...options.env,
     };
     const { stdout, stderr } = await execFileAsync(process.execPath, [cliPath, ...args], {

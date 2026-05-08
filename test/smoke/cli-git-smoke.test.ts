@@ -113,6 +113,7 @@ references:
     expect(JSON.parse(packListJson.stdout)).toMatchObject([{ id: "task-pack" }]);
 
     const help = await runCli(["task", "--help"], { cwd: workspace });
+    expect(help.stdout).toContain("add [options] <title>");
     expect(help.stdout).toContain("list [options]");
     expect(help.stdout).toContain("show [options] <taskId>");
     expect(help.stdout).toContain("start [options] <taskId>");
@@ -198,6 +199,69 @@ references:
 
     const oldSyncAll = await runCli(["sync", "--all"], { cwd: workspace, reject: false });
     expect(oldSyncAll.stderr).toContain("unknown option '--all'");
+  });
+
+  it("adds ad hoc tasks through the task add command", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-task-add-smoke-"));
+
+    await runCli(["init", "--id", "task-add-pack", "--add-task", "Original task"], {
+      cwd: workspace,
+    });
+
+    const added = await runCli(
+      [
+        "task",
+        "add",
+        "Review auth flow",
+        "--id",
+        "task-add-pack",
+        "--category",
+        "review",
+        "--body",
+        "Inspect request handling.",
+        "--done-when",
+        "Findings cite files",
+        "--done-when",
+        "Test gaps are noted",
+      ],
+      { cwd: workspace },
+    );
+    expect(added.stdout).toContain("Pack: task-add-pack");
+    expect(added.stdout).toContain("Tasks: 0/2 completed, 0 blocked");
+
+    const shown = await runCli(["task", "show", "t002", "--id", "task-add-pack"], {
+      cwd: workspace,
+    });
+    expect(shown.stdout).toContain("Title: Review auth flow");
+    expect(shown.stdout).toContain("Category: review");
+    expect(shown.stdout).toContain("Body:\nInspect request handling.");
+    expect(shown.stdout).toContain("Findings cite files");
+    expect(shown.stdout).toContain("Test gaps are noted");
+
+    const addedJson = await runCli(
+      ["task", "add", "JSON task", "--id", "task-add-pack", "--json"],
+      { cwd: workspace },
+    );
+    expect(JSON.parse(addedJson.stdout)).toMatchObject({
+      task: { id: "t003", title: "JSON task", status: "pending" },
+      summary: {
+        id: "task-add-pack",
+        status: "pending",
+        tasks: { total: 3, pending: 3 },
+      },
+    });
+
+    const emptyTitle = await runCli(["task", "add", "", "--id", "task-add-pack"], {
+      cwd: workspace,
+      reject: false,
+    });
+    expect(emptyTitle.stderr).toContain("task title must not be empty");
+
+    const emptyDoneWhen = await runCli(
+      ["task", "add", "Bad criteria", "--id", "task-add-pack", "--done-when", " "],
+      { cwd: workspace, reject: false },
+    );
+    expect(emptyDoneWhen.stderr).toContain("task done-when must not be empty");
   });
 
   it("lists, shows, and resolves catalog entries", async () => {

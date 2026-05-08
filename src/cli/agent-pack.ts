@@ -7,6 +7,7 @@ import { renderReport, renderSummary, renderTask } from "../core/brief/render.js
 import { catalogTypes } from "../core/catalog.js";
 import { AgentPackError } from "../core/errors.js";
 import {
+  addTask,
   brief,
   catalogList,
   catalogPath,
@@ -294,6 +295,35 @@ function configureTaskCommands(root: Command): void {
   const task = root.command("task").description("List, inspect, and update pack tasks.");
 
   task
+    .command("add")
+    .description("Add an ad hoc task to a pack.")
+    .argument("<title>", "task title")
+    .option("--id <id>", "pack ID")
+    .option("--category <category>", "task category")
+    .option("--body <text>", "task body/details")
+    .option("--done-when <criterion>", "completion criterion", collectString, [])
+    .option("--json", "emit machine-readable output")
+    .action(async (title, options) => {
+      await run(async () => {
+        const result = await addTask({
+          packId: options.id,
+          title,
+          category: options.category,
+          body: options.body,
+          doneWhen: options.doneWhen,
+        });
+        if (options.json) {
+          printJson({
+            task: taskJson(result.task),
+            summary: statusJson(result.pack),
+          });
+        } else {
+          process.stdout.write(renderSummary(result.pack));
+        }
+      });
+    });
+
+  task
     .command("list")
     .description("List tasks in a pack.")
     .option("--id <id>", "pack ID")
@@ -430,6 +460,11 @@ function collectInclude(includes: InitInclude[], toInclude: (value: string) => I
     includes.push(toInclude(value));
     return previous;
   };
+}
+
+function collectString(value: string, previous: string[]): string[] {
+  previous.push(value);
+  return previous;
 }
 
 function gitRefreshOption(): Option {
@@ -666,6 +701,17 @@ function statusJson(pack: PackState) {
     tasks: pack.taskCounts,
     references: pack.references.length,
     skills: pack.skills.length,
+  };
+}
+
+function taskJson(task: PackState["tasks"][number]) {
+  return {
+    id: task.id,
+    title: task.title,
+    category: task.category,
+    body: task.body,
+    doneWhen: task.doneWhen,
+    status: task.status,
   };
 }
 
