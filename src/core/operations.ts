@@ -9,6 +9,7 @@ import {
   gitSnapshotRoot,
   gitSourceTargetPath,
   materializeGitRef,
+  withGitCacheLock,
 } from "./git/cache.js";
 import { isGitRef, parseGitRef } from "./git/ref.js";
 import { readInstructions, readManifest } from "./manifest/parse.js";
@@ -194,12 +195,14 @@ export async function cleanCache(id?: string): Promise<CleanResult> {
   }
   const removed: string[] = [];
   for (const repoHash of [...repoHashes].sort()) {
-    for (const target of gitCacheTargets(repoHash, store.paths)) {
-      if (await pathExists(target.absPath)) {
-        await rm(target.absPath, { recursive: true, force: true });
-        removed.push(target.displayPath);
+    await withGitCacheLock(store.paths, repoHash, async () => {
+      for (const target of gitCacheTargets(repoHash, store.paths)) {
+        if (await pathExists(target.absPath)) {
+          await rm(target.absPath, { recursive: true, force: true });
+          removed.push(target.displayPath);
+        }
       }
-    }
+    });
   }
   return {
     packIds: packs.map((pack) => pack.id),
@@ -283,34 +286,49 @@ export async function report(id?: string): Promise<PackState> {
 }
 
 export async function validateCachePaths(pack: PackState, paths: RuntimePaths): Promise<void> {
-  const targets = new Set<string>();
+  const sourcesByRepo = new Map<string, GitSourceInfo[]>();
   for (const reference of pack.references) {
     if (reference.source.kind === "git") {
-      targets.add(gitCacheValidationPath(reference.source, paths));
+      addGitValidationSource(sourcesByRepo, reference.source, pack.id);
     }
   }
   for (const skill of pack.skills) {
     if (skill.source.kind === "git") {
-      targets.add(gitCacheValidationPath(skill.source, paths));
+      addGitValidationSource(sourcesByRepo, skill.source, pack.id);
     }
   }
   for (const task of pack.tasks) {
     if (task.source?.kind === "git") {
-      targets.add(gitCacheValidationPath(task.source, paths));
+      addGitValidationSource(sourcesByRepo, task.source, pack.id);
     }
   }
-  const results = await Promise.all(
-    [...targets].map(async (target) => ({
-      target,
-      exists: await existsDisplayPath(target, paths),
-    })),
-  );
-  const missing = results.filter((result) => !result.exists).map((result) => result.target);
+  const missing: string[] = [];
+  for (const [repoHash, sources] of sourcesByRepo) {
+    await withGitCacheLock(paths, repoHash, async () => {
+      const targets = new Set(sources.map((source) => gitCacheValidationPath(source, paths)));
+      const results = await Promise.all(
+        [...targets].map(async (target) => ({
+          target,
+          exists: await existsDisplayPath(target, paths),
+        })),
+      );
+      missing.push(...results.filter((result) => !result.exists).map((result) => result.target));
+    });
+  }
   if (missing.length) {
     throw new AgentPackError(
       `cache material missing; run agent-pack sync --id ${pack.id}: ${missing.join(", ")}`,
     );
   }
+}
+
+function addGitValidationSource(
+  sourcesByRepo: Map<string, GitSourceInfo[]>,
+  source: GitSourceInfo,
+  packId: string,
+): void {
+  const repoHash = validGitCacheKey(source.repoHash, packId);
+  sourcesByRepo.set(repoHash, [...(sourcesByRepo.get(repoHash) ?? []), source]);
 }
 
 function gitCacheValidationPath(source: GitSourceInfo, paths: RuntimePaths): string {
@@ -354,34 +372,37 @@ async function packWithRuntimeGitPaths(pack: PackState, paths: RuntimePaths): Pr
         if (reference.source.kind !== "git") {
           return reference;
         }
-        const rootDisplay = toDisplayPath(gitSnapshotRoot(reference.source, paths), paths.repoRoot);
-        if (reference.files) {
-          const pattern = reference.source.path;
-          if (pattern && hasGlobMagic(pattern)) {
-            const matches = await fg(pattern, {
-              cwd: gitSnapshotRoot(reference.source, paths),
-              ...fileGlobOptions,
-            });
+        const source = reference.source;
+        return withGitCacheLock(paths, validGitCacheKey(source.repoHash, pack.id), async () => {
+          const rootDisplay = toDisplayPath(gitSnapshotRoot(source, paths), paths.repoRoot);
+          if (reference.files) {
+            const pattern = source.path;
+            if (pattern && hasGlobMagic(pattern)) {
+              const matches = await fg(pattern, {
+                cwd: gitSnapshotRoot(source, paths),
+                ...fileGlobOptions,
+              });
+              return {
+                ...reference,
+                files: matches.map((match) => path.posix.join(rootDisplay, match)),
+              };
+            }
+            return reference;
+          }
+          if (reference.rootPath) {
             return {
               ...reference,
-              files: matches.map((match) => path.posix.join(rootDisplay, match)),
+              rootPath: gitSourceTargetPath(source, paths).displayPath,
+            };
+          }
+          if (reference.path) {
+            return {
+              ...reference,
+              path: gitSourceTargetPath(source, paths).displayPath,
             };
           }
           return reference;
-        }
-        if (reference.rootPath) {
-          return {
-            ...reference,
-            rootPath: gitSourceTargetPath(reference.source, paths).displayPath,
-          };
-        }
-        if (reference.path) {
-          return {
-            ...reference,
-            path: gitSourceTargetPath(reference.source, paths).displayPath,
-          };
-        }
-        return reference;
+        });
       }),
     ),
     skills: pack.skills.map((skill) =>

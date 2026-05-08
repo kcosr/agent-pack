@@ -405,7 +405,7 @@ By default, `clean` reads all packs in the current state directory and removes m
 
 After cleaning, run `agent-pack sync --all` or `agent-pack sync --id <pack>` before rendering briefs for packs with git-backed material. Resync can fail if the original remote, ref, or credentials are no longer available.
 
-The cache root is shared by default across projects for the same user account. If two state directories reference the same git repository, `agent-pack clean` in one project can remove cache material another project will need to rebuild with `sync`. Do not run `clean` while another `agent-pack` process is reading from or writing to the same cache root.
+The cache root is shared by default across projects for the same user account. If two state directories reference the same git repository, `agent-pack clean` in one project can remove cache material another project will need to rebuild with `sync`. Cache reads, syncs, and cleans are locked per git repository cache key so concurrent `agent-pack` processes do not remove cache material mid-operation.
 
 With `--json`, `clean` emits `{ packIds, repoHashes, removed }`: pack IDs scanned, unique git repository cache keys targeted, and cache paths actually removed.
 
@@ -661,7 +661,7 @@ Each pack has an append-only JSONL event log under `.agent-pack/state/events/<id
 
 State mutations are serialized with lock directories under the cache root's `locks/` directory. Stale locks whose holder process is gone are recovered automatically. If a command reports a stuck lock and no `agent-pack` process is running, remove the reported lock directory.
 
-Lock filenames are prefixed with a 16-character hash of the state directory path so multiple state directories sharing the same cache root do not collide.
+Pack state lock filenames are prefixed with a 16-character hash of the state directory path so multiple state directories sharing the same cache root do not collide. Git cache lock filenames use the shared `cache-<repoHash>` form so cache operations for the same repository are serialized across state directories.
 
 ### Reinitializing a Pack
 

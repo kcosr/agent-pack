@@ -541,9 +541,10 @@ unknown: true`,
   });
 
   it("renders git reference paths from the current cache directory", async () => {
+    const repoHash = "aaaaaaaaaaaaaaaa";
     await mkdir(".agent-pack/state/packs", { recursive: true });
-    await mkdir("external-cache/snapshots/repohash/commit/docs", { recursive: true });
-    await writeFile("external-cache/snapshots/repohash/commit/docs/design.md", "# Design\n");
+    await mkdir(`external-cache/snapshots/${repoHash}/commit/docs`, { recursive: true });
+    await writeFile(`external-cache/snapshots/${repoHash}/commit/docs/design.md`, "# Design\n");
     await writeFile(
       ".agent-pack/state/packs/runtime-cache-path.json",
       JSON.stringify({
@@ -564,10 +565,10 @@ unknown: true`,
               url: "file:///repo.git",
               resolvedRef: "main",
               resolvedCommit: "commit",
-              repoHash: "repohash",
+              repoHash,
               path: "docs/design.md",
             },
-            path: "./.agent-pack/cache/snapshots/repohash/commit/docs/design.md",
+            path: `./.agent-pack/cache/snapshots/${repoHash}/commit/docs/design.md`,
           },
         ],
         skills: [],
@@ -575,7 +576,7 @@ unknown: true`,
     );
     vi.stubEnv("AGENT_PACK_CACHE_DIR", "external-cache");
     await expect(brief("runtime-cache-path")).resolves.toContain(
-      "Path: ./external-cache/snapshots/repohash/commit/docs/design.md",
+      `Path: ./external-cache/snapshots/${repoHash}/commit/docs/design.md`,
     );
   });
 

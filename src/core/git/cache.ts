@@ -4,6 +4,7 @@ import { rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { AgentPackError } from "../errors.js";
 import { ensureDir, errorMessage, isAlreadyExists, pathExists } from "../fs.js";
+import { withDirectoryLock } from "../lock.js";
 import type { GitRefresh, GitSourceInfo, RuntimePaths, SourceInfo } from "../types.js";
 import { parseGitRef, repoHash, sanitizeGitUrl } from "./ref.js";
 
@@ -23,32 +24,34 @@ export async function materializeGitRef(
 ): Promise<MaterializedGitRef> {
   const parsed = parseGitRef(ref);
   const hash = repoHash(parsed.url);
-  const sourceUrl = sanitizeGitUrl(parsed.url);
-  const mirrorPath = path.join(paths.gitCacheDir, hash, "mirror.git");
-  await ensureMirror(parsed.url, mirrorPath, refresh);
-  const resolved = resolveCommit(mirrorPath, parsed.requestedRef);
-  const snapshotRootAbs = path.join(paths.cacheDir, "snapshots", hash, resolved.commit);
-  await ensureSnapshot(mirrorPath, resolved.commit, snapshotRootAbs);
-  const snapshotRootDisplay = relativeFromRoot(snapshotRootAbs, paths.repoRoot);
-  const targetAbs = parsed.pathInRepo
-    ? path.join(snapshotRootAbs, parsed.pathInRepo)
-    : snapshotRootAbs;
-  return {
-    source: {
-      kind: "git",
-      url: sourceUrl,
-      requestedRef: parsed.requestedRef,
-      resolvedRef: resolved.ref,
-      resolvedCommit: resolved.commit,
-      path: parsed.pathInRepo,
-      repoHash: hash,
-    },
-    snapshotRootAbs,
-    snapshotRootDisplay,
-    targetAbs,
-    targetDisplay: relativeFromRoot(targetAbs, paths.repoRoot),
-    pathInRepo: parsed.pathInRepo,
-  };
+  return withGitCacheLock(paths, hash, async () => {
+    const sourceUrl = sanitizeGitUrl(parsed.url);
+    const mirrorPath = path.join(paths.gitCacheDir, hash, "mirror.git");
+    await ensureMirror(parsed.url, mirrorPath, refresh);
+    const resolved = resolveCommit(mirrorPath, parsed.requestedRef);
+    const snapshotRootAbs = path.join(paths.cacheDir, "snapshots", hash, resolved.commit);
+    await ensureSnapshot(mirrorPath, resolved.commit, snapshotRootAbs);
+    const snapshotRootDisplay = relativeFromRoot(snapshotRootAbs, paths.repoRoot);
+    const targetAbs = parsed.pathInRepo
+      ? path.join(snapshotRootAbs, parsed.pathInRepo)
+      : snapshotRootAbs;
+    return {
+      source: {
+        kind: "git",
+        url: sourceUrl,
+        requestedRef: parsed.requestedRef,
+        resolvedRef: resolved.ref,
+        resolvedCommit: resolved.commit,
+        path: parsed.pathInRepo,
+        repoHash: hash,
+      },
+      snapshotRootAbs,
+      snapshotRootDisplay,
+      targetAbs,
+      targetDisplay: relativeFromRoot(targetAbs, paths.repoRoot),
+      pathInRepo: parsed.pathInRepo,
+    };
+  });
 }
 
 export async function ensureGitSourceSnapshot(
@@ -59,9 +62,19 @@ export async function ensureGitSourceSnapshot(
   if (source.kind !== "git") {
     return;
   }
-  const mirrorPath = path.join(paths.gitCacheDir, source.repoHash, "mirror.git");
-  await ensureMirror(source.url, mirrorPath, refresh);
-  await ensureSnapshot(mirrorPath, source.resolvedCommit, gitSnapshotRoot(source, paths));
+  await withGitCacheLock(paths, source.repoHash, async () => {
+    const mirrorPath = path.join(paths.gitCacheDir, source.repoHash, "mirror.git");
+    await ensureMirror(source.url, mirrorPath, refresh);
+    await ensureSnapshot(mirrorPath, source.resolvedCommit, gitSnapshotRoot(source, paths));
+  });
+}
+
+export function withGitCacheLock<T>(
+  paths: RuntimePaths,
+  repoHashValue: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return withDirectoryLock(paths.lockDir, `cache-${repoHashValue}`, fn);
 }
 
 export function gitSnapshotRoot(source: GitSourceInfo, paths: RuntimePaths): string {
