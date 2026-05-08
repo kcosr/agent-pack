@@ -9,12 +9,12 @@ import {
   brief,
   cleanCache,
   initPack,
+  listPacks,
   listTasks,
   report,
   showTask,
   status,
   summary,
-  syncAll,
   syncPack,
   updateTask,
 } from "../core/operations.js";
@@ -45,18 +45,13 @@ program
   .command("sync")
   .description("Fetch and unpack missing git cache material for a pack.")
   .option("--id <id>", "pack ID")
-  .option("--all", "sync all packs")
   .addOption(gitRefreshOption())
   .option("--json", "emit machine-readable output")
   .action(async (options) => {
     await run(async () => {
-      const result = options.all
-        ? await syncAll(options.gitRefresh)
-        : await syncPack(options.id, options.gitRefresh);
+      const result = await syncPack(options.id, options.gitRefresh);
       if (options.json) {
         printJson(result);
-      } else if (Array.isArray(result)) {
-        process.stdout.write(`Synced ${result.length} packs\n`);
       } else {
         process.stdout.write(`Synced pack ${result.id}\n`);
       }
@@ -83,25 +78,35 @@ program
     });
   });
 
+program
+  .command("list")
+  .description("List packs in the current state directory.")
+  .option("--json", "emit machine-readable output")
+  .action(async (options) => {
+    await run(async () => {
+      const packs = await listPacks();
+      if (options.json) {
+        printJson(packs.map(statusJson));
+        return;
+      }
+      for (const pack of packs) {
+        process.stdout.write(statusRow(pack));
+      }
+    });
+  });
+
 configureTaskCommands(program);
 
 program
   .command("status")
   .description("Show derived pack progress.")
   .option("--id <id>", "pack ID")
-  .option("--all", "show all packs")
   .option("--json", "emit machine-readable output")
   .action(async (options) => {
     await run(async () => {
-      const result = await status(options.id, options.all);
+      const result = await status(options.id);
       if (options.json) {
-        printJson(Array.isArray(result) ? result.map(statusJson) : statusJson(result));
-      } else if (Array.isArray(result)) {
-        for (const pack of result) {
-          process.stdout.write(
-            `${pack.id}\t${pack.name ?? ""}\t${pack.status}\t${pack.taskCounts.completed}/${pack.taskCounts.total}\tblocked:${pack.taskCounts.blocked}\n`,
-          );
-        }
+        printJson(statusJson(result));
       } else {
         process.stdout.write(renderSummary(result));
       }
@@ -346,6 +351,10 @@ function statusJson(pack: PackState) {
     references: pack.references.length,
     skills: pack.skills.length,
   };
+}
+
+function statusRow(pack: PackState): string {
+  return `${pack.id}\t${pack.name ?? ""}\t${pack.status}\t${pack.taskCounts.completed}/${pack.taskCounts.total}\tblocked:${pack.taskCounts.blocked}\n`;
 }
 
 function printJson(value: unknown): void {

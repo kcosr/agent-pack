@@ -173,17 +173,6 @@ export async function syncPack(id: string | undefined, refresh: GitRefresh): Pro
   return pack;
 }
 
-export async function syncAll(refresh: GitRefresh): Promise<PackState[]> {
-  const store = new StateStore();
-  const packs = await store.listPacks();
-  for (const pack of packs) {
-    for (const source of gitSources(pack)) {
-      await ensureGitSourceSnapshot(source, store.paths, refresh);
-    }
-  }
-  return packs;
-}
-
 export async function cleanCache(id?: string): Promise<CleanResult> {
   const store = new StateStore();
   const packs = id ? [await store.loadPack(id)] : await store.listPacks();
@@ -275,9 +264,14 @@ export async function updateTask(
   );
 }
 
-export async function status(id?: string, all = false): Promise<PackState | PackState[]> {
+export async function status(id?: string): Promise<PackState> {
   const store = new StateStore();
-  return all ? store.listPacks() : store.loadPack(id);
+  return store.loadPack(id);
+}
+
+export async function listPacks(): Promise<PackState[]> {
+  const store = new StateStore();
+  return store.listPacks();
 }
 
 export async function report(id?: string): Promise<PackState> {

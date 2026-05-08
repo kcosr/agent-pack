@@ -3,7 +3,14 @@ import { mkdir, mkdtemp, stat, symlink, utimes, writeFile } from "node:fs/promis
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { brief, cleanCache, initPack, status, updateTask } from "../../src/core/operations.js";
+import {
+  brief,
+  cleanCache,
+  initPack,
+  listPacks,
+  status,
+  updateTask,
+} from "../../src/core/operations.js";
 import { resolveRuntimePaths } from "../../src/core/paths.js";
 
 describe("pack workflow", () => {
@@ -68,7 +75,7 @@ contract:
 
     const updated = await updateTask("t001", "completed", "Done.", "design-review");
     expect(updated.status).toBe("completed");
-    const loaded = await status("design-review", false);
+    const loaded = await status("design-review");
     expect(Array.isArray(loaded)).toBe(false);
     expect((loaded as typeof updated).taskCounts.completed).toBe(1);
   });
@@ -314,21 +321,21 @@ unknown: true`,
       }),
     ).rejects.toThrow("ad hoc task text must not be empty");
 
-    await expect(status("empty-task", false)).rejects.toThrow("pack not found");
+    await expect(status("empty-task")).rejects.toThrow("pack not found");
   });
 
   it("rejects corrupt index JSON instead of treating it as empty", async () => {
     await mkdir(".agent-pack/state", { recursive: true });
     await writeFile(".agent-pack/state/index.json", "{bad json");
 
-    await expect(status(undefined, true)).rejects.toThrow("failed to read JSON");
+    await expect(listPacks()).rejects.toThrow("failed to read JSON");
   });
 
   it("rejects invalid pack state schema", async () => {
     await mkdir(".agent-pack/state/packs", { recursive: true });
     await writeFile(".agent-pack/state/packs/bad.json", JSON.stringify({ schemaVersion: 99 }));
 
-    await expect(status("bad", false)).rejects.toThrow("schemaVersion 99 is not supported");
+    await expect(status("bad")).rejects.toThrow("schemaVersion 99 is not supported");
   });
 
   it("rejects unknown pack state fields", async () => {
@@ -350,7 +357,7 @@ unknown: true`,
       }),
     );
 
-    await expect(status("obsolete", false)).rejects.toThrow(
+    await expect(status("obsolete")).rejects.toThrow(
       "unsupported pack state field 'unexpectedField'",
     );
   });
@@ -442,9 +449,7 @@ unknown: true`,
       }),
     );
 
-    await expect(status("unknown-nested-state", false)).rejects.toThrow(
-      "tasks[0].unexpectedNested",
-    );
+    await expect(status("unknown-nested-state")).rejects.toThrow("tasks[0].unexpectedNested");
   });
 
   it("rejects invalid pack reference state", async () => {
@@ -465,7 +470,7 @@ unknown: true`,
       }),
     );
 
-    await expect(status("bad-reference-state", false)).rejects.toThrow("source.path");
+    await expect(status("bad-reference-state")).rejects.toThrow("source.path");
   });
 
   it("lists valid orphan pack files missing from the index", async () => {
@@ -486,7 +491,7 @@ unknown: true`,
       }),
     );
 
-    const packs = await status(undefined, true);
+    const packs = await listPacks();
 
     if (!Array.isArray(packs)) {
       throw new Error("expected pack list");
@@ -511,7 +516,7 @@ unknown: true`,
       }),
     );
 
-    expect(await status(undefined, true)).toEqual([]);
+    expect(await listPacks()).toEqual([]);
   });
 
   it("preserves concurrent task notes through locked updates", async () => {
@@ -526,7 +531,7 @@ unknown: true`,
       updateTask("t001", undefined, "second note", "locked-notes"),
     ]);
 
-    const pack = await status("locked-notes", false);
+    const pack = await status("locked-notes");
     expect(Array.isArray(pack)).toBe(false);
     expect((pack as Awaited<ReturnType<typeof updateTask>>).tasks[0]?.notes).toHaveLength(2);
   });

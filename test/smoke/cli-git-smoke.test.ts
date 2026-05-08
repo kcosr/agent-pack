@@ -82,6 +82,11 @@ references:
       cwd: workspace,
     });
 
+    const packList = await runCli(["list"], { cwd: workspace });
+    expect(packList.stdout).toContain("task-pack");
+    const packListJson = await runCli(["list", "--json"], { cwd: workspace });
+    expect(JSON.parse(packListJson.stdout)).toMatchObject([{ id: "task-pack" }]);
+
     const help = await runCli(["task", "--help"], { cwd: workspace });
     expect(help.stdout).toContain("list [options]");
     expect(help.stdout).toContain("show [options] <taskId>");
@@ -105,6 +110,12 @@ references:
       reject: false,
     });
     expect(oldTopLevel.stderr).toContain("unknown command 'done'");
+
+    const oldStatusAll = await runCli(["status", "--all"], { cwd: workspace, reject: false });
+    expect(oldStatusAll.stderr).toContain("unknown option '--all'");
+
+    const oldSyncAll = await runCli(["sync", "--all"], { cwd: workspace, reject: false });
+    expect(oldSyncAll.stderr).toContain("unknown option '--all'");
   });
 
   it("clones git sources, materializes snapshots, syncs missing cache, and renders brief", async () => {
@@ -292,7 +303,7 @@ skills:
 
   it("rejects invalid git refresh policy from the environment", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-env-smoke-"));
-    const result = await runCli(["status", "--all"], {
+    const result = await runCli(["list"], {
       cwd: workspace,
       reject: false,
       env: { AGENT_PACK_GIT_REFRESH: "sometimes" },

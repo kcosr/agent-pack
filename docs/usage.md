@@ -26,6 +26,13 @@ Print the agent brief:
 agent-pack brief --id demo-pack
 ```
 
+List packs in the current state directory:
+
+```bash
+agent-pack list
+agent-pack list --json
+```
+
 For long task lists, render a compact brief that shows task status, ID, and title without task bodies:
 
 ```bash

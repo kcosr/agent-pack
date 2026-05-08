@@ -367,11 +367,11 @@ Fetch and unpack missing git-backed material for a pack.
 
 ```bash
 agent-pack sync --id reviewer-001
-agent-pack sync --all --git-refresh always
-agent-pack sync --all --json
+agent-pack sync --id reviewer-001 --git-refresh always
+agent-pack sync --id reviewer-001 --json
 ```
 
-With `--json`, `sync` emits the synced pack or packs as JSON. `--all --json` emits an array.
+With `--json`, `sync` emits the synced pack as JSON.
 
 `sync` is explicit. Other commands do not fetch or clone git sources. If a pack is resumed on a new host, run `sync` before `brief`:
 
@@ -403,11 +403,22 @@ agent-pack clean --json
 
 By default, `clean` reads all packs in the current state directory and removes matching `git/<repoHash>` mirrors and `snapshots/<repoHash>` directories from the cache root. `--id` limits cleanup to one pack. Pack state, event logs, local references, HTTP/HTTPS references, and locks are not removed.
 
-After cleaning, run `agent-pack sync --all` or `agent-pack sync --id <pack>` before rendering briefs for packs with git-backed material. Resync can fail if the original remote, ref, or credentials are no longer available.
+After cleaning, run `agent-pack list` to identify affected packs, then run `agent-pack sync --id <pack>` before rendering briefs for packs with git-backed material. Resync can fail if the original remote, ref, or credentials are no longer available.
 
 The cache root is shared by default across projects for the same user account. If two state directories reference the same git repository, `agent-pack clean` in one project can remove cache material another project will need to rebuild with `sync`. Cache reads, syncs, and cleans are locked per git repository cache key so concurrent `agent-pack` processes do not remove cache material mid-operation.
 
 With `--json`, `clean` emits `{ packIds, repoHashes, removed }`: pack IDs scanned, unique git repository cache keys targeted, and cache paths actually removed.
+
+### `list`
+
+List packs in the current state directory.
+
+```bash
+agent-pack list
+agent-pack list --json
+```
+
+Text output is tab-separated: pack id, pack name, status, completed/total task count, and a `blocked:N` field. Use `list --json` for scripts that need to discover pack IDs.
 
 ### Task Commands
 
@@ -426,14 +437,13 @@ agent-pack task block t002 --id reviewer-001 --note "Need user decision."
 
 ```bash
 agent-pack status --id reviewer-001
-agent-pack status --all
 agent-pack status --id reviewer-001 --json
 agent-pack report --id reviewer-001
 agent-pack report --id reviewer-001 --json
 agent-pack summary --id reviewer-001
 ```
 
-`status --all` prints tab-separated columns: pack id, pack name, status, completed/total task count, and a `blocked:N` field. Use `status --all --json` for scripts.
+Use `agent-pack list` to discover packs, then run `status --id <pack>` for the pack you want to inspect.
 
 JSON output shapes:
 
@@ -441,10 +451,9 @@ JSON output shapes:
 |---|---|
 | `init --json` | `{ id, briefCommand, pack }` |
 | `sync --id <id> --json` | Pack state object |
-| `sync --all --json` | Array of pack state objects |
 | `clean --json` | `{ packIds, repoHashes, removed }` |
+| `list --json` | Array of status objects |
 | `status --json` | `{ id, name, status, tasks, references, skills }` |
-| `status --all --json` | Array of status objects |
 | `report --json` | Full pack state object |
 
 Derived pack statuses:
