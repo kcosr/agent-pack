@@ -50,7 +50,7 @@ Use these flags with `agent-pack init`:
 - `--add-task <text>`: one inline task
 - `--task <ref>`: task YAML file, glob, or git-backed task file
 - `--reference <ref>`: file, directory, glob, HTTP/HTTPS URL, git path, or whole git repo
-- `--skill <ref>`: one `SKILL.md` file or a glob/directory scan for `SKILL.md`
+- `--skill <ref>`: one `SKILL.md` file, directory scan, glob, or git-backed skill source
 - `--instructions <path>`: raw text instructions file
 
 Git refs use this shape. See the README for the full list of supported URL forms:

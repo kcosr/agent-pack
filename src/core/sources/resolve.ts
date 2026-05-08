@@ -193,13 +193,8 @@ async function resolveLocalSkillFiles(
   ref: string,
   paths: RuntimePaths,
 ): Promise<Array<{ absPath: string; displayPath: string; source: PackSkill["source"] }>> {
-  const refs = hasGlobMagic(ref)
-    ? await fg(ref, { cwd: paths.repoRoot, ...fileGlobOptions })
-    : [toDisplayPath(resolveInputPath(ref, paths.repoRoot), paths.repoRoot)];
+  const refs = await localSkillFileRefs(ref, paths);
   const files = refs.filter((entry) => path.basename(entry) === "SKILL.md");
-  if (!hasGlobMagic(ref) && path.basename(ref) !== "SKILL.md") {
-    throw new AgentPackError(`--skill requires a SKILL.md file: ${ref}`);
-  }
   const resolved: Array<{ absPath: string; displayPath: string; source: PackSkill["source"] }> = [];
   for (const displayPath of files) {
     const absPath = resolveInputPath(displayPath, paths.repoRoot);
@@ -210,6 +205,22 @@ async function resolveLocalSkillFiles(
     });
   }
   return resolved;
+}
+
+async function localSkillFileRefs(ref: string, paths: RuntimePaths): Promise<string[]> {
+  if (hasGlobMagic(ref)) {
+    return fg(ref, { cwd: paths.repoRoot, ...fileGlobOptions });
+  }
+  const absPath = resolveInputPath(ref, paths.repoRoot);
+  const stats = await stat(absPath).catch(() => undefined);
+  if (stats?.isDirectory()) {
+    const matches = await fg("**/SKILL.md", { cwd: absPath, ...fileGlobOptions });
+    return matches.map((match) => toDisplayPath(path.join(absPath, match), paths.repoRoot));
+  }
+  if (path.basename(ref) !== "SKILL.md") {
+    throw new AgentPackError(`--skill requires a SKILL.md file or directory: ${ref}`);
+  }
+  return [toDisplayPath(absPath, paths.repoRoot)];
 }
 
 async function readSkillMetadata(filePath: string, ref: string) {

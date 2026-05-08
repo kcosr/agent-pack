@@ -128,6 +128,28 @@ skills:
     expect(pack.skills.map((skill) => skill.name)).toEqual(["first", "second"]);
   });
 
+  it("scans local skill directories for SKILL.md files", async () => {
+    await mkdir("skills/review", { recursive: true });
+    await mkdir("skills/ignored", { recursive: true });
+    await writeFile(
+      "skills/review/SKILL.md",
+      "---\nname: review-skill\ndescription: Review carefully.\n---\n",
+    );
+    await writeFile("skills/ignored/notes.md", "# Notes\n");
+
+    const pack = await initPack({
+      id: "skill-dir",
+      includes: [{ type: "skill", ref: { ref: "./skills" } }],
+      gitRefresh: "auto",
+    });
+
+    expect(pack.skills).toHaveLength(1);
+    expect(pack.skills[0]).toMatchObject({
+      name: "review-skill",
+      path: "./skills/review/SKILL.md",
+    });
+  });
+
   it("rejects unsupported manifest fields", async () => {
     await writeFile(
       "pack.yaml",
@@ -470,6 +492,26 @@ unknown: true`,
       throw new Error("expected pack list");
     }
     expect(packs.map((pack) => pack.id)).toContain("orphan");
+  });
+
+  it("ignores stale index entries whose pack files were removed", async () => {
+    await mkdir(".agent-pack/state", { recursive: true });
+    await writeFile(
+      ".agent-pack/state/index.json",
+      JSON.stringify({
+        schemaVersion: 1,
+        packs: {
+          missing: {
+            id: "missing",
+            status: "pending",
+            updatedAt: new Date().toISOString(),
+            path: ".agent-pack/state/packs/missing.json",
+          },
+        },
+      }),
+    );
+
+    expect(await status(undefined, true)).toEqual([]);
   });
 
   it("preserves concurrent task notes through locked updates", async () => {

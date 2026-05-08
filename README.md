@@ -61,7 +61,7 @@ Requirements:
 - Git and `tar` on `PATH` for git-backed references and skills
 - Git authentication for private repositories. `agent-pack` shells out to `git`, so SSH agent, credential helper, netrc, platform keychain, GitHub CLI, or configured askpass can work.
 
-`agent-pack` works with any agent CLI or editor agent that can read a text prompt and run shell commands in your workspace. The examples use POSIX shell syntax; on Windows PowerShell, use backticks for line continuations or write commands on one line, and prefer double-quoted globs such as `"./skills/**"`.
+`agent-pack` works with any agent CLI or editor agent that can read a text prompt and run shell commands in your workspace. The examples use POSIX shell syntax; on Windows PowerShell, use backticks for line continuations or write commands on one line, and prefer double-quoted globs such as `"./docs/**/*.md"`.
 
 ## Core Concepts
 
@@ -69,7 +69,7 @@ Requirements:
 
 A pack is the durable unit of work. A pack stores a prompt, instructions, tasks, references, skills, an optional contract, task status, and notes. Alongside the pack file, `agent-pack` writes an append-only event log for state changes.
 
-By default, pack state is stored in the repository working tree:
+By default, pack state is stored under the current working directory. Run `agent-pack` from your repository or workspace root when you want the default state directory committed with that project:
 
 ```text
 .agent-pack/state/
@@ -168,10 +168,10 @@ Skills are supplemental `SKILL.md` files. `agent-pack` extracts the skill name, 
 Only files named exactly `SKILL.md` are accepted as skills:
 
 ```bash
-agent-pack init --skills './skills/**' --add-task "Apply relevant skills to this work."
+agent-pack init --skills ./skills --add-task "Apply relevant skills to this work."
 ```
 
-That command scans broadly but only includes matching `SKILL.md` files.
+That command scans the directory recursively but only includes matching `SKILL.md` files. Globs such as `./skills/**` work too.
 
 A `SKILL.md` may include YAML frontmatter with `name` and `description` fields. Other frontmatter fields are ignored. Without frontmatter, the name falls back to the first `#` heading and then the parent directory name; the description falls back to the first paragraph, capped at 300 characters.
 
@@ -275,7 +275,7 @@ Common options:
 | `--tasks <ref>` | Alias for `--task`; useful when passing several task sources |
 | `--reference <ref>` | Add one reference file, directory, glob, URL, or git ref |
 | `--references <ref>` | Alias for `--reference`; useful when passing several references |
-| `--skill <ref>` | Add one `SKILL.md` file |
+| `--skill <ref>` | Add one `SKILL.md` file, directory scan, glob, or git ref |
 | `--skills <ref>` | Alias for `--skill`; useful when passing several skills |
 | `--git-refresh auto\|always\|never` | Control git fetching for this command |
 | `--state-dir <path>` | Override the state directory for `init`; use `AGENT_PACK_STATE_DIR` for other commands |
@@ -297,13 +297,13 @@ agent-pack init \
   --reference git+https://github.com/example/product.git//adr#main \
   --references './docs/**/*.md' \
   --skill git+https://github.com/example/agent-skills.git//review/fresh-eyes/SKILL.md#v1.0.0 \
-  --skills './skills/**' \
+  --skills ./skills \
   "Use the included docs and skills to complete the review."
 ```
 
 That command composes content across types: the manifest can contribute instructions, tasks, references, skills, and contract rules; task flags add more tasks; reference flags add git, URL, and local reading material; skill flags add supplemental `SKILL.md` files.
 
-For a similar pack expressed mostly as one manifest, put the reusable content in YAML. Task file and glob inputs become inline task entries in the manifest; keep `--task` flags alongside `--manifest` when you want to load external task files directly.
+For a similar pack expressed mostly as one manifest, save this YAML as `reviewer-pack.yaml`. Task file and glob inputs become inline task entries in the manifest; keep `--task` flags alongside `--manifest` when you want to load external task files directly.
 
 ```yaml
 schemaVersion: 1
@@ -331,7 +331,7 @@ references:
 
 skills:
   - ref: git+https://github.com/example/agent-skills.git//review/fresh-eyes/SKILL.md#v1.0.0
-  - ref: ./skills/**
+  - ref: ./skills
 ```
 
 Then initialize with the manifest and a one-off prompt:
@@ -435,6 +435,18 @@ agent-pack summary --id reviewer-001
 
 `status --all` prints tab-separated columns: pack id, pack name, status, completed/total task count, and a `blocked:N` field. Use `status --all --json` for scripts.
 
+JSON output shapes:
+
+| Command | JSON shape |
+|---|---|
+| `init --json` | `{ id, briefCommand, pack }` |
+| `sync --id <id> --json` | Pack state object |
+| `sync --all --json` | Array of pack state objects |
+| `clean --json` | `{ packIds, repoHashes, removed }` |
+| `status --json` | `{ id, name, status, tasks, references, skills }` |
+| `status --all --json` | Array of status objects |
+| `report --json` | Full pack state object |
+
 Derived pack statuses:
 
 | Status | Meaning |
@@ -478,6 +490,37 @@ Rules:
 - `contract` must include at least one `do` or `dont` entry.
 - Manifest task `id` is preserved as `sourceId`; task commands use the runtime ID (`t001`, `t002`, ...) shown by `agent-pack list`.
 - `category` is stored as task metadata but is not currently rendered in the brief.
+
+### Task Files
+
+`--task` and `--tasks` load standalone YAML task files. Task files use the same fields as manifest `tasks` entries: `id`, `title`, `category`, `body`, and `doneWhen`.
+
+A task file may contain one task object:
+
+```yaml
+id: inspect
+title: Inspect implementation
+body: Read the changed files and record concrete findings.
+doneWhen:
+  - Notes cite inspected files.
+```
+
+It may contain an array of task objects:
+
+```yaml
+- id: inspect
+  title: Inspect implementation
+- id: summarize
+  title: Summarize findings
+```
+
+Or it may contain a `tasks` wrapper:
+
+```yaml
+tasks:
+  - id: inspect
+    title: Inspect implementation
+```
 
 ```yaml
 schemaVersion: 1
@@ -562,7 +605,7 @@ Authentication is delegated to normal `git` behavior: SSH agent, credential help
 | Variable | Purpose | Default |
 |---|---|---|
 | `AGENT_PACK_ID` | Default pack target | unset |
-| `AGENT_PACK_STATE_DIR` | Pack state directory | `<repo>/.agent-pack/state` |
+| `AGENT_PACK_STATE_DIR` | Pack state directory | `<cwd>/.agent-pack/state` |
 | `AGENT_PACK_CACHE_DIR` | Cache root | `$XDG_CACHE_HOME/agent-pack`, or `~/.cache/agent-pack` when `XDG_CACHE_HOME` is unset, or `<cwd>/.agent-pack/cache` when neither `XDG_CACHE_HOME` nor `HOME` is set |
 | `AGENT_PACK_GIT_REFRESH` | Default git fetch policy for `init` and `sync` | `auto` |
 | `AGENT_PACK_CMD` | Command name rendered in brief task commands; set when invoking through a wrapper | `agent-pack` |
@@ -598,6 +641,30 @@ Default layout:
   snapshots/
   locks/
 ```
+
+```mermaid
+flowchart TD
+  Init[agent-pack init] --> State[.agent-pack/state<br/>pack JSON + event log]
+  Init --> LocalRefs[Local references and skills<br/>paths stored, files read in place]
+  Init --> UrlRefs[HTTP/HTTPS references<br/>URL stored for the agent]
+  Init --> GitCache[Git cache root<br/>mirror + commit snapshot]
+
+  State --> Brief[agent-pack brief]
+  LocalRefs --> Brief
+  UrlRefs --> Brief
+  GitCache --> Brief
+
+  Commit[Commit .agent-pack/state] --> NewHost[New checkout or host]
+  NewHost --> Sync[agent-pack sync]
+  Sync --> GitCache
+  GitCache --> Brief
+
+  Clean[agent-pack clean] --> RemoveCache[Remove rebuildable git mirrors and snapshots]
+  RemoveCache --> Sync
+  Clean -. leaves untouched .-> State
+```
+
+Pack state is the durable handoff; git cache material is rebuildable with `sync`, while local files and URLs remain external context.
 
 The cache root is `AGENT_PACK_CACHE_DIR` when set, otherwise `$XDG_CACHE_HOME/agent-pack`, `~/.cache/agent-pack`, or `.agent-pack/cache` in the current working directory if neither `XDG_CACHE_HOME` nor `HOME` is set.
 
@@ -665,7 +732,7 @@ Pack state lock filenames are prefixed with a 16-character hash of the state dir
 
 ### Reinitializing a Pack
 
-`agent-pack init` fails if the pack id already exists. To recreate a scratch pack, remove `.agent-pack/state/packs/<id>.json` and `.agent-pack/state/events/<id>.jsonl`; the index is reconciled from disk by later status/list operations.
+`agent-pack init` fails if the pack id already exists. To recreate a scratch pack, remove `.agent-pack/state/packs/<id>.json` and `.agent-pack/state/events/<id>.jsonl`, then run `agent-pack init --id <id> ...` again. Pack listings ignore stale index entries whose pack files were removed.
 
 ## More Documentation
 

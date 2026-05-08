@@ -103,6 +103,9 @@ export class StateStore {
     const index = await this.loadIndex();
     const packs: PackState[] = [];
     for (const id of await this.packIds(index)) {
+      if (!(await pathExists(this.packPath(id)))) {
+        continue;
+      }
       packs.push(await this.loadPack(id));
     }
     return packs;
