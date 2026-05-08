@@ -301,6 +301,46 @@ agent-pack init \
 
 That command composes content across types: the manifest can contribute instructions, tasks, references, skills, and contract rules; task flags add more tasks; reference flags add git, URL, and local reading material; skill flags add supplemental `SKILL.md` files.
 
+Alternatively, put the reusable content in a manifest. Task file and glob inputs become inline task entries in the manifest; keep `--task` flags alongside `--manifest` when you want to load external task files directly.
+
+```yaml
+schemaVersion: 1
+name: reviewer-001
+instructions: Use the included docs and skills to complete the review.
+
+tasks:
+  - title: Check local unstaged changes
+  - id: security-review
+    title: Run the shared security review task
+    body: Follow the security review checklist for this repository.
+  - id: local-task-review
+    title: Run the local task review checklist
+    body: Covers the work that would otherwise live in ./tasks/*.yaml.
+
+references:
+  - name: product docs
+    ref: git+https://github.com/example/product.git//docs/**/*.md#main
+  - name: design notes
+    ref: https://example.com/design-notes.md
+  - name: architecture decisions
+    ref: git+https://github.com/example/product.git//adr#main
+  - name: local docs
+    ref: ./docs/**/*.md
+
+skills:
+  - ref: git+https://github.com/example/agent-skills.git//review/fresh-eyes/SKILL.md#v1.0.0
+  - ref: ./skills/**
+```
+
+Then initialize with the manifest and a one-off prompt:
+
+```bash
+agent-pack init \
+  --id reviewer-001 \
+  --manifest ./reviewer-pack.yaml \
+  "Use the included docs and skills to complete the review."
+```
+
 ### `brief`
 
 Print the agent-facing brief.
