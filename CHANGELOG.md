@@ -6,9 +6,9 @@
 
 ### Added
 
-- Added `agent-pack task add <title>` for appending ad hoc tasks to existing packs.
+- Added `agent-pack task add <title>` for appending ad hoc tasks to existing packs ([#2](https://github.com/kcosr/agent-pack/pull/2)).
 - Added a bundled `feature-design-summary` example manifest for creating a
-  repository-grounded feature design summary markdown file.
+  repository-grounded feature design summary markdown file ([#2](https://github.com/kcosr/agent-pack/pull/2)).
 
 ### Changed
 
