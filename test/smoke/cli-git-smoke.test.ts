@@ -19,9 +19,10 @@ describe("agent-pack CLI git smoke", () => {
   });
 
   it("prints the package version from package.json", async () => {
+    const pkg = JSON.parse(await readFile(path.resolve("package.json"), "utf8"));
     const result = await runCli(["--version"]);
 
-    expect(result.stdout.trim()).toBe("0.0.0");
+    expect(result.stdout.trim()).toBe(pkg.version);
   });
 
   it("uses packaged examples as a catalog root", async () => {

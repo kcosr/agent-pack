@@ -42,6 +42,7 @@ if (released === changelog) {
   throw new Error("CHANGELOG.md is missing an Unreleased section");
 }
 writeFileSync("CHANGELOG.md", released);
+run("npm", ["run", "format"]);
 run("npm", ["run", "check"]);
 run("npm", ["run", "test:smoke"]);
 run("npm", ["publish", "--dry-run", "--access", "public"]);
