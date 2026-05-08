@@ -8,17 +8,17 @@ A minimal handoff looks like this:
 
 ```bash
 agent-pack init \
-  --id quickstart \
-  --add-task "Read the README and identify one concrete improvement." \
-  "Get oriented and record evidence in task notes."
+  --manifest ./examples/demo.yaml \
+  "Run the demo task and record evidence."
 
-agent-pack brief --id quickstart
+export AGENT_PACK_ID=demo
+agent-pack brief
 ```
 
 Then paste a handoff like this into your agent CLI:
 
 ```text
-Run agent-pack brief --id quickstart and work the pack. Update task status as you go.
+AGENT_PACK_ID is demo. Run agent-pack brief and work the pack. Update task status as you go.
 ```
 
 ## Why Use It
@@ -44,6 +44,7 @@ Use it when you want to:
 - [Git Sources](#git-sources)
 - [Environment Variables](#environment-variables)
 - [State and Portability](#state-and-portability)
+- [Reusable Examples](#reusable-examples)
 - [More Documentation](#more-documentation)
 
 ## Installation
@@ -107,7 +108,7 @@ The brief is the text document rendered by `agent-pack brief`. It is meant to be
 
 When present, the brief renders sections in this order: prompt, instructions, contract, commands, references, skills, and tasks. `agent-pack` lists reference paths in the brief; it does not paste referenced file contents into the brief.
 
-By default, task entries include the task body and `doneWhen` checklist. For very large task lists, set `AGENT_PACK_BRIEF_TASK_CONTENT=false` when rendering the brief to show only task status, ID, and title; the brief will tell the agent to run `agent-pack task show <task-id> --id <pack-id>` before working a task.
+By default, task entries include the task body and `doneWhen` checklist. For very large task lists, set `AGENT_PACK_BRIEF_TASK_CONTENT=false` when rendering the brief to show only task status, ID, and title; the brief will tell the agent to run `agent-pack task show <task-id>` before working a task, including `--id <pack-id>` when the brief was rendered with an explicit id.
 
 ### Manifest
 
@@ -136,10 +137,11 @@ Tasks are mutable work items. Each task gets an auto-generated runtime ID (`t001
 Agents update task state as they work:
 
 ```bash
-agent-pack task list --id quickstart
-agent-pack task start t001 --id quickstart
-agent-pack task note t001 --id quickstart "Read README.md."
-agent-pack task done t001 --id quickstart --note "Recorded findings in task notes."
+export AGENT_PACK_ID=quickstart
+agent-pack task list
+agent-pack task start t001
+agent-pack task note t001 "Read README.md."
+agent-pack task done t001 --note "Recorded findings in task notes."
 ```
 
 ### References
@@ -194,61 +196,62 @@ A contract is manifest-only guidance rendered in the brief for the agent to foll
 
 ## Quick Start
 
-Create a pack with one task:
+Create a pack from the demo manifest:
 
 ```bash
 agent-pack init \
-  --id quickstart \
-  --add-task "Run date and record the output." \
+  --manifest ./examples/demo.yaml \
   "Run the demo task and record evidence."
 ```
 
 Expected output:
 
 ```text
-Created pack quickstart
-Run: agent-pack brief --id quickstart
+Created pack demo
+Run: agent-pack brief --id demo
 ```
 
-Show the brief:
+Set the generated pack id in your shell before asking an agent to work. Commands can then omit `--id`:
 
 ```bash
-agent-pack brief --id quickstart
+export AGENT_PACK_ID=demo
+agent-pack brief
 ```
 
 Abbreviated output:
 
 ```text
-You are working from pack quickstart.
+You are working from pack demo.
+Name: demo
 
 Prompt:
 Run the demo task and record evidence.
 
 Commands:
-  agent-pack task list --id quickstart
-  agent-pack task show <task-id> --id quickstart
-  agent-pack task start <task-id> --id quickstart
-  agent-pack task note <task-id> --id quickstart "evidence"
-  agent-pack task done <task-id> --id quickstart --note "completion evidence"
-  agent-pack task block <task-id> --id quickstart --note "blocker"
+  agent-pack task list
+  agent-pack task show <task-id>
+  agent-pack task start <task-id>
+  agent-pack task note <task-id> "evidence"
+  agent-pack task done <task-id> --note "completion evidence"
+  agent-pack task block <task-id> --note "blocker"
   ...
 
 Tasks:
-- [pending] t001 - Run date and record the output.
+- [pending] t001 - Run date and record the output
 ```
 
 In your agent CLI or editor agent, paste a handoff like this:
 
 ```text
-Run agent-pack brief --id quickstart and work the pack. Update task status as you go.
+AGENT_PACK_ID is demo. Run agent-pack brief and work the pack. Update task status as you go.
 ```
 
 Check progress:
 
 ```bash
-agent-pack task list --id quickstart
-agent-pack status --id quickstart
-agent-pack report --id quickstart
+agent-pack task list
+agent-pack status
+agent-pack report
 ```
 
 ## Command Reference
@@ -622,7 +625,7 @@ Authentication is delegated to normal `git` behavior: SSH agent, credential help
 
 Relative path values resolve from the current working directory.
 
-Set a default pack ID when working on one pack for a while:
+Set a default pack ID when working on one pack for a while. This is the recommended handoff shape before launching an agent CLI from the same shell:
 
 ```bash
 export AGENT_PACK_ID=reviewer-001
@@ -630,6 +633,12 @@ export AGENT_PACK_ID=reviewer-001
 agent-pack brief
 agent-pack status
 agent-pack task done t001 --note "Completed."
+```
+
+If the agent starts in a different shell, include the pack id in the handoff:
+
+```text
+AGENT_PACK_ID is reviewer-001. Run agent-pack brief, then work the pack.
 ```
 
 ## State and Portability
@@ -742,6 +751,36 @@ Pack state lock filenames are prefixed with a 16-character hash of the state dir
 ### Reinitializing a Pack
 
 `agent-pack init` fails if the pack id already exists. To recreate a scratch pack, remove `.agent-pack/state/packs/<id>.json` and `.agent-pack/state/events/<id>.jsonl`, then run `agent-pack init --id <id> ...` again. Pack listings ignore stale index entries whose pack files were removed.
+
+## Reusable Examples
+
+The `examples/` directory includes reusable manifests for common workflows.
+
+Create a code-review pack:
+
+```bash
+agent-pack init \
+  --manifest ./examples/code-review.yaml \
+  --reference . \
+  "Review scope: unstaged changes."
+
+export AGENT_PACK_ID=code-review
+agent-pack brief
+```
+
+Create a documentation-review pack:
+
+```bash
+agent-pack init \
+  --manifest ./examples/docs-review.yaml \
+  --reference . \
+  "Review the repository documentation against the current code."
+
+export AGENT_PACK_ID=docs-review
+agent-pack brief
+```
+
+Use `--id <id>` when you want a deterministic pack id that differs from the manifest name, or when scripting commands from a shell where `AGENT_PACK_ID` is not set.
 
 ## More Documentation
 

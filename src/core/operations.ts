@@ -206,6 +206,7 @@ export async function brief(id?: string): Promise<string> {
   await validateCachePaths(pack, store.paths);
   return renderBrief(await packWithRuntimeGitPaths(pack, store.paths), undefined, {
     includeTaskContent: briefTaskContentEnabled(),
+    includePackIdInCommands: Boolean(id),
   });
 }
 

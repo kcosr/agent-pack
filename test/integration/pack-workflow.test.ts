@@ -737,6 +737,21 @@ doneWhen:
     );
   });
 
+  it("omits pack id arguments from brief commands when AGENT_PACK_ID selects the pack", async () => {
+    await initPack({
+      id: "env-brief",
+      includes: [{ type: "adHocTask", text: "Inspect" }],
+      gitRefresh: "auto",
+    });
+
+    vi.stubEnv("AGENT_PACK_ID", "env-brief");
+    const rendered = await brief();
+
+    expect(rendered).toContain("  agent-pack task list");
+    expect(rendered).toContain("  agent-pack task done <task-id> --note");
+    expect(rendered).not.toContain("--id env-brief");
+  });
+
   it("rejects invalid task content brief settings", async () => {
     await initPack({
       id: "invalid-brief-setting",

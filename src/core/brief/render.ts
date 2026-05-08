@@ -2,6 +2,7 @@ import type { PackState, PackTask } from "../types.js";
 
 export interface BriefRenderOptions {
   includeTaskContent?: boolean;
+  includePackIdInCommands?: boolean;
 }
 
 export function renderBrief(
@@ -10,6 +11,7 @@ export function renderBrief(
   options: BriefRenderOptions = {},
 ): string {
   const includeTaskContent = options.includeTaskContent ?? true;
+  const includePackIdInCommands = options.includePackIdInCommands ?? true;
   const lines: string[] = [];
   lines.push(`You are working from pack ${pack.id}.`);
   if (pack.name) {
@@ -38,19 +40,51 @@ export function renderBrief(
   }
   if (pack.tasks.length) {
     lines.push("", "Commands:");
-    lines.push(`  ${taskCommand(commandName, pack.id, "list")}`);
-    lines.push(`  ${taskCommand(commandName, pack.id, "show", "<task-id>")}`);
-    lines.push(`  ${taskCommand(commandName, pack.id, "start", "<task-id>")}`);
-    lines.push(`  ${taskCommand(commandName, pack.id, "note", "<task-id>", '"evidence"')}`);
+    lines.push(`  ${taskCommand(commandName, pack.id, "list", { includePackIdInCommands })}`);
     lines.push(
-      `  ${taskCommand(commandName, pack.id, "done", "<task-id>", '--note "completion evidence"')}`,
+      `  ${taskCommand(commandName, pack.id, "show", {
+        includePackIdInCommands,
+        taskId: "<task-id>",
+      })}`,
     );
-    lines.push(`  ${taskCommand(commandName, pack.id, "block", "<task-id>", '--note "blocker"')}`);
+    lines.push(
+      `  ${taskCommand(commandName, pack.id, "start", {
+        includePackIdInCommands,
+        taskId: "<task-id>",
+      })}`,
+    );
+    lines.push(
+      `  ${taskCommand(commandName, pack.id, "note", {
+        includePackIdInCommands,
+        taskId: "<task-id>",
+        trailingArgs: '"evidence"',
+      })}`,
+    );
+    lines.push(
+      `  ${taskCommand(commandName, pack.id, "done", {
+        includePackIdInCommands,
+        taskId: "<task-id>",
+        trailingArgs: '--note "completion evidence"',
+      })}`,
+    );
+    lines.push(
+      `  ${taskCommand(commandName, pack.id, "block", {
+        includePackIdInCommands,
+        taskId: "<task-id>",
+        trailingArgs: '--note "blocker"',
+      })}`,
+    );
     lines.push("Use `task list` to see task status and `task show` before working a task.");
     lines.push(
       "For multi-line notes, pass one shell argument with command substitution or a heredoc:",
     );
-    lines.push(`  ${taskCommand(commandName, pack.id, "note", "<task-id>", `"$(cat <<'EOF'`)}`);
+    lines.push(
+      `  ${taskCommand(commandName, pack.id, "note", {
+        includePackIdInCommands,
+        taskId: "<task-id>",
+        trailingArgs: `"$(cat <<'EOF'`,
+      })}`,
+    );
     lines.push("multi-line evidence");
     lines.push("EOF");
     lines.push(')"');
@@ -123,7 +157,10 @@ export function renderBrief(
           commandName,
           pack.id,
           "show",
-          "<task-id>",
+          {
+            includePackIdInCommands,
+            taskId: "<task-id>",
+          },
         )}\` before working a task.`,
       );
     }
@@ -159,10 +196,20 @@ function taskCommand(
   commandName: string,
   packId: string,
   verb: string,
-  taskId?: string,
-  trailingArgs?: string,
+  options: {
+    includePackIdInCommands: boolean;
+    taskId?: string;
+    trailingArgs?: string;
+  },
 ): string {
-  return [commandName, "task", verb, taskId, "--id", packId, trailingArgs]
+  return [
+    commandName,
+    "task",
+    verb,
+    options.taskId,
+    ...(options.includePackIdInCommands ? ["--id", packId] : []),
+    options.trailingArgs,
+  ]
     .filter(Boolean)
     .join(" ");
 }

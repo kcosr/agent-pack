@@ -77,6 +77,15 @@ describe("brief rendering", () => {
       "Task content is omitted from this brief. Run `ap task show <task-id> --id review-pack` before working a task.",
     );
   });
+
+  it("can render task commands without pack id arguments", () => {
+    const brief = renderBrief(pack(), "ap", { includePackIdInCommands: false });
+
+    expect(brief).toContain("  ap task list");
+    expect(brief).toContain("  ap task show <task-id>");
+    expect(brief).toContain('  ap task note <task-id> "evidence"');
+    expect(brief).not.toContain("--id review-pack");
+  });
 });
 
 function pack(overrides: Partial<PackState> = {}): PackState {

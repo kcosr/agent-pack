@@ -11,19 +11,19 @@ Requirements:
 
 ## Quick Start
 
-Create a pack:
+Create a pack from the demo manifest:
 
 ```bash
 agent-pack init \
-  --id demo-pack \
-  --add-task "Run date and record the output." \
+  --manifest ./examples/demo.yaml \
   "Run the demo task and record the result."
 ```
 
-Print the agent brief:
+Set the generated pack id before asking an agent to work:
 
 ```bash
-agent-pack brief --id demo-pack
+export AGENT_PACK_ID=demo
+agent-pack brief
 ```
 
 List packs in the current state directory:
@@ -36,17 +36,17 @@ agent-pack list --json
 For long task lists, render a compact brief that shows task status, ID, and title without task bodies:
 
 ```bash
-AGENT_PACK_BRIEF_TASK_CONTENT=false agent-pack brief --id demo-pack
+AGENT_PACK_BRIEF_TASK_CONTENT=false agent-pack brief
 ```
 
-The compact brief tells the agent to run `agent-pack task show <task-id> --id demo-pack` before working a task.
+The compact brief tells the agent to run `agent-pack task show <task-id>` before working a task.
 
 Then ask an agent to run the brief and update task status as it works:
 
 ```bash
-agent-pack task start t001 --id demo-pack
-agent-pack task note t001 --id demo-pack "date output: Thu May 7 ..."
-agent-pack task done t001 --id demo-pack --note "Recorded date output."
+agent-pack task start t001
+agent-pack task note t001 "date output: Thu May 7 ..."
+agent-pack task done t001 --note "Recorded date output."
 ```
 
 ## Source Types
@@ -88,15 +88,15 @@ If `XDG_CACHE_HOME` is unset, the cache defaults to `~/.cache/agent-pack/`. If n
 On a new host, rebuild git-backed material:
 
 ```bash
-agent-pack sync --id demo-pack
-agent-pack sync --id demo-pack --json
-agent-pack brief --id demo-pack
+agent-pack sync
+agent-pack sync --json
+agent-pack brief
 ```
 
 Clean rebuildable git cache material without removing pack state:
 
 ```bash
 agent-pack clean
-agent-pack clean --id demo-pack
-agent-pack sync --id demo-pack
+agent-pack clean --id demo
+agent-pack sync
 ```
