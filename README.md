@@ -234,7 +234,7 @@ Commands:
   ...
 
 Tasks:
-[pending] t001 - Run date and record the output.
+- [pending] t001 - Run date and record the output.
 ```
 
 In your agent CLI or editor agent, paste a handoff like this:

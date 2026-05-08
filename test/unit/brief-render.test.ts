@@ -10,7 +10,7 @@ describe("brief rendering", () => {
     expect(brief).toContain("Name: Review Pack");
     expect(brief).toContain("Prompt:\nReview the implementation.");
     expect(brief).toContain("Instructions:\nRead references first.");
-    expect(brief).toContain("[pending] t001 - Inspect API");
+    expect(brief).toContain("- [pending] t001 - Inspect API");
     expect(brief).toContain("  Check request handling.");
     expect(brief).toContain("  Done when:");
     expect(brief).toContain("  - Notes cite files.");
@@ -18,12 +18,14 @@ describe("brief rendering", () => {
     expect(brief).toContain("- design");
     expect(brief).toContain("  Path: ./docs/design.md");
     expect(brief).toContain("- source glob");
+    expect(brief).toContain("  Path: ./docs/design.md\n\n- source glob");
     expect(brief).toContain("  Files:");
     expect(brief).toContain("  - ./src/index.ts");
     expect(brief).toContain("Skills:");
     expect(brief).toContain("Use these supplemental skills");
     expect(brief).toContain("- fresh-eyes");
     expect(brief).toContain("- fresh-eyes (2)");
+    expect(brief).toContain("  Path: ./skills/fresh-eyes/SKILL.md\n\n- fresh-eyes (2)");
     expect(brief).toContain("Contract:");
     expect(brief).toContain("Do:");
     expect(brief).toContain("- Run tests.");
@@ -66,7 +68,7 @@ describe("brief rendering", () => {
   it("can render only task ids and titles without task content", () => {
     const brief = renderBrief(pack(), "ap", { includeTaskContent: false });
 
-    expect(brief).toContain("[pending] t001 - Inspect API");
+    expect(brief).toContain("- [pending] t001 - Inspect API");
     expect(brief).not.toContain("  Check request handling.");
     expect(brief).not.toContain("  Done when:");
     expect(brief).toContain(

@@ -55,7 +55,10 @@ export function renderBrief(
   }
   if (pack.references.length) {
     lines.push("", "References:");
-    for (const reference of pack.references) {
+    pack.references.forEach((reference, index) => {
+      if (index > 0) {
+        lines.push("");
+      }
       lines.push(`- ${reference.name}`);
       if (reference.description) {
         lines.push(`  Description: ${reference.description}`);
@@ -72,7 +75,7 @@ export function renderBrief(
           lines.push(`  - ${file}`);
         }
       }
-    }
+    });
   }
   if (pack.skills.length) {
     lines.push(
@@ -81,19 +84,26 @@ export function renderBrief(
       "Use these supplemental skills when their descriptions match the work in this pack. Read the listed `SKILL.md` before applying a skill's workflow.",
       "",
     );
-    for (const skill of pack.skills) {
+    pack.skills.forEach((skill, index) => {
+      if (index > 0) {
+        lines.push("");
+      }
       lines.push(`- ${skill.name}`);
       if (skill.description) {
         lines.push(`  Description: ${skill.description}`);
       }
       lines.push(`  Path: ${skill.path}`);
-    }
+    });
   }
   lines.push("", "Tasks:");
   if (pack.tasks.length === 0) {
     lines.push("- No tasks in this pack.");
   } else {
-    for (const task of pack.tasks) {
+    const spaceTaskEntries = includeTaskContent && hasDetailedTasks(pack.tasks);
+    pack.tasks.forEach((task, index) => {
+      if (spaceTaskEntries && index > 0) {
+        lines.push("");
+      }
       lines.push(formatTaskSummary(task));
       if (includeTaskContent && task.body) {
         lines.push(`  ${task.body}`);
@@ -104,7 +114,7 @@ export function renderBrief(
           lines.push(`  - ${condition}`);
         }
       }
-    }
+    });
     if (!includeTaskContent) {
       lines.push(
         `Task content is omitted from this brief. Run \`${commandName} show <task-id> --id ${pack.id}\` before working a task.`,
@@ -135,5 +145,9 @@ export function renderSummary(pack: PackState): string {
 }
 
 function formatTaskSummary(task: PackTask): string {
-  return `[${task.status}] ${task.id} - ${task.title}`;
+  return `- [${task.status}] ${task.id} - ${task.title}`;
+}
+
+function hasDetailedTasks(tasks: PackTask[]): boolean {
+  return tasks.some((task) => Boolean(task.body) || Boolean(task.doneWhen?.length));
 }

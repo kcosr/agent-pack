@@ -682,7 +682,7 @@ doneWhen:
     vi.stubEnv("AGENT_PACK_BRIEF_TASK_CONTENT", "false");
     const rendered = await brief("compact-brief");
 
-    expect(rendered).toContain("[pending] t001 - Inspect implementation");
+    expect(rendered).toContain("- [pending] t001 - Inspect implementation");
     expect(rendered).not.toContain("Read the implementation carefully.");
     expect(rendered).not.toContain("Done when:");
     expect(rendered).toContain(
