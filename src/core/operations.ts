@@ -317,7 +317,11 @@ export async function validateCachePaths(pack: PackState, paths: RuntimePaths): 
   }
   if (missing.length) {
     throw new AgentPackError(
-      `cache material missing; run agent-pack sync --id ${pack.id}: ${missing.join(", ")}`,
+      [
+        `cache material missing; run agent-pack sync --id ${pack.id}`,
+        "Missing cache material:",
+        ...missing.map((target) => `- ${target}`),
+      ].join("\n"),
     );
   }
 }

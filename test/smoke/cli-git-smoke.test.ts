@@ -171,6 +171,8 @@ skills:
     await rm(path.join(workspace, ".agent-pack/cache"), { recursive: true, force: true });
     const missing = await runCli(["brief", "--id", "git-pack"], { cwd: workspace, reject: false });
     expect(missing.stderr).toContain("agent-pack sync --id git-pack");
+    expect(missing.stderr).toContain("\nMissing cache material:\n");
+    expect(missing.stderr).toContain("\n- ./.agent-pack/cache/snapshots/");
 
     const never = await runCli(["sync", "--id", "git-pack", "--git-refresh", "never"], {
       cwd: workspace,
@@ -202,8 +204,7 @@ skills:
     "initializes a pack from a live HTTPS git reference",
     async () => {
       const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-live-smoke-"));
-      const repo =
-        process.env.AGENT_PACK_SMOKE_REPO ?? "https://github.com/octocat/Hello-World.git";
+      const repo = process.env.AGENT_PACK_SMOKE_REPO ?? "https://github.com/kcosr/agent-pack.git";
 
       const init = await runCli(
         [
