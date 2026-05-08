@@ -60,21 +60,7 @@ export async function readReferenceFile(filePath: string): Promise<ManifestRefer
   if (!isObject(parsed)) {
     throw new AgentPackError(`reference file must be a string or object: ${filePath}`);
   }
-  assertKnownKeys(parsed, includeKeys, "reference");
-  if (typeof parsed.ref !== "string" || !parsed.ref.trim()) {
-    throw new AgentPackError(`reference ref must be a string: ${filePath}`);
-  }
-  if (parsed.name !== undefined && typeof parsed.name !== "string") {
-    throw new AgentPackError(`reference name must be a string: ${filePath}`);
-  }
-  if (parsed.description !== undefined && typeof parsed.description !== "string") {
-    throw new AgentPackError(`reference description must be a string: ${filePath}`);
-  }
-  return {
-    name: stringValue(parsed.name),
-    description: stringValue(parsed.description),
-    ref: parsed.ref,
-  };
+  return normalizeIncludeObject(parsed, "reference", filePath);
 }
 
 export function normalizeTask(task: unknown, label = "task"): ManifestTask {
@@ -182,10 +168,31 @@ function validateIncludes(value: unknown, label: "references" | "skills", filePa
         `manifest ${label}[${index}] must be a string or object: ${filePath}`,
       );
     }
-    assertKnownKeys(entry, includeKeys, `${label}[${index}]`);
-    if (typeof entry.ref !== "string" || !entry.ref.trim()) {
-      throw new AgentPackError(`manifest ${label}[${index}].ref must be a string: ${filePath}`);
-    }
+    normalizeIncludeObject(entry, `${label}[${index}]`, filePath);
+  }
+}
+
+function normalizeIncludeObject(
+  entry: Record<string, unknown>,
+  label: string,
+  filePath: string,
+): ManifestReference {
+  assertKnownKeys(entry, includeKeys, label);
+  if (typeof entry.ref !== "string" || !entry.ref.trim()) {
+    throw new AgentPackError(`${label}.ref must be a string: ${filePath}`);
+  }
+  validateIncludeString(entry.name, `${label}.name`, filePath);
+  validateIncludeString(entry.description, `${label}.description`, filePath);
+  return {
+    name: stringValue(entry.name),
+    description: stringValue(entry.description),
+    ref: entry.ref,
+  };
+}
+
+function validateIncludeString(value: unknown, label: string, filePath: string): void {
+  if (value !== undefined && typeof value !== "string") {
+    throw new AgentPackError(`${label} must be a string: ${filePath}`);
   }
 }
 

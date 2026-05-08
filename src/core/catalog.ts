@@ -1,7 +1,9 @@
-import { mkdir, readFile, readdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
+import fg from "fast-glob";
 import { AgentPackError } from "./errors.js";
-import { pathExists } from "./fs.js";
+import { ensureDir, pathExists } from "./fs.js";
+import { fileGlobOptions } from "./sources/glob.js";
 import type { CatalogEntry, CatalogType, RuntimePaths } from "./types.js";
 
 const catalogLayouts: Record<CatalogType, { dir: string; suffix: string; fileName?: string }> = {
@@ -10,6 +12,8 @@ const catalogLayouts: Record<CatalogType, { dir: string; suffix: string; fileNam
   reference: { dir: "references", suffix: ".yaml" },
   skill: { dir: "skills", suffix: "", fileName: "SKILL.md" },
 };
+
+export const catalogTypes = Object.keys(catalogLayouts) as CatalogType[];
 
 export function catalogPath(type: CatalogType, name: string, paths: RuntimePaths): string {
   assertCatalogName(name);
@@ -34,10 +38,8 @@ export async function listCatalogEntries(
   paths: RuntimePaths,
   type?: CatalogType,
 ): Promise<CatalogEntry[]> {
-  const types: CatalogType[] = type ? [type] : ["manifest", "task", "reference", "skill"];
-  await Promise.all(
-    types.map((entryType) => mkdir(catalogRoot(paths, entryType), { recursive: true })),
-  );
+  const types: CatalogType[] = type ? [type] : catalogTypes;
+  await Promise.all(types.map((entryType) => ensureDir(catalogRoot(paths, entryType))));
   const entries = (
     await Promise.all(types.map(async (entryType) => listCatalogType(paths, entryType)))
   ).flat();
@@ -83,40 +85,28 @@ async function listCatalogType(paths: RuntimePaths, type: CatalogType): Promise<
   if (!(await pathExists(root))) {
     return [];
   }
-  const files = await walkFiles(root);
-  return files
-    .filter((file) => isCatalogFile(type, file))
-    .map((file) => ({
-      type,
-      name: catalogNameForFile(type, root, file),
-      path: file,
-    }));
+  const files = await fg(catalogGlob(type), {
+    cwd: root,
+    absolute: true,
+    ...fileGlobOptions,
+  });
+  return files.map((file) => ({
+    type,
+    name: catalogNameForFile(type, root, file),
+    path: file,
+  }));
 }
 
 function catalogRoot(paths: RuntimePaths, type: CatalogType): string {
   return path.join(paths.configDir, catalogLayouts[type].dir);
 }
 
-async function walkFiles(root: string): Promise<string[]> {
-  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
-  const files = await Promise.all(
-    entries.map(async (entry) => {
-      const absPath = path.join(root, entry.name);
-      if (entry.isDirectory()) {
-        return walkFiles(absPath);
-      }
-      return entry.isFile() ? [absPath] : [];
-    }),
-  );
-  return files.flat();
-}
-
-function isCatalogFile(type: CatalogType, filePath: string): boolean {
+function catalogGlob(type: CatalogType): string {
   const layout = catalogLayouts[type];
   if (layout.fileName) {
-    return path.basename(filePath) === layout.fileName;
+    return `**/${layout.fileName}`;
   }
-  return filePath.endsWith(layout.suffix);
+  return `**/*${layout.suffix}`;
 }
 
 function catalogNameForFile(type: CatalogType, root: string, filePath: string): string {

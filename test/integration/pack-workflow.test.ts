@@ -334,6 +334,24 @@ references:
     ).rejects.toThrow("tasks[0].unknownNested");
   });
 
+  it("rejects invalid manifest include metadata", async () => {
+    await writeFile(
+      "pack.yaml",
+      `schemaVersion: 1
+references:
+  - name: 123
+    ref: ./README.md`,
+    );
+
+    await expect(
+      initPack({
+        id: "bad-include-metadata",
+        includes: [{ type: "manifest", ref: "./pack.yaml" }],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow("references[0].name must be a string");
+  });
+
   it("rejects invalid contract shapes", async () => {
     await writeFile(
       "pack.yaml",

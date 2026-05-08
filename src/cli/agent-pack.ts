@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Argument, Command, Option } from "commander";
 import { renderReport, renderSummary, renderTask } from "../core/brief/render.js";
+import { catalogTypes } from "../core/catalog.js";
 import { AgentPackError } from "../core/errors.js";
 import {
   brief,
@@ -383,15 +384,11 @@ function configureCatalogCommands(root: Command): void {
 }
 
 function catalogTypeOption(): Option {
-  return new Option("--type <type>", "catalog entry type").choices(catalogTypes());
+  return new Option("--type <type>", "catalog entry type").choices(catalogTypes);
 }
 
 function catalogTypeArgument() {
-  return new Argument("<type>", "catalog entry type").choices(catalogTypes());
-}
-
-function catalogTypes(): CatalogType[] {
-  return ["manifest", "task", "reference", "skill"];
+  return new Argument("<type>", "catalog entry type").choices(catalogTypes);
 }
 
 function collectInclude(includes: InitInclude[], toInclude: (value: string) => InitInclude) {

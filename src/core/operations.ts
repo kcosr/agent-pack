@@ -336,16 +336,7 @@ export async function updateTask(
 export function status(): SystemStatus {
   const store = new StateStore();
   return {
-    cwd: store.paths.cwd,
-    repoRoot: store.paths.repoRoot,
-    configDir: store.paths.configDir,
-    stateDir: store.paths.stateDir,
-    cacheDir: store.paths.cacheDir,
-    gitCacheDir: store.paths.gitCacheDir,
-    packDir: store.paths.packDir,
-    eventDir: store.paths.eventDir,
-    lockDir: store.paths.lockDir,
-    indexPath: store.paths.indexPath,
+    ...store.paths,
     defaultPackId: process.env.AGENT_PACK_ID,
   };
 }
