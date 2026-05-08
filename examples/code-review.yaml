@@ -1,0 +1,288 @@
+schemaVersion: 1
+name: code-review
+instructions: |
+  Perform a standalone code review of the target repository. The user should
+  provide the review scope in the pack prompt, for example "full repository",
+  "unstaged changes", "staged changes", "last commit", or a concrete git range.
+
+  You are reviewing code, not modifying it. Use read-only commands to inspect
+  the repository, including grep, rg, cat, git diff, git show, git log, and
+  source-file reads when they help validate a finding. Do not run tests or
+  destructive commands.
+
+  For every finding, use this format in task notes:
+
+      [SEVERITY] path:line - short title
+        Observation: what you actually saw in the code.
+        Why it matters: the concrete failure mode, blast radius, or symptom.
+        Suggested fix: a concrete change the maintainer can make.
+
+  Severity guide:
+
+      CRITICAL: data loss, security hole, deadlock, broken core invariant.
+      HIGH: wrong behavior, credible race, missing error handling on a real path.
+      MEDIUM: fragile design, meaningful duplication, missing test for risky code.
+      LOW: minor inconsistency, dead code, small maintenance issue.
+      NIT: pure style preference; use sparingly.
+
+  Be honest. A dimension with no real issues should say "No issues found in this
+  dimension." Do not pad the review with weak findings.
+
+tasks:
+  - id: orient
+    title: Orient to the repository and resolve scope
+    category: review
+    body: |
+      Understand the project before reviewing details.
+
+      Read the high-signal entry points:
+        - AGENTS.md, CLAUDE.md, CONTRIBUTING.md, and README files
+        - Build manifests such as package.json, Cargo.toml, go.mod, pyproject.toml
+        - docs/, doc/, documentation/, or guides/ directories
+        - Primary entry points such as CLI mains, library indexes, HTTP handlers,
+          worker loops, or files named by the build manifest
+
+      Resolve the review scope from the pack prompt:
+        - full repository: review the whole codebase
+        - unstaged changes: inspect `git diff`
+        - staged changes: inspect `git diff --cached`
+        - last commit: inspect `git show HEAD`
+        - git range: inspect `git diff <range>`
+
+      For scoped reviews, capture touched files and read each touched file in
+      full, not only the diff, so findings are grounded in surrounding context.
+    doneWhen:
+      - Notes summarize the project, major modules, and review scope.
+      - For scoped reviews, Notes list the concrete files or hunks reviewed.
+
+  - id: architecture
+    title: Architecture and module boundaries
+    category: review
+    body: |
+      Review module layout and component boundaries.
+
+      Look for modules doing more than one thing, layer violations, circular
+      dependencies, abstractions that do not carry their weight, missing
+      abstractions where sibling modules duplicate logic, inverted dependencies,
+      and asymmetries between sibling modules that suggest one side is wrong.
+
+      For changed shared paths, verify sibling behavior stays explicit: parsers,
+      dispatchers, request/response builders, state reducers, serializers,
+      config loaders, lifecycle handlers, database access layers, and UI state
+      transitions often serve more than the feature under review.
+    doneWhen:
+      - Notes list architecture findings or explicitly say none were found.
+
+  - id: concurrency
+    title: Concurrency and async safety
+    category: review
+    body: |
+      Look for swallowed promise/future rejections, empty catch blocks, races on
+      shared mutable state, listeners that are not removed, timers that are not
+      cleared, cancellation paths that fire after settlement, child processes or
+      sockets that survive failures, `Promise.race` or select patterns where the
+      losing branch keeps running, forgotten awaits, and accidental serial waits
+      where parallelism is required.
+
+      Pay special attention to backend adapters, subprocess wrappers, queue
+      processors, file watchers, long-lived loops, and request handlers.
+    doneWhen:
+      - Notes list concurrency findings or explicitly say none were found.
+
+  - id: error-handling
+    title: Error handling and edge cases
+    category: review
+    body: |
+      For each user-visible operation in scope, ask what happens when it fails.
+
+      Walk malformed config, missing files, permission errors, network failures,
+      subprocess non-zero exits, subprocess crashes, subprocess hangs, empty input,
+      concurrent writers, disk-full/EIO during writes, and partial state left on
+      disk after failure.
+
+      Check that errors are actionable and include enough context for a user to
+      fix the problem. For changed shared paths, look for ordering bugs where
+      values are captured, cached, projected, or persisted before validation and
+      normalization have completed.
+    doneWhen:
+      - Notes list error-handling findings or explicitly say none were found.
+
+  - id: state-machine
+    title: State machine and lifecycle correctness
+    category: review
+    body: |
+      Identify explicit and implicit state machines: persisted status enums,
+      session lifecycles, build phases, retries, resume/abort flows, resource
+      acquire/release cycles, and workflow status transitions.
+
+      Check whether all states are reachable, illegal transitions are rejected,
+      failure mid-transition leaves a coherent persisted state, and status fields
+      cannot become stale relative to reality.
+    doneWhen:
+      - Notes list lifecycle findings or explicitly say none were found.
+
+  - id: resources
+    title: Resource management and cleanup
+    category: review
+    body: |
+      Review code that allocates non-memory resources: file handles, streams,
+      child processes, sockets, WebSockets, database connections, temporary files,
+      temporary directories, caches, log buffers, and long-lived maps.
+
+      Trace the guaranteed release path on success and every failure mode. Long-
+      lived programs cannot rely on process exit for cleanup. Also flag unbounded
+      growth without a cap or retention policy.
+    doneWhen:
+      - Notes list resource findings or explicitly say none were found.
+
+  - id: security
+    title: Security and untrusted input
+    category: review
+    body: |
+      Identify trust boundaries: CLI args, env vars, config files, files written
+      by another process or agent, HTTP/RPC request bodies, user-supplied regexes,
+      search queries, and prompts sent to AI systems.
+
+      Trace whether untrusted input becomes a shell command, file path, prompt,
+      regex, dynamic import, eval target, log line, persisted secret, or error
+      message. Look for command injection, path traversal, symlink following,
+      prompt injection exposure, ReDoS, leaked secrets, and unsafe dynamic code.
+    doneWhen:
+      - Notes list security findings or explicitly say none were found.
+
+  - id: types-schema
+    title: Type safety and schema rigor
+    category: review
+    body: |
+      Check whether the type system and schemas are load-bearing.
+
+      Look for unjustified `any`, `unknown as`, ts-ignore, unsafe blocks, broad
+      interfaces, untyped JSON.parse results, unvalidated YAML/JSON/config files,
+      discriminated unions with implicit fall-through, optional fields treated as
+      required, schemas that silently drop unknown fields, and versioned payloads
+      that can be silently misread.
+    doneWhen:
+      - Notes list type/schema findings or explicitly say none were found.
+
+  - id: simplification-duplication
+    title: Simplification and duplication
+    category: review
+    body: |
+      Look for code more complex than the problem it solves: functions doing
+      multiple unrelated things, class hierarchies where plain functions or tagged
+      unions would do, long conditional chains better expressed as a map, clever
+      stringly typed registries, forwarding wrappers, and premature caches or
+      pools.
+
+      Also look for duplicated logic whose invariants must stay in sync:
+      repeated computations, parallel code paths with one changed parameter,
+      copy-pasted error handling, duplicate validation in schemas and runtime
+      checks, and duplicated cross-language types.
+
+      Cite every duplicate instance and propose the extraction point or simpler
+      shape.
+    doneWhen:
+      - Notes list simplification or duplication findings, or explicitly say none were found.
+
+  - id: test-coverage
+    title: Test coverage gaps
+    category: review
+    body: |
+      Inspect the test suite and identify the project test command, but do not
+      run tests unless the user explicitly asks you to.
+
+      Check whether fragile areas flagged in earlier tasks have tests: async
+      error handlers, boundary cases, lifecycle interactions, retries, resume,
+      abort, cleanup, schema validation, changed shared paths, and sibling
+      behaviors that reuse the same parser, dispatcher, reducer, serializer,
+      config loader, lifecycle handler, database layer, or UI transition.
+    doneWhen:
+      - Notes identify the relevant test command if one exists.
+      - Notes list meaningful coverage gaps or explicitly say none were found.
+
+  - id: docs-drift
+    title: Documentation accuracy within the code review
+    category: review
+    body: |
+      Compare code in scope against docs that describe it.
+
+      Check field names, config keys, CLI flags, examples, paths, status enum
+      values, and behavior claims. Stale claims are higher severity than missing
+      docs because they actively mislead users. Keep this pass focused on
+      contradictions and inaccuracies; a full documentation review belongs in the
+      docs-review pack.
+    doneWhen:
+      - Notes list docs drift findings or explicitly say none were found.
+
+  - id: surface-completeness
+    title: Surface completeness
+    category: review
+    body: |
+      Walk each user-facing surface element introduced, modified, or removed by
+      the scope: CLI flags, positionals, subcommands, HTTP routes, RPC methods,
+      env vars, config keys, UI labels, public exports, and persisted fields shown
+      in user-facing output.
+
+      For each surface, trace:
+        1. Declaration or parser where the value enters.
+        2. Consumer where business logic reads it.
+        3. Integration test exercising the outermost entry point.
+
+      For removed surfaces, grep for old names and ensure live runtime paths are
+      gone. For symmetric peers, verify aligned behavior or an explicit contract
+      explaining asymmetry.
+    doneWhen:
+      - Notes list surface completeness findings or explicitly say none were found.
+
+  - id: synthesis
+    title: Top findings synthesis
+    category: synthesis
+    body: |
+      Read back through all review task notes and build a single ranked list of
+      the top 10 highest-leverage findings. Order by severity and then impact.
+      Each entry must cite the original file:line from the finding.
+
+      If fewer than 10 real issues exist, list the real issues and stop. Include
+      one sentence on overall project health, the single highest-leverage refactor
+      if one exists, and a one-sentence recommendation using exactly one of:
+      "ship", "ship with changes", or "block".
+    doneWhen:
+      - Notes contain a ranked findings list or state that no real issues were found.
+      - Notes include overall health, highest-leverage refactor if any, and recommendation.
+
+  - id: approval
+    title: Ship or block decision
+    category: gate
+    body: |
+      Make the final review decision.
+
+      Block if any HIGH or CRITICAL finding is unresolved, if synthesis says
+      "ship with changes" or "block", or if you could not trace a suspected issue
+      deeply enough to judge whether it is real. Complete only if the synthesis
+      recommendation is "ship" and you would personally stand behind the reviewed
+      code landing as-is.
+
+      Write one of these records in Notes:
+
+          APPROVED for ship.
+          Rationale: <one to three sentences.>
+          Residual findings: <open MEDIUM/LOW items accepted by the caller, or "none".>
+
+          BLOCKED -- cannot approve.
+          Unresolved: <specific blocking findings with file:line citations.>
+          Path to approval: <concrete fixes or decisions needed for approval.>
+    doneWhen:
+      - Notes contain either an APPROVED or BLOCKED decision record.
+
+contract:
+  do:
+    - Review code by reading the relevant files, not only summaries or diffs.
+    - Cite file paths and line numbers for every finding.
+    - Record findings in the task notes for the dimension where they were found.
+    - Keep synthesis grounded in findings already recorded in task notes.
+  dont:
+    - Modify files in the reviewed repository.
+    - Run tests unless the user explicitly asks you to.
+    - Invent findings to make the review look comprehensive.
+    - Treat stylistic preferences as correctness issues.
+    - Mark approval complete when unresolved HIGH or CRITICAL findings remain.

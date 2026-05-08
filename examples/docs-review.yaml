@@ -1,0 +1,220 @@
+schemaVersion: 1
+name: docs-review
+instructions: |
+  Perform a documentation review of the target repository. Review the docs
+  against the actual code and project behavior. You are reviewing documentation,
+  not rewriting it. Do not modify files in the reviewed repository.
+
+  Use read-only commands to verify claims: rg, grep, cat, git show, git log,
+  package scripts, CLI help, build metadata, and source files. A documentation
+  finding should be grounded in what the docs say and what the repo actually
+  does.
+
+  For every finding, use this format in task notes:
+
+      [SEVERITY] doc_path:line - short title
+        Observation: what the documentation currently says.
+        What's wrong: the inaccuracy, gap, unclear claim, drift, or missing context.
+        Suggested fix: concrete replacement wording or a precise description of what to add.
+
+  Severity guide:
+
+      CRITICAL: actively misleading or unrunnable, such as a broken quickstart.
+      HIGH: significant gap, such as an undocumented feature most users need.
+      MEDIUM: clarity problem, incomplete example, confusing order, terminology drift.
+      LOW: minor inconsistency, stale link, small typo, or small factual issue.
+      NIT: pure style preference; use sparingly.
+
+  Be honest. A dimension with no real issues should say "No issues found in this
+  dimension." Do not pad the review with weak findings.
+
+tasks:
+  - id: inventory
+    title: Inventory documentation and public surface
+    category: review
+    body: |
+      Find every documentation surface:
+        - README files at the root and in subdirectories
+        - docs/, doc/, documentation/, guides/, website, or man page sources
+        - AGENTS.md, CLAUDE.md, CONTRIBUTING.md, CHANGELOG.md, SECURITY.md
+        - User-facing module docstrings or generated API docs
+
+      Also inventory enough code surface to know what the docs should cover:
+        - Build manifests and scripts
+        - CLI entry points, subcommands, flags, env vars, and exit codes
+        - Public library exports, HTTP/RPC routes, config schemas, and examples
+    doneWhen:
+      - Notes list the docs found and the code surface used for comparison.
+
+  - id: elevator-pitch
+    title: README elevator pitch and framing
+    category: review
+    body: |
+      Read the README opening. A new reader should quickly know what the project
+      is, what problem it solves, who it is for, and what it is not when that
+      boundary is non-obvious.
+
+      Check for buried lead, unexplained jargon, vague "framework/tool for X"
+      language, claims that require project knowledge to parse, and a missing
+      reason to use this instead of the obvious alternative.
+    doneWhen:
+      - Notes list framing findings or explicitly say none were found.
+
+  - id: quickstart
+    title: Quickstart runnability and completeness
+    category: review
+    body: |
+      Review the quickstart or getting-started path. A good quickstart lets a new
+      reader copy commands and see concrete results within a few minutes.
+
+      Check prerequisites, install steps, binary names, command order, argument
+      order, flags, environment variables, missing setup, missing expected output,
+      and whether the first example is minimal enough to be useful.
+
+      Broken quickstart commands are CRITICAL. Verify against code before
+      flagging.
+    doneWhen:
+      - Notes list quickstart findings or explicitly say none were found.
+
+  - id: concepts
+    title: Conceptual clarity and terminology
+    category: review
+    body: |
+      Check whether domain terms are introduced before use, terminology is
+      consistent, the docs' mental model matches the code, and relationships
+      between concepts are clear.
+
+      Flag cases where the docs imply one entity is a kind of another while the
+      code treats them as siblings, or where several names are used for the same
+      thing without explanation.
+    doneWhen:
+      - Notes list conceptual clarity findings or explicitly say none were found.
+
+  - id: commands-flags-api
+    title: Commands, flags, and API reference accuracy
+    category: review
+    body: |
+      Verify every documented CLI command, flag, function signature, config key,
+      env var, HTTP endpoint, RPC method, schema field, default, and exit code
+      against the code.
+
+      For each inaccuracy, cite both sides: the doc line and the code line. Drift
+      here is CRITICAL when it sends users down a broken path.
+    doneWhen:
+      - Notes list command/API drift findings or explicitly say none were found.
+
+  - id: examples
+    title: Examples, tutorials, and recipes
+    category: review
+    body: |
+      Walk every runnable example: shell commands, config files, code snippets,
+      curl calls, tutorials, and recipes.
+
+      Check that commands and flags exist, paths are real, setup is complete,
+      examples show enough output for success to be recognizable, and advanced
+      examples demonstrate genuinely advanced behavior rather than padding.
+
+      Broken examples are CRITICAL.
+    doneWhen:
+      - Notes list example findings or explicitly say none were found.
+
+  - id: completeness
+    title: Completeness and undocumented features
+    category: review
+    body: |
+      Compare the code surface from inventory against the docs. Identify features
+      missing entirely or mentioned only in passing: subcommands, config fields,
+      env vars, lifecycle behavior, resume/cleanup/abort behavior, retries,
+      safety guardrails, backend differences, error codes, and common failure
+      modes.
+
+      Missing docs for a real feature are usually HIGH. Stale docs that contradict
+      reality are usually CRITICAL.
+    doneWhen:
+      - Notes list completeness findings or explicitly say none were found.
+
+  - id: structure-navigation
+    title: Structure and navigation
+    category: review
+    body: |
+      Review the documentation structure. Check whether section order serves a new
+      reader, table of contents and headings match the content, important material
+      is not buried, subsections are findable, and related docs have a clear
+      canonical relationship.
+
+      Check cross-references: if a doc points to another file, verify that file
+      exists and covers what was promised.
+    doneWhen:
+      - Notes list structure findings or explicitly say none were found.
+
+  - id: diagrams
+    title: Diagram opportunities
+    category: review
+    body: |
+      Identify places where a diagram would materially improve understanding.
+
+      Favor:
+        - Component architecture diagrams for multi-subsystem projects.
+        - Sequence diagrams for flows crossing layers, such as init, resume,
+          cancellation, retry, or request handling.
+        - State diagrams for lifecycle enums and status transitions.
+
+      Only propose diagrams that add information. For each proposal, name the doc
+      file and target section, provide a ready-to-paste mermaid block, and include
+      a one-sentence caption.
+    doneWhen:
+      - Notes list useful diagram proposals or say no diagrams would add value.
+
+  - id: voice-consistency
+    title: Voice, tone, and formatting consistency
+    category: review
+    body: |
+      Read the docs end-to-end for voice drift, pronoun inconsistency, formatting
+      inconsistency, code fences without language tags, tables where prose would
+      be clearer, and prose where a table would be clearer.
+
+      This is a low-severity dimension. Skip pure preference and only flag issues
+      a reader would actually notice.
+    doneWhen:
+      - Notes list voice/format findings or explicitly say none were found.
+
+  - id: accessibility-assumed-knowledge
+    title: Accessibility and assumed knowledge
+    category: review
+    body: |
+      Check whether the docs meet the intended reader where they are.
+
+      Look for unexplained jargon, acronyms without expansion, assumed tooling or
+      cloud knowledge, commands that only work on one platform without saying so,
+      screenshots or diagrams without text equivalents, and steps that are only
+      obvious to someone who already knows the project.
+    doneWhen:
+      - Notes list accessibility or assumed-knowledge findings, or explicitly say none were found.
+
+  - id: synthesis
+    title: Top documentation findings synthesis
+    category: synthesis
+    body: |
+      Read back through all documentation review task notes and build a single
+      ranked list of the top 10 highest-leverage findings. Order by severity and
+      then impact. Each entry must cite the original doc path and line.
+
+      If fewer than 10 real issues exist, list the real issues and stop. Include
+      one sentence on the docs' overall health, the highest-leverage fix if one
+      exists, and a short list of diagram proposals with target sections.
+    doneWhen:
+      - Notes contain a ranked findings list or state that no real issues were found.
+      - Notes include overall health, highest-leverage fix if any, and diagram proposal summary.
+
+contract:
+  do:
+    - Verify documentation claims against the code or runnable help output.
+    - Cite doc paths and line numbers for every finding.
+    - Quote replacement wording when a short concrete replacement is possible.
+    - Keep findings focused on user impact.
+  dont:
+    - Modify documentation during the review.
+    - Run tests unless the user explicitly asks you to.
+    - Pad the review with style preferences.
+    - Flag docs as wrong before checking whether the code actually supports the claim.
+    - Treat missing docs as worse than actively misleading stale docs.
