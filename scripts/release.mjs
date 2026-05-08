@@ -51,7 +51,7 @@ run("git", ["tag", `v${version}`]);
 run("npm", ["publish", "--access", "public"]);
 run("git", ["push", "origin", "main"]);
 run("git", ["push", "origin", `v${version}`]);
-run("gh", ["release", "create", `v${version}`, "--prerelease", "--generate-notes"]);
+run("gh", ["release", "create", `v${version}`, "--generate-notes"]);
 
 const next = released.replace(
   "# Changelog",
