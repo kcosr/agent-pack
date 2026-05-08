@@ -33,6 +33,14 @@ describe("extractSkillMetadata", () => {
     });
   });
 
+  it("reports malformed frontmatter YAML", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "agent-pack-skill-"));
+    const skillPath = path.join(dir, "SKILL.md");
+    await writeFile(skillPath, "---\nname: [unterminated\n---\n# Bad\n");
+
+    await expect(extractSkillMetadata(skillPath)).rejects.toThrow("malformed skill frontmatter");
+  });
+
   it("falls back to heading and first paragraph", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "agent-pack-skill-"));
     const skillPath = path.join(dir, "SKILL.md");

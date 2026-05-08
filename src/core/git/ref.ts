@@ -46,16 +46,29 @@ export function parseGitRef(ref: string): GitRef {
   }
 
   const url = raw.slice(0, separator);
-  const pathInRepo = path.posix.normalize(raw.slice(separator + 2).replace(/^\/+/, ""));
+  const pathInRepo = normalizeGitPathInRepo(raw.slice(separator + 2).replace(/^\/+/, ""), ref);
   if (!url || !pathInRepo) {
     throw new AgentPackError(`invalid git reference: ${ref}`);
   }
   validateGitUrl(url, ref);
   validateGitRefName(requestedRef, ref);
-  if (pathInRepo === "." || pathInRepo.startsWith("../") || pathInRepo === "..") {
-    throw new AgentPackError(`git reference path escapes repository: ${ref}`);
-  }
   return { url, pathInRepo, requestedRef };
+}
+
+export function normalizeGitPathInRepo(value: string, label: string): string {
+  if (
+    !value ||
+    value.includes("\0") ||
+    path.posix.isAbsolute(value) ||
+    value.split("/").includes("..")
+  ) {
+    throw new AgentPackError(`git reference path escapes repository: ${label}`);
+  }
+  const normalized = path.posix.normalize(value);
+  if (normalized === "." || normalized === ".." || normalized.startsWith("../")) {
+    throw new AgentPackError(`git reference path escapes repository: ${label}`);
+  }
+  return normalized;
 }
 
 function validateGitUrl(url: string, originalRef: string): void {

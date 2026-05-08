@@ -480,6 +480,12 @@ unknown: true`,
     await expect(status("bad-reference-state")).rejects.toThrow("source.path");
   });
 
+  it("rejects persisted git source paths that escape snapshots", async () => {
+    await writeGitPackState("escaped-git-path", "aaaaaaaaaaaaaaaa", "../outside.md");
+
+    await expect(status("escaped-git-path")).rejects.toThrow("escapes repository");
+  });
+
   it("lists valid orphan pack files missing from the index", async () => {
     await mkdir(".agent-pack/state/packs", { recursive: true });
     await writeFile(
@@ -717,6 +723,16 @@ unknown: true`,
     ).rejects.toThrow("URL references must not include credentials");
   });
 
+  it("rejects reference globs that match no files", async () => {
+    await expect(
+      initPack({
+        id: "empty-reference-glob",
+        includes: [{ type: "reference", ref: { ref: "./docs/**/*.md" } }],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow("reference source matched no files");
+  });
+
   it("can omit task content from rendered briefs through the environment", async () => {
     await writeFile(
       "task.yaml",
@@ -814,7 +830,7 @@ function packLockPath(id: string): string {
   return path.join(paths.lockDir, `${namespace}-pack-${id}.lock`);
 }
 
-async function writeGitPackState(id: string, repoHash: string): Promise<void> {
+async function writeGitPackState(id: string, repoHash: string, sourcePath?: string): Promise<void> {
   await mkdir(".agent-pack/state/packs", { recursive: true });
   await writeFile(
     `.agent-pack/state/packs/${id}.json`,
@@ -837,6 +853,7 @@ async function writeGitPackState(id: string, repoHash: string): Promise<void> {
             resolvedRef: "main",
             resolvedCommit: "commit",
             repoHash,
+            path: sourcePath,
           },
           rootPath: `./.agent-pack/cache/snapshots/${repoHash}/commit`,
         },

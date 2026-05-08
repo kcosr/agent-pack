@@ -27,7 +27,13 @@ function parseFrontmatter(
   if (end < 0) {
     return {};
   }
-  const parsed = YAML.parse(content.slice(4, end));
+  let parsed: unknown;
+  try {
+    parsed = YAML.parse(content.slice(4, end));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new AgentPackError(`malformed skill frontmatter in ${filePath}: ${detail}`);
+  }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new AgentPackError(`skill frontmatter must be a YAML object: ${filePath}`);
   }

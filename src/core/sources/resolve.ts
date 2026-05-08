@@ -68,6 +68,9 @@ async function resolveLocalReference(
       cwd: paths.repoRoot,
       ...fileGlobOptions,
     });
+    if (matches.length === 0) {
+      throw new AgentPackError(`reference source matched no files: ${entry.ref}`);
+    }
     return {
       name,
       description: entry.description,
@@ -163,6 +166,9 @@ async function resolveGitReference(
       cwd: materialized.snapshotRootAbs,
       ...fileGlobOptions,
     });
+    if (matches.length === 0) {
+      throw new AgentPackError(`reference source matched no files: ${entry.ref}`);
+    }
     return {
       name,
       description: entry.description,

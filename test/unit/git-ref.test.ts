@@ -36,6 +36,9 @@ describe("parseGitRef", () => {
     expect(() => parseGitRef("git+https://github.com/org/repo.git//../secret#main")).toThrow(
       "escapes repository",
     );
+    expect(() => parseGitRef("git+https://github.com/org/repo.git//docs/../secret#main")).toThrow(
+      "escapes repository",
+    );
   });
 
   it("removes credentials from persisted git URLs", () => {

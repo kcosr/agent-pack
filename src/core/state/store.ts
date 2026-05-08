@@ -10,6 +10,7 @@ import {
   readJson,
   writeJson,
 } from "../fs.js";
+import { normalizeGitPathInRepo } from "../git/ref.js";
 import { lockNamespace, withDirectoryLock } from "../lock.js";
 import { resolveRuntimePaths } from "../paths.js";
 import type { PackState, RuntimePaths, TaskCounts, TaskStatus } from "../types.js";
@@ -446,6 +447,9 @@ function validateSource(value: unknown, label: string, filePath: string): void {
     validateRequiredString(value.repoHash, `${label}.repoHash`, filePath);
     validateOptionalString(value.requestedRef, `${label}.requestedRef`, filePath);
     validateOptionalString(value.path, `${label}.path`, filePath);
+    if (typeof value.path === "string") {
+      normalizeGitPathInRepo(value.path, `${label}.path in ${filePath}`);
+    }
     return;
   }
   if (value.kind === "url") {
