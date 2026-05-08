@@ -12,7 +12,7 @@ instructions: |
 
   Create one markdown file as the deliverable. If the prompt names an output
   path, use that path. Otherwise create
-  `docs/design/design-summary-<kebab-feature-slug>.md` when `docs/` exists, or
+  `docs/design/design-summary-<kebab-feature-slug>.md` when `docs/design/` exists, or
   `design-summary-<kebab-feature-slug>.md` at the repo root when it does not.
   Do not create task-runner assignments, task-runner attachments, worktrees,
   implementation branches, commits, or PRs.
@@ -219,7 +219,7 @@ tasks:
     body: |
       Create the markdown summary file. If the prompt names an output path, use
       that path. Otherwise use `docs/design/design-summary-<kebab-feature-slug>.md`
-      when `docs/` exists, or `design-summary-<kebab-feature-slug>.md` at the
+      when `docs/design/` exists, or `design-summary-<kebab-feature-slug>.md` at the
       repo root when it does not.
 
       Render the required sections from prior task notes:

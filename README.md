@@ -589,7 +589,7 @@ source <(agent-pack completion script zsh)
 agent-pack completion script fish | source
 ```
 
-Completions suggest catalog names for `--manifest`, `--task`, `--reference`, and `--skill`, plus `catalog show|path` names. When the current word starts with `/`, `./`, `../`, `~`, or `~/`, catalog completion returns no candidates so normal shell file completion can be used.
+Completions suggest command names, subcommands, option names, known enum values such as `--git-refresh auto|always|never` and `catalog list --type manifest|task|reference|skill`, shell names for `completion`, catalog names for `--manifest`, `--task`, `--reference`, and `--skill`, plus `catalog show|path` names. When the current word starts with `/`, `./`, `../`, `~`, or `~/`, catalog completion returns no candidates so normal shell file completion can be used.
 
 ## Manifests
 

@@ -34,7 +34,10 @@ describe("agent-pack CLI git smoke", () => {
     expect(list.stdout).toContain("manifest\tdemo\t");
     expect(list.stdout).toContain("manifest\tdocs-review\t");
 
-    const candidates = await runCli(["__complete", "manifest", "do"], { cwd: workspace, env });
+    const candidates = await runCli(["__complete", "do", "init", "--manifest"], {
+      cwd: workspace,
+      env,
+    });
     expect(candidates.stdout).toBe("docs-review\n");
   });
 
@@ -323,32 +326,94 @@ references:
 
     const script = await runCli(["completion", "script", "bash"], { cwd: workspace, env });
     expect(script.stdout).toContain("complete -o default -o bashdefault -F");
-    expect(script.stdout).toContain("agent-pack __complete");
-    expect(script.stdout).toContain("--type)");
+    expect(script.stdout).toContain('agent-pack __complete -- "$cur"');
 
     const zshScript = await runCli(["completion", "script", "zsh"], { cwd: workspace, env });
     expect(zshScript.stdout).toContain("compdef _agent_pack agent-pack");
-    expect(zshScript.stdout).toContain("--type) _describe 'catalog type' catalog_types");
+    expect(zshScript.stdout).toContain('agent-pack __complete -- "$current"');
 
     const fishScript = await runCli(["completion", "script", "fish"], { cwd: workspace, env });
-    expect(fishScript.stdout).toContain("__fish_prev_arg_in --type");
-    expect(fishScript.stdout).toContain(
-      "__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from show; and __fish_seen_subcommand_from manifest",
-    );
+    expect(fishScript.stdout).toContain("function __agent_pack_complete");
+    expect(fishScript.stdout).toContain('agent-pack __complete -- "$current"');
 
-    const manifestCandidates = await runCli(["__complete", "manifest", "review/"], {
+    const topLevelCandidates = await runCli(["__complete", ""], { cwd: workspace, env });
+    expect(topLevelCandidates.stdout).toContain("init\n");
+    expect(topLevelCandidates.stdout).toContain("task\n");
+
+    const taskSubcommandCandidates = await runCli(["__complete", "d", "task"], {
+      cwd: workspace,
+      env,
+    });
+    expect(taskSubcommandCandidates.stdout).toBe("done\n");
+
+    const initOptionCandidates = await runCli(["__complete", "--", "--mani", "init"], {
+      cwd: workspace,
+      env,
+    });
+    expect(initOptionCandidates.stdout).toBe("--manifest\n--manifests\n");
+
+    const taskOptionCandidates = await runCli(["__complete", "--", "--", "task", "done"], {
+      cwd: workspace,
+      env,
+    });
+    expect(taskOptionCandidates.stdout).toContain("--id\n");
+    expect(taskOptionCandidates.stdout).toContain("--note\n");
+
+    const gitRefreshCandidates = await runCli(["__complete", "au", "sync", "--git-refresh"], {
+      cwd: workspace,
+      env,
+    });
+    expect(gitRefreshCandidates.stdout).toBe("auto\n");
+
+    const gitRefreshEqualsCandidates = await runCli(
+      ["__complete", "--", "--git-refresh=au", "sync"],
+      {
+        cwd: workspace,
+        env,
+      },
+    );
+    expect(gitRefreshEqualsCandidates.stdout).toBe("--git-refresh=auto\n");
+
+    const catalogTypeCandidates = await runCli(["__complete", "m", "catalog", "list", "--type"], {
+      cwd: workspace,
+      env,
+    });
+    expect(catalogTypeCandidates.stdout).toBe("manifest\n");
+
+    const catalogSubcommandCandidates = await runCli(["__complete", "p", "catalog"], {
+      cwd: workspace,
+      env,
+    });
+    expect(catalogSubcommandCandidates.stdout).toBe("path\n");
+
+    const shellCandidates = await runCli(["__complete", "b", "completion", "script"], {
+      cwd: workspace,
+      env,
+    });
+    expect(shellCandidates.stdout).toBe("bash\n");
+
+    const manifestCandidates = await runCli(["__complete", "review/", "init", "--manifest"], {
       cwd: workspace,
       env,
     });
     expect(manifestCandidates.stdout).toBe("review/code-review\n");
 
-    const taskCandidates = await runCli(["__complete", "task", "review/s"], {
+    const taskCandidates = await runCli(["__complete", "review/s", "init", "--task"], {
       cwd: workspace,
       env,
     });
     expect(taskCandidates.stdout).toBe("review/security\n");
 
-    const pathCandidates = await runCli(["__complete", "task", "./tasks"], {
+    const catalogNameCandidates = await runCli(
+      ["__complete", "review/", "catalog", "show", "manifest"],
+      {
+        cwd: workspace,
+        env,
+      },
+    );
+    expect(catalogNameCandidates.stdout).toBe("review/code-review\n");
+
+    const pathCandidates = await runCli(["__complete", "./tasks", "init", "--task"], {
       cwd: workspace,
       env,
     });

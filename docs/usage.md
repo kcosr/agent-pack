@@ -146,7 +146,7 @@ source <(agent-pack completion script zsh)
 agent-pack completion script fish | source
 ```
 
-Run `agent-pack completion` for detected-shell instructions. Completion suggests catalog names for `--manifest`, `--task`, `--reference`, and `--skill`; explicit path prefixes fall back to normal file completion.
+Run `agent-pack completion` for detected-shell instructions. Completion suggests command names, subcommands, option names, known enum values, shell names for `completion`, and catalog names for catalog-backed refs; explicit path prefixes fall back to normal file completion.
 
 Git refs use this shape. See the README for the full list of supported URL forms:
 
