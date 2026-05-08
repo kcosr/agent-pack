@@ -164,6 +164,20 @@ export interface RuntimePaths {
   indexPath: string;
 }
 
+export interface SystemStatus {
+  cwd: string;
+  repoRoot: string;
+  configDir: string;
+  stateDir: string;
+  cacheDir: string;
+  gitCacheDir: string;
+  packDir: string;
+  eventDir: string;
+  lockDir: string;
+  indexPath: string;
+  defaultPackId?: string;
+}
+
 export interface CleanResult {
   packIds: string[];
   repoHashes: string[];

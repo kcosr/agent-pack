@@ -18,10 +18,18 @@ import {
   showTask,
   status,
   summary,
+  summaryPack,
   syncPack,
   updateTask,
 } from "../core/operations.js";
-import type { CatalogType, GitRefresh, InitInclude, PackState, TaskStatus } from "../core/types.js";
+import type {
+  CatalogType,
+  GitRefresh,
+  InitInclude,
+  PackState,
+  SystemStatus,
+  TaskStatus,
+} from "../core/types.js";
 
 const program = new Command();
 let startupError: AgentPackError | undefined;
@@ -103,16 +111,15 @@ configureCatalogCommands(program);
 
 program
   .command("status")
-  .description("Show derived pack progress.")
-  .option("--id <id>", "pack ID")
+  .description("Show resolved agent-pack paths and defaults.")
   .option("--json", "emit machine-readable output")
   .action(async (options) => {
     await run(async () => {
-      const result = await status(options.id);
+      const result = status();
       if (options.json) {
-        printJson(statusJson(result));
+        printJson(result);
       } else {
-        process.stdout.write(renderSummary(result));
+        process.stdout.write(renderSystemStatus(result));
       }
     });
   });
@@ -137,9 +144,14 @@ program
   .command("summary")
   .description("Show a concise pack summary.")
   .option("--id <id>", "pack ID")
+  .option("--json", "emit machine-readable output")
   .action(async (options) => {
     await run(async () => {
-      process.stdout.write(await summary(options.id));
+      if (options.json) {
+        printJson(statusJson(await summaryPack(options.id)));
+      } else {
+        process.stdout.write(await summary(options.id));
+      }
     });
   });
 
@@ -406,6 +418,23 @@ function defaultGitRefresh(): GitRefresh {
   }
   startupError = new AgentPackError(`invalid AGENT_PACK_GIT_REFRESH value: ${value}`);
   return "auto";
+}
+
+function renderSystemStatus(result: SystemStatus): string {
+  return [
+    "Agent Pack Status",
+    `Workspace: ${result.cwd}`,
+    `Config/catalog dir: ${result.configDir}`,
+    `State dir: ${result.stateDir}`,
+    `Cache dir: ${result.cacheDir}`,
+    `Git cache dir: ${result.gitCacheDir}`,
+    `Lock dir: ${result.lockDir}`,
+    `Pack dir: ${result.packDir}`,
+    `Event dir: ${result.eventDir}`,
+    `Index: ${result.indexPath}`,
+    `Default pack id: ${result.defaultPackId ?? "(unset)"}`,
+    "",
+  ].join("\n");
 }
 
 function statusJson(pack: PackState) {

@@ -50,10 +50,18 @@ agent-pack task show t001
 agent-pack task start t001
 agent-pack task note t001 "date output: Thu May 7 ..."
 agent-pack task done t001 --note "Recorded date output."
+agent-pack summary
 agent-pack report
 ```
 
-`task show` and `report` print text for humans and agents by default. Use `task show <task-id> --json` or `report --json` for scripts that need saved state objects.
+`task show`, `summary`, and `report` print text for humans and agents by default. Use `task show <task-id> --json`, `summary --json`, or `report --json` for scripts that need saved state objects.
+
+Inspect resolved paths and defaults:
+
+```bash
+agent-pack status
+agent-pack status --json
+```
 
 ## Source Types
 

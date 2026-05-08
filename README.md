@@ -245,14 +245,14 @@ Tasks:
 In your agent CLI or editor agent, paste a handoff like this:
 
 ```text
-AGENT_PACK_ID is demo. Run agent-pack brief and work the pack. Update task status as you go.
+AGENT_PACK_ID is demo-a1b2c3. Run agent-pack brief and work the pack. Update task status as you go.
 ```
 
 Check progress:
 
 ```bash
 agent-pack task list
-agent-pack status
+agent-pack summary
 agent-pack report
 ```
 
@@ -443,15 +443,19 @@ agent-pack task block t002 --id reviewer-001 --note "Need user decision."
 ### Status and Reports
 
 ```bash
-agent-pack status --id reviewer-001
-agent-pack status --id reviewer-001 --json
+agent-pack status
+agent-pack status --json
+agent-pack summary --id reviewer-001
+agent-pack summary --id reviewer-001 --json
 agent-pack report --id reviewer-001
 agent-pack report --id reviewer-001 --json
-agent-pack summary --id reviewer-001
 ```
 
-Use `agent-pack list` to discover packs, then run `status --id <pack>` for the pack you want to inspect.
+Use `agent-pack status` to inspect resolved directories and defaults such as the config/catalog dir, state dir, cache dir, and current `AGENT_PACK_ID`.
 
+Use `agent-pack list` to discover packs, then run `summary --id <pack>` for pack progress.
+
+`summary` prints a concise pack progress summary by default. Add `--json` for a compact pack progress object.
 `report` prints a human-readable pack report by default, including task status and notes. Add `--json` for the full saved pack state.
 
 JSON output shapes:
@@ -462,7 +466,8 @@ JSON output shapes:
 | `sync --id <id> --json` | Pack state object |
 | `clean --json` | `{ packIds, repoHashes, removed }` |
 | `list --json` | Array of status objects |
-| `status --json` | `{ id, name, status, tasks, references, skills }` |
+| `status --json` | Resolved paths and current defaults |
+| `summary --json` | `{ id, name, status, tasks, references, skills }` |
 | `task show <task-id> --json` | Task state object |
 | `report --json` | Full pack state object |
 
@@ -715,7 +720,7 @@ Set a default pack ID when working on one pack for a while. This is the recommen
 export AGENT_PACK_ID=reviewer-001
 
 agent-pack brief
-agent-pack status
+agent-pack summary
 agent-pack task done t001 --note "Completed."
 ```
 

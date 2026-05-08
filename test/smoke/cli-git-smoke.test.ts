@@ -148,6 +148,31 @@ references:
       tasks: [{ id: "t001", status: "completed" }],
     });
 
+    const summary = await runCli(["summary", "--id", "task-pack"], { cwd: workspace });
+    expect(summary.stdout).toContain("Pack: task-pack");
+    expect(summary.stdout).toContain("Tasks: 1/1 completed, 0 blocked");
+
+    const summaryJson = await runCli(["summary", "--id", "task-pack", "--json"], {
+      cwd: workspace,
+    });
+    expect(JSON.parse(summaryJson.stdout)).toMatchObject({
+      id: "task-pack",
+      status: "completed",
+      tasks: { completed: 1, total: 1 },
+    });
+
+    const systemStatus = await runCli(["status"], { cwd: workspace });
+    expect(systemStatus.stdout).toContain("Agent Pack Status");
+    expect(systemStatus.stdout).toContain(`Workspace: ${workspace}`);
+    expect(systemStatus.stdout).toContain("Config/catalog dir:");
+    expect(systemStatus.stdout).toContain("State dir:");
+
+    const systemStatusJson = await runCli(["status", "--json"], { cwd: workspace });
+    expect(JSON.parse(systemStatusJson.stdout)).toMatchObject({
+      cwd: workspace,
+      stateDir: path.join(workspace, ".agent-pack/state"),
+    });
+
     const oldTopLevel = await runCli(["done", "t001", "--id", "task-pack"], {
       cwd: workspace,
       reject: false,

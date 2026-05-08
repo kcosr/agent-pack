@@ -36,6 +36,7 @@ import type {
   PackTask,
   RuntimePaths,
   SourceInfo,
+  SystemStatus,
   TaskStatus,
 } from "./types.js";
 
@@ -275,8 +276,12 @@ export async function brief(id?: string): Promise<string> {
 }
 
 export async function summary(id?: string): Promise<string> {
+  return renderSummary(await summaryPack(id));
+}
+
+export async function summaryPack(id?: string): Promise<PackState> {
   const store = new StateStore();
-  return renderSummary(await store.loadPack(id));
+  return store.loadPack(id);
 }
 
 export async function listTasks(id?: string): Promise<string> {
@@ -328,9 +333,21 @@ export async function updateTask(
   );
 }
 
-export async function status(id?: string): Promise<PackState> {
+export function status(): SystemStatus {
   const store = new StateStore();
-  return store.loadPack(id);
+  return {
+    cwd: store.paths.cwd,
+    repoRoot: store.paths.repoRoot,
+    configDir: store.paths.configDir,
+    stateDir: store.paths.stateDir,
+    cacheDir: store.paths.cacheDir,
+    gitCacheDir: store.paths.gitCacheDir,
+    packDir: store.paths.packDir,
+    eventDir: store.paths.eventDir,
+    lockDir: store.paths.lockDir,
+    indexPath: store.paths.indexPath,
+    defaultPackId: process.env.AGENT_PACK_ID,
+  };
 }
 
 export async function listPacks(): Promise<PackState[]> {

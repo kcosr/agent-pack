@@ -10,6 +10,7 @@ import {
   initPack,
   listPacks,
   status,
+  summaryPack,
   updateTask,
 } from "../../src/core/operations.js";
 import { resolveRuntimePaths } from "../../src/core/paths.js";
@@ -83,7 +84,7 @@ contract:
 
     const updated = await updateTask("t001", "completed", "Done.", "design-review");
     expect(updated.status).toBe("in_progress");
-    const loaded = await status("design-review");
+    const loaded = await summaryPack("design-review");
     expect(Array.isArray(loaded)).toBe(false);
     expect((loaded as typeof updated).taskCounts.completed).toBe(1);
   });
@@ -123,6 +124,19 @@ tasks:
     });
 
     expect(pack.id).toBe("env-review");
+  });
+
+  it("reports system status paths and default pack id", () => {
+    vi.stubEnv("AGENT_PACK_ID", "active-pack");
+
+    expect(status()).toMatchObject({
+      cwd,
+      repoRoot: cwd,
+      configDir: path.join(os.homedir(), ".config/agent-pack"),
+      stateDir: path.join(cwd, ".agent-pack/state"),
+      cacheDir: path.join(cwd, ".agent-pack/cache"),
+      defaultPackId: "active-pack",
+    });
   });
 
   it("preserves source order within each brief section", async () => {
@@ -445,7 +459,7 @@ unknown: true`,
       }),
     ).rejects.toThrow("ad hoc task text must not be empty");
 
-    await expect(status("empty-task")).rejects.toThrow("pack not found");
+    await expect(summaryPack("empty-task")).rejects.toThrow("pack not found");
   });
 
   it("rejects corrupt index JSON instead of treating it as empty", async () => {
@@ -459,7 +473,7 @@ unknown: true`,
     await mkdir(".agent-pack/state/packs", { recursive: true });
     await writeFile(".agent-pack/state/packs/bad.json", JSON.stringify({ schemaVersion: 99 }));
 
-    await expect(status("bad")).rejects.toThrow("schemaVersion 99 is not supported");
+    await expect(summaryPack("bad")).rejects.toThrow("schemaVersion 99 is not supported");
   });
 
   it("rejects unknown pack state fields", async () => {
@@ -481,7 +495,7 @@ unknown: true`,
       }),
     );
 
-    await expect(status("obsolete")).rejects.toThrow(
+    await expect(summaryPack("obsolete")).rejects.toThrow(
       "unsupported pack state field 'unexpectedField'",
     );
   });
@@ -573,7 +587,7 @@ unknown: true`,
       }),
     );
 
-    await expect(status("unknown-nested-state")).rejects.toThrow("tasks[0].unexpectedNested");
+    await expect(summaryPack("unknown-nested-state")).rejects.toThrow("tasks[0].unexpectedNested");
   });
 
   it("rejects invalid pack reference state", async () => {
@@ -594,13 +608,13 @@ unknown: true`,
       }),
     );
 
-    await expect(status("bad-reference-state")).rejects.toThrow("source.path");
+    await expect(summaryPack("bad-reference-state")).rejects.toThrow("source.path");
   });
 
   it("rejects persisted git source paths that escape snapshots", async () => {
     await writeGitPackState("escaped-git-path", "aaaaaaaaaaaaaaaa", "../outside.md");
 
-    await expect(status("escaped-git-path")).rejects.toThrow("escapes repository");
+    await expect(summaryPack("escaped-git-path")).rejects.toThrow("escapes repository");
   });
 
   it("lists valid orphan pack files missing from the index", async () => {
@@ -661,7 +675,7 @@ unknown: true`,
       updateTask("t001", undefined, "second note", "locked-notes"),
     ]);
 
-    const pack = await status("locked-notes");
+    const pack = await summaryPack("locked-notes");
     expect(Array.isArray(pack)).toBe(false);
     expect((pack as Awaited<ReturnType<typeof updateTask>>).tasks[0]?.notes).toHaveLength(2);
   });
