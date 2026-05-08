@@ -728,7 +728,7 @@ doneWhen:
     expect(rendered).not.toContain("Read the implementation carefully.");
     expect(rendered).not.toContain("Done when:");
     expect(rendered).toContain(
-      "Task content is omitted from this brief. Run `agent-pack show <task-id> --id compact-brief` before working a task.",
+      "Task content is omitted from this brief. Run `agent-pack task show <task-id> --id compact-brief` before working a task.",
     );
   });
 

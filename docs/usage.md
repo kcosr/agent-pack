@@ -32,14 +32,14 @@ For long task lists, render a compact brief that shows task status, ID, and titl
 AGENT_PACK_BRIEF_TASK_CONTENT=false agent-pack brief --id demo-pack
 ```
 
-The compact brief tells the agent to run `agent-pack show <task-id> --id demo-pack` before working a task.
+The compact brief tells the agent to run `agent-pack task show <task-id> --id demo-pack` before working a task.
 
 Then ask an agent to run the brief and update task status as it works:
 
 ```bash
-agent-pack start t001 --id demo-pack
-agent-pack note t001 --id demo-pack "date output: Thu May 7 ..."
-agent-pack done t001 --id demo-pack --note "Recorded date output."
+agent-pack task start t001 --id demo-pack
+agent-pack task note t001 --id demo-pack "date output: Thu May 7 ..."
+agent-pack task done t001 --id demo-pack --note "Recorded date output."
 ```
 
 ## Source Types

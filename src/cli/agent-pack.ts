@@ -83,78 +83,7 @@ program
     });
   });
 
-program
-  .command("list")
-  .description("List tasks in a pack.")
-  .option("--id <id>", "pack ID")
-  .action(async (options) => {
-    await run(async () => {
-      process.stdout.write(await listTasks(options.id));
-    });
-  });
-
-program
-  .command("show")
-  .description("Show a task as JSON.")
-  .argument("<taskId>", "task ID")
-  .option("--id <id>", "pack ID")
-  .action(async (taskId, options) => {
-    await run(async () => {
-      process.stdout.write(await showTask(taskId, options.id));
-    });
-  });
-
-program
-  .command("start")
-  .description("Mark a task in progress.")
-  .argument("<taskId>", "task ID")
-  .option("--id <id>", "pack ID")
-  .option("--note <note>", "progress note")
-  .action(async (taskId, options) => {
-    await run(async () => {
-      const pack = await updateTask(taskId, "in_progress", options.note, options.id);
-      process.stdout.write(renderSummary(pack));
-    });
-  });
-
-program
-  .command("note")
-  .description("Add a task note.")
-  .argument("<taskId>", "task ID")
-  .argument("<note>", "note")
-  .option("--id <id>", "pack ID")
-  .action(async (taskId, note, options) => {
-    await run(async () => {
-      const pack = await updateTask(taskId, undefined, note, options.id);
-      process.stdout.write(renderSummary(pack));
-    });
-  });
-
-program
-  .command("done")
-  .description("Mark a task completed.")
-  .argument("<taskId>", "task ID")
-  .option("--id <id>", "pack ID")
-  .option("--note <note>", "completion evidence")
-  .action(async (taskId, options) => {
-    await run(async () => {
-      const pack = await updateTask(taskId, "completed", options.note, options.id);
-      process.stdout.write(renderSummary(pack));
-    });
-  });
-
-program
-  .command("block")
-  .description("Mark a task blocked.")
-  .argument("<taskId>", "task ID")
-  .option("--id <id>", "pack ID")
-  .option("--note <note>", "blocker note")
-  .action(async (taskId, options) => {
-    await run(async () => {
-      const pack = await updateTask(taskId, "blocked", options.note, options.id);
-      process.stdout.write(renderSummary(pack));
-    });
-  });
+configureTaskCommands(program);
 
 program
   .command("status")
@@ -271,13 +200,13 @@ function configureInitCommand(root: Command): void {
     )
     .option(
       "--skill <ref>",
-      "add one SKILL.md file",
+      "add one SKILL.md file, directory, glob, or git ref",
       collectInclude(includes, (ref) => ({ type: "skill", ref: { ref } })),
       [],
     )
     .option(
       "--skills <ref>",
-      "add skill file or glob",
+      "add one SKILL.md file, directory, glob, or git ref",
       collectInclude(includes, (ref) => ({ type: "skill", ref: { ref } })),
       [],
     )
@@ -302,6 +231,83 @@ function configureInitCommand(root: Command): void {
           process.stdout.write(`Created pack ${pack.id}\n`);
           process.stdout.write(`Run: agent-pack brief --id ${pack.id}\n`);
         }
+      });
+    });
+}
+
+function configureTaskCommands(root: Command): void {
+  const task = root.command("task").description("List, inspect, and update pack tasks.");
+
+  task
+    .command("list")
+    .description("List tasks in a pack.")
+    .option("--id <id>", "pack ID")
+    .action(async (options) => {
+      await run(async () => {
+        process.stdout.write(await listTasks(options.id));
+      });
+    });
+
+  task
+    .command("show")
+    .description("Show a task as JSON.")
+    .argument("<taskId>", "task ID")
+    .option("--id <id>", "pack ID")
+    .action(async (taskId, options) => {
+      await run(async () => {
+        process.stdout.write(await showTask(taskId, options.id));
+      });
+    });
+
+  task
+    .command("start")
+    .description("Mark a task in progress.")
+    .argument("<taskId>", "task ID")
+    .option("--id <id>", "pack ID")
+    .option("--note <note>", "progress note")
+    .action(async (taskId, options) => {
+      await run(async () => {
+        const pack = await updateTask(taskId, "in_progress", options.note, options.id);
+        process.stdout.write(renderSummary(pack));
+      });
+    });
+
+  task
+    .command("note")
+    .description("Add a task note.")
+    .argument("<taskId>", "task ID")
+    .argument("<note>", "note")
+    .option("--id <id>", "pack ID")
+    .action(async (taskId, note, options) => {
+      await run(async () => {
+        const pack = await updateTask(taskId, undefined, note, options.id);
+        process.stdout.write(renderSummary(pack));
+      });
+    });
+
+  task
+    .command("done")
+    .description("Mark a task completed.")
+    .argument("<taskId>", "task ID")
+    .option("--id <id>", "pack ID")
+    .option("--note <note>", "completion evidence")
+    .action(async (taskId, options) => {
+      await run(async () => {
+        const pack = await updateTask(taskId, "completed", options.note, options.id);
+        process.stdout.write(renderSummary(pack));
+      });
+    });
+
+  task
+    .command("block")
+    .description("Mark a task blocked.")
+    .argument("<taskId>", "task ID")
+    .option("--id <id>", "pack ID")
+    .option("--note <note>", "blocker note")
+    .action(async (taskId, options) => {
+      await run(async () => {
+        const pack = await updateTask(taskId, "blocked", options.note, options.id);
+        process.stdout.write(renderSummary(pack));
       });
     });
 }

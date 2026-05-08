@@ -38,17 +38,17 @@ export function renderBrief(
   }
   if (pack.tasks.length) {
     lines.push("", "Commands:");
-    lines.push(`  ${commandName} list --id ${pack.id}`);
-    lines.push(`  ${commandName} show <task-id> --id ${pack.id}`);
-    lines.push(`  ${commandName} start <task-id> --id ${pack.id}`);
-    lines.push(`  ${commandName} note <task-id> --id ${pack.id} "evidence"`);
-    lines.push(`  ${commandName} done <task-id> --id ${pack.id} --note "completion evidence"`);
-    lines.push(`  ${commandName} block <task-id> --id ${pack.id} --note "blocker"`);
-    lines.push("Use `list` to see task status and `show` before working a task.");
+    lines.push(`  ${commandName} task list --id ${pack.id}`);
+    lines.push(`  ${commandName} task show <task-id> --id ${pack.id}`);
+    lines.push(`  ${commandName} task start <task-id> --id ${pack.id}`);
+    lines.push(`  ${commandName} task note <task-id> --id ${pack.id} "evidence"`);
+    lines.push(`  ${commandName} task done <task-id> --id ${pack.id} --note "completion evidence"`);
+    lines.push(`  ${commandName} task block <task-id> --id ${pack.id} --note "blocker"`);
+    lines.push("Use `task list` to see task status and `task show` before working a task.");
     lines.push(
       "For multi-line notes, pass one shell argument with command substitution or a heredoc:",
     );
-    lines.push(`  ${commandName} note <task-id> --id ${pack.id} "$(cat <<'EOF'`);
+    lines.push(`  ${commandName} task note <task-id> --id ${pack.id} "$(cat <<'EOF'`);
     lines.push("multi-line evidence");
     lines.push("EOF");
     lines.push(')"');
@@ -117,7 +117,7 @@ export function renderBrief(
     });
     if (!includeTaskContent) {
       lines.push(
-        `Task content is omitted from this brief. Run \`${commandName} show <task-id> --id ${pack.id}\` before working a task.`,
+        `Task content is omitted from this brief. Run \`${commandName} task show <task-id> --id ${pack.id}\` before working a task.`,
       );
     }
   }

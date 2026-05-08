@@ -107,7 +107,7 @@ The brief is the text document rendered by `agent-pack brief`. It is meant to be
 
 When present, the brief renders sections in this order: prompt, instructions, contract, commands, references, skills, and tasks. `agent-pack` lists reference paths in the brief; it does not paste referenced file contents into the brief.
 
-By default, task entries include the task body and `doneWhen` checklist. For very large task lists, set `AGENT_PACK_BRIEF_TASK_CONTENT=false` when rendering the brief to show only task status, ID, and title; the brief will tell the agent to run `agent-pack show <task-id> --id <pack-id>` before working a task.
+By default, task entries include the task body and `doneWhen` checklist. For very large task lists, set `AGENT_PACK_BRIEF_TASK_CONTENT=false` when rendering the brief to show only task status, ID, and title; the brief will tell the agent to run `agent-pack task show <task-id> --id <pack-id>` before working a task.
 
 ### Manifest
 
@@ -131,15 +131,15 @@ Use instructions for reusable workflow guidance such as review standards, eviden
 
 ### Tasks
 
-Tasks are mutable work items. Each task gets an auto-generated runtime ID (`t001`, `t002`, ...). If a manifest task has its own `id`, that value is preserved as `sourceId` for traceability, but task commands use the runtime ID shown by `agent-pack list`.
+Tasks are mutable work items. Each task gets an auto-generated runtime ID (`t001`, `t002`, ...). If a manifest task has its own `id`, that value is preserved as `sourceId` for traceability, but task commands use the runtime ID shown by `agent-pack task list`.
 
 Agents update task state as they work:
 
 ```bash
-agent-pack list --id quickstart
-agent-pack start t001 --id quickstart
-agent-pack note t001 --id quickstart "Read README.md."
-agent-pack done t001 --id quickstart --note "Recorded findings in task notes."
+agent-pack task list --id quickstart
+agent-pack task start t001 --id quickstart
+agent-pack task note t001 --id quickstart "Read README.md."
+agent-pack task done t001 --id quickstart --note "Recorded findings in task notes."
 ```
 
 ### References
@@ -225,12 +225,12 @@ Prompt:
 Run the demo task and record evidence.
 
 Commands:
-  agent-pack list --id quickstart
-  agent-pack show <task-id> --id quickstart
-  agent-pack start <task-id> --id quickstart
-  agent-pack note <task-id> --id quickstart "evidence"
-  agent-pack done <task-id> --id quickstart --note "completion evidence"
-  agent-pack block <task-id> --id quickstart --note "blocker"
+  agent-pack task list --id quickstart
+  agent-pack task show <task-id> --id quickstart
+  agent-pack task start <task-id> --id quickstart
+  agent-pack task note <task-id> --id quickstart "evidence"
+  agent-pack task done <task-id> --id quickstart --note "completion evidence"
+  agent-pack task block <task-id> --id quickstart --note "blocker"
   ...
 
 Tasks:
@@ -246,7 +246,7 @@ Run agent-pack brief --id quickstart and work the pack. Update task status as yo
 Check progress:
 
 ```bash
-agent-pack list --id quickstart
+agent-pack task list --id quickstart
 agent-pack status --id quickstart
 agent-pack report --id quickstart
 ```
@@ -359,7 +359,7 @@ For long task lists, render a compact task section:
 AGENT_PACK_BRIEF_TASK_CONTENT=false agent-pack brief --id reviewer-001
 ```
 
-Compact briefs omit task bodies and `doneWhen` checklists, but keep task status, ID, and title. The agent can run `agent-pack show <task-id> --id reviewer-001` for the full task detail when starting a task.
+Compact briefs omit task bodies and `doneWhen` checklists, but keep task status, ID, and title. The agent can run `agent-pack task show <task-id> --id reviewer-001` for the full task detail when starting a task.
 
 ### `sync`
 
@@ -412,15 +412,15 @@ With `--json`, `clean` emits `{ packIds, repoHashes, removed }`: pack IDs scanne
 ### Task Commands
 
 ```bash
-agent-pack list --id reviewer-001
-agent-pack show t001 --id reviewer-001
-agent-pack start t001 --id reviewer-001 --note "Starting review."
-agent-pack note t001 --id reviewer-001 "Read the design."
-agent-pack done t001 --id reviewer-001 --note "Completed with evidence in notes."
-agent-pack block t002 --id reviewer-001 --note "Need user decision."
+agent-pack task list --id reviewer-001
+agent-pack task show t001 --id reviewer-001
+agent-pack task start t001 --id reviewer-001 --note "Starting review."
+agent-pack task note t001 --id reviewer-001 "Read the design."
+agent-pack task done t001 --id reviewer-001 --note "Completed with evidence in notes."
+agent-pack task block t002 --id reviewer-001 --note "Need user decision."
 ```
 
-`agent-pack note` takes the note text as a positional argument. `start`, `done`, and `block` take optional note text with `--note`.
+`agent-pack task note` takes the note text as a positional argument. `agent-pack task start`, `agent-pack task done`, and `agent-pack task block` take optional note text with `--note`.
 
 ### Status and Reports
 
@@ -488,7 +488,7 @@ Rules:
 - `doneWhen`, `contract.do`, and `contract.dont` are arrays of non-empty strings.
 - Reference and skill `ref` values are non-empty strings.
 - `contract` must include at least one `do` or `dont` entry.
-- Manifest task `id` is preserved as `sourceId`; task commands use the runtime ID (`t001`, `t002`, ...) shown by `agent-pack list`.
+- Manifest task `id` is preserved as `sourceId`; task commands use the runtime ID (`t001`, `t002`, ...) shown by `agent-pack task list`.
 - `category` is stored as task metadata but is not currently rendered in the brief.
 
 ### Task Files
@@ -620,7 +620,7 @@ export AGENT_PACK_ID=reviewer-001
 
 agent-pack brief
 agent-pack status
-agent-pack done t001 --note "Completed."
+agent-pack task done t001 --note "Completed."
 ```
 
 ## State and Portability

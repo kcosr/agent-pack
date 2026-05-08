@@ -75,6 +75,37 @@ references:
     ]);
   });
 
+  it("updates tasks through the task command group", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-task-smoke-"));
+
+    await runCli(["init", "--id", "task-pack", "--add-task", "Inspect task commands"], {
+      cwd: workspace,
+    });
+
+    const list = await runCli(["task", "list", "--id", "task-pack"], { cwd: workspace });
+    expect(list.stdout).toContain("t001");
+    expect(list.stdout).toContain("Inspect task commands");
+
+    const show = await runCli(["task", "show", "t001", "--id", "task-pack"], { cwd: workspace });
+    expect(show.stdout).toContain('"id": "t001"');
+
+    await runCli(["task", "start", "t001", "--id", "task-pack", "--note", "Started"], {
+      cwd: workspace,
+    });
+    await runCli(["task", "note", "t001", "--id", "task-pack", "Evidence"], { cwd: workspace });
+    const done = await runCli(
+      ["task", "done", "t001", "--id", "task-pack", "--note", "Completed"],
+      { cwd: workspace },
+    );
+    expect(done.stdout).toContain("Tasks: 1/1 completed, 0 blocked");
+
+    const oldTopLevel = await runCli(["done", "t001", "--id", "task-pack"], {
+      cwd: workspace,
+      reject: false,
+    });
+    expect(oldTopLevel.stderr).toContain("unknown command 'done'");
+  });
+
   it("clones git sources, materializes snapshots, syncs missing cache, and renders brief", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "agent-pack-smoke-"));
     const repo = path.join(root, "fixture");

@@ -32,16 +32,18 @@ describe("brief rendering", () => {
     expect(brief).toContain("Don't:");
     expect(brief).toContain("- Skip evidence.");
     expect(brief).toContain("Commands:");
-    expect(brief).toContain("  ap list --id review-pack");
-    expect(brief).toContain("  ap show <task-id> --id review-pack");
-    expect(brief).toContain("  ap start <task-id> --id review-pack");
-    expect(brief).toContain('  ap note <task-id> --id review-pack "evidence"');
-    expect(brief).toContain('  ap done <task-id> --id review-pack --note "completion evidence"');
-    expect(brief).toContain('  ap block <task-id> --id review-pack --note "blocker"');
+    expect(brief).toContain("  ap task list --id review-pack");
+    expect(brief).toContain("  ap task show <task-id> --id review-pack");
+    expect(brief).toContain("  ap task start <task-id> --id review-pack");
+    expect(brief).toContain('  ap task note <task-id> --id review-pack "evidence"');
+    expect(brief).toContain(
+      '  ap task done <task-id> --id review-pack --note "completion evidence"',
+    );
+    expect(brief).toContain('  ap task block <task-id> --id review-pack --note "blocker"');
     expect(brief).toContain(
       "For multi-line notes, pass one shell argument with command substitution or a heredoc:",
     );
-    expect(brief).toContain("  ap note <task-id> --id review-pack \"$(cat <<'EOF'");
+    expect(brief).toContain("  ap task note <task-id> --id review-pack \"$(cat <<'EOF'");
     expect(brief).toContain("multi-line evidence\nEOF\n)");
     expect(brief).not.toContain("Progress commands:");
     expect(brief.indexOf("Commands:")).toBeLessThan(brief.indexOf("References:"));
@@ -72,7 +74,7 @@ describe("brief rendering", () => {
     expect(brief).not.toContain("  Check request handling.");
     expect(brief).not.toContain("  Done when:");
     expect(brief).toContain(
-      "Task content is omitted from this brief. Run `ap show <task-id> --id review-pack` before working a task.",
+      "Task content is omitted from this brief. Run `ap task show <task-id> --id review-pack` before working a task.",
     );
   });
 });
