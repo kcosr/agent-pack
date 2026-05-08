@@ -2,11 +2,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Command, Option } from "commander";
+import { Argument, Command, Option } from "commander";
 import { renderReport, renderSummary, renderTask } from "../core/brief/render.js";
 import { AgentPackError } from "../core/errors.js";
 import {
   brief,
+  catalogList,
+  catalogPath,
+  catalogShow,
   cleanCache,
   initPack,
   listPacks,
@@ -18,7 +21,7 @@ import {
   syncPack,
   updateTask,
 } from "../core/operations.js";
-import type { GitRefresh, InitInclude, PackState, TaskStatus } from "../core/types.js";
+import type { CatalogType, GitRefresh, InitInclude, PackState, TaskStatus } from "../core/types.js";
 
 const program = new Command();
 let startupError: AgentPackError | undefined;
@@ -96,6 +99,7 @@ program
   });
 
 configureTaskCommands(program);
+configureCatalogCommands(program);
 
 program
   .command("status")
@@ -157,13 +161,13 @@ function configureInitCommand(root: Command): void {
     .option("--name <name>", "set a display name")
     .option(
       "--manifest <ref>",
-      "load a pack manifest YAML file or git ref",
+      "load a catalog, local, or git pack manifest YAML file",
       collectInclude(includes, (ref) => ({ type: "manifest", ref })),
       [],
     )
     .option(
       "--manifests <ref>",
-      "load a pack manifest YAML file or git ref",
+      "load a catalog, local, or git pack manifest YAML file",
       collectInclude(includes, (ref) => ({ type: "manifest", ref })),
       [],
     )
@@ -181,37 +185,37 @@ function configureInitCommand(root: Command): void {
     )
     .option(
       "--task <ref>",
-      "add task YAML file, glob, or git ref",
+      "add catalog, local, or git task YAML",
       collectInclude(includes, (ref) => ({ type: "taskRef", ref })),
       [],
     )
     .option(
       "--tasks <ref>",
-      "add task YAML file, glob, or git ref",
+      "add catalog, local, or git task YAML",
       collectInclude(includes, (ref) => ({ type: "taskRef", ref })),
       [],
     )
     .option(
       "--reference <ref>",
-      "add one reference file, directory, glob, URL, or git ref",
+      "add catalog, local, URL, or git reference",
       collectInclude(includes, (ref) => ({ type: "reference", ref: { ref } })),
       [],
     )
     .option(
       "--references <ref>",
-      "add one reference file, directory, glob, URL, or git ref",
+      "add catalog, local, URL, or git reference",
       collectInclude(includes, (ref) => ({ type: "reference", ref: { ref } })),
       [],
     )
     .option(
       "--skill <ref>",
-      "add one SKILL.md file, directory, glob, or git ref",
+      "add catalog, local, or git skill",
       collectInclude(includes, (ref) => ({ type: "skill", ref: { ref } })),
       [],
     )
     .option(
       "--skills <ref>",
-      "add one SKILL.md file, directory, glob, or git ref",
+      "add catalog, local, or git skill",
       collectInclude(includes, (ref) => ({ type: "skill", ref: { ref } })),
       [],
     )
@@ -320,6 +324,62 @@ function configureTaskStatusCommand(
         process.stdout.write(renderSummary(pack));
       });
     });
+}
+
+function configureCatalogCommands(root: Command): void {
+  const catalog = root.command("catalog").description("List and inspect catalog entries.");
+
+  catalog
+    .command("list")
+    .description("List catalog entries.")
+    .addOption(catalogTypeOption().makeOptionMandatory(false))
+    .option("--json", "emit machine-readable output")
+    .action(async (options) => {
+      await run(async () => {
+        const entries = await catalogList(options.type);
+        if (options.json) {
+          printJson(entries);
+          return;
+        }
+        for (const entry of entries) {
+          process.stdout.write(`${entry.type}\t${entry.name}\t${entry.path}\n`);
+        }
+      });
+    });
+
+  catalog
+    .command("show")
+    .description("Print a catalog entry file.")
+    .addArgument(catalogTypeArgument())
+    .argument("<name>", "catalog name")
+    .action(async (type, name) => {
+      await run(async () => {
+        process.stdout.write((await catalogShow(type, name)).content);
+      });
+    });
+
+  catalog
+    .command("path")
+    .description("Print a catalog entry path.")
+    .addArgument(catalogTypeArgument())
+    .argument("<name>", "catalog name")
+    .action(async (type, name) => {
+      await run(async () => {
+        process.stdout.write(`${await catalogPath(type, name)}\n`);
+      });
+    });
+}
+
+function catalogTypeOption(): Option {
+  return new Option("--type <type>", "catalog entry type").choices(catalogTypes());
+}
+
+function catalogTypeArgument() {
+  return new Argument("<type>", "catalog entry type").choices(catalogTypes());
+}
+
+function catalogTypes(): CatalogType[] {
+  return ["manifest", "task", "reference", "skill"];
 }
 
 function collectInclude(includes: InitInclude[], toInclude: (value: string) => InitInclude) {

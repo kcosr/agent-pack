@@ -57,24 +57,53 @@ agent-pack report
 
 Use these flags with `agent-pack init`:
 
-- `--manifest <ref>`: one manifest YAML file, local or git-backed
+- `--manifest <ref>`: one catalog, local, or git-backed manifest YAML file
 - `--add-task <text>`: one inline task
-- `--task <ref>`: task YAML file, glob, or git-backed task file
-- `--reference <ref>`: file, directory, glob, HTTP/HTTPS URL, git path, or whole git repo
-- `--skill <ref>`: one `SKILL.md` file, directory scan, glob, or git-backed skill source
+- `--task <ref>`: catalog task, local task YAML file, glob, or git-backed task file
+- `--reference <ref>`: catalog reference, local file, directory, glob, HTTP/HTTPS URL, git path, or whole git repo
+- `--skill <ref>`: catalog skill, local `SKILL.md` file, directory scan, glob, or git-backed skill source
 - `--instructions <path>`: raw text instructions file
 
 Manifest `tasks`, `references`, and `skills` arrays can use the same refs as these CLI flags:
 
 ```yaml
 tasks:
+  - review/security
   - ./tasks/*.yaml
   - id: inline-check
     title: Check local state
 references:
+  - product/api
   - ./docs/**/*.md
 skills:
+  - engineering/fresh-eyes
   - ./skills
+```
+
+Bare refs such as `review/security` are catalog refs under the config directory. Local paths must start with `./`, `../`, `~/`, or `/`.
+
+Catalog default:
+
+```text
+$XDG_CONFIG_HOME/agent-pack/
+~/.config/agent-pack/
+```
+
+Use `AGENT_PACK_CONFIG_DIR` to override it. Catalog layout:
+
+```text
+manifests/review/code-review.yaml
+tasks/review/security.yaml
+references/product/api.yaml
+skills/engineering/fresh-eyes/SKILL.md
+```
+
+Inspect catalog entries:
+
+```bash
+agent-pack catalog list
+agent-pack catalog show manifest review/code-review
+agent-pack catalog path skill engineering/fresh-eyes
 ```
 
 Git refs use this shape. See the README for the full list of supported URL forms:

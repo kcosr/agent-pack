@@ -6,6 +6,7 @@ export function resolveRuntimePaths(
 ): RuntimePaths {
   const cwd = path.resolve(options.cwd ?? process.cwd());
   const repoRoot = cwd;
+  const configDir = path.resolve(cwd, process.env.AGENT_PACK_CONFIG_DIR ?? defaultConfigDir(cwd));
   const stateDir = path.resolve(
     cwd,
     options.stateDir ?? process.env.AGENT_PACK_STATE_DIR ?? ".agent-pack/state",
@@ -15,6 +16,7 @@ export function resolveRuntimePaths(
   return {
     cwd,
     repoRoot,
+    configDir,
     stateDir,
     cacheDir,
     gitCacheDir,
@@ -23,6 +25,16 @@ export function resolveRuntimePaths(
     lockDir: path.join(cacheDir, "locks"),
     indexPath: path.join(stateDir, "index.json"),
   };
+}
+
+function defaultConfigDir(cwd: string): string {
+  if (process.env.XDG_CONFIG_HOME) {
+    return path.join(process.env.XDG_CONFIG_HOME, "agent-pack");
+  }
+  if (process.env.HOME) {
+    return path.join(process.env.HOME, ".config", "agent-pack");
+  }
+  return path.resolve(cwd, ".agent-pack/config");
 }
 
 function defaultCacheDir(cwd: string): string {
@@ -51,4 +63,14 @@ export function resolveInputPath(input: string, cwd: string): string {
     return path.join(process.env.HOME ?? cwd, input.slice(1));
   }
   return path.resolve(cwd, input);
+}
+
+export function isExplicitPathRef(ref: string): boolean {
+  return (
+    path.isAbsolute(ref) ||
+    ref.startsWith("./") ||
+    ref.startsWith("../") ||
+    ref === "~" ||
+    ref.startsWith("~/")
+  );
 }

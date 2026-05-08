@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
 import { AgentPackError } from "../errors.js";
-import type { ManifestTask, PackContract, PackManifest } from "../types.js";
+import type { ManifestReference, ManifestTask, PackContract, PackManifest } from "../types.js";
 
 const manifestKeys = new Set([
   "schemaVersion",
@@ -49,6 +49,32 @@ export async function readTaskFile(filePath: string): Promise<ManifestTask[]> {
     return [normalizeTask(parsed, "task")];
   }
   throw new AgentPackError(`task file must contain a task or tasks: ${filePath}`);
+}
+
+export async function readReferenceFile(filePath: string): Promise<ManifestReference> {
+  const content = await readText(filePath, "reference file");
+  const parsed = parseYaml(content, filePath);
+  if (isNonEmptyString(parsed)) {
+    return { ref: parsed };
+  }
+  if (!isObject(parsed)) {
+    throw new AgentPackError(`reference file must be a string or object: ${filePath}`);
+  }
+  assertKnownKeys(parsed, includeKeys, "reference");
+  if (typeof parsed.ref !== "string" || !parsed.ref.trim()) {
+    throw new AgentPackError(`reference ref must be a string: ${filePath}`);
+  }
+  if (parsed.name !== undefined && typeof parsed.name !== "string") {
+    throw new AgentPackError(`reference name must be a string: ${filePath}`);
+  }
+  if (parsed.description !== undefined && typeof parsed.description !== "string") {
+    throw new AgentPackError(`reference description must be a string: ${filePath}`);
+  }
+  return {
+    name: stringValue(parsed.name),
+    description: stringValue(parsed.description),
+    ref: parsed.ref,
+  };
 }
 
 export function normalizeTask(task: unknown, label = "task"): ManifestTask {

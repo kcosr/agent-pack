@@ -1,10 +1,11 @@
 import path from "node:path";
 import fg from "fast-glob";
+import { resolveCatalogPath } from "../catalog.js";
 import { AgentPackError } from "../errors.js";
 import { materializeGitRef } from "../git/cache.js";
 import { isGitRef } from "../git/ref.js";
 import { readTaskFile, taskTitleFromText } from "../manifest/parse.js";
-import { resolveInputPath, toDisplayPath } from "../paths.js";
+import { isExplicitPathRef, resolveInputPath, toDisplayPath } from "../paths.js";
 import { fileGlobOptions, hasGlobMagic } from "../sources/glob.js";
 import type {
   GitRefresh,
@@ -62,7 +63,25 @@ async function loadTaskRef(
   paths: RuntimePaths,
   refresh: GitRefresh,
 ): Promise<Array<{ task: ManifestTask; source?: SourceInfo }>> {
-  return isGitRef(ref) ? loadGitTaskRef(ref, paths, refresh) : loadLocalTaskRef(ref, paths);
+  if (isGitRef(ref)) {
+    return loadGitTaskRef(ref, paths, refresh);
+  }
+  if (isExplicitPathRef(ref)) {
+    return loadLocalTaskRef(ref, paths);
+  }
+  return loadCatalogTaskRef(ref, paths);
+}
+
+async function loadCatalogTaskRef(
+  ref: string,
+  paths: RuntimePaths,
+): Promise<Array<{ task: ManifestTask; source?: SourceInfo }>> {
+  const absPath = await resolveCatalogPath("task", ref, paths);
+  const tasks = await readTaskFile(absPath);
+  return tasks.map((task) => ({
+    task,
+    source: { kind: "file" as const, path: toDisplayPath(absPath, paths.repoRoot) },
+  }));
 }
 
 async function loadLocalTaskRef(

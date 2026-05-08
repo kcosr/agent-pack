@@ -2,6 +2,7 @@ import { rm } from "node:fs/promises";
 import path from "node:path";
 import fg from "fast-glob";
 import { renderBrief, renderSummary } from "./brief/render.js";
+import { listCatalogEntries, readCatalogEntry, resolveCatalogPath } from "./catalog.js";
 import { AgentPackError } from "./errors.js";
 import { errorMessage, pathExists } from "./fs.js";
 import {
@@ -13,13 +14,15 @@ import {
 } from "./git/cache.js";
 import { isGitRef, parseGitRef } from "./git/ref.js";
 import { readInstructions, readManifest } from "./manifest/parse.js";
-import { resolveInputPath, toDisplayPath } from "./paths.js";
+import { isExplicitPathRef, resolveInputPath, toDisplayPath } from "./paths.js";
 import { fileGlobOptions, hasGlobMagic } from "./sources/glob.js";
 import { resolveReferences, resolveSkills } from "./sources/resolve.js";
 import { StateStore, assertValidPackId } from "./state/store.js";
 import { loadTasks } from "./tasks/load.js";
 import type { TaskInput } from "./tasks/load.js";
 import type {
+  CatalogEntry,
+  CatalogType,
   CleanResult,
   GitRefresh,
   GitSourceInfo,
@@ -153,7 +156,9 @@ async function readManifestRef(
   refresh: GitRefresh,
 ): Promise<{ manifest: PackManifest; source: SourceInfo }> {
   if (!isGitRef(ref)) {
-    const absPath = resolveInputPath(ref, paths.repoRoot);
+    const absPath = isExplicitPathRef(ref)
+      ? resolveInputPath(ref, paths.repoRoot)
+      : await resolveCatalogPath("manifest", ref, paths);
     return {
       manifest: await readManifest(absPath),
       source: { kind: "file" as const, path: toDisplayPath(absPath, paths.repoRoot) },
@@ -176,6 +181,24 @@ async function readManifestRef(
     manifest,
     source: materialized.source,
   };
+}
+
+export async function catalogList(type?: CatalogType): Promise<CatalogEntry[]> {
+  const store = new StateStore();
+  return listCatalogEntries(store.paths, type);
+}
+
+export async function catalogShow(
+  type: CatalogType,
+  name: string,
+): Promise<{ path: string; content: string }> {
+  const store = new StateStore();
+  return readCatalogEntry(type, name, store.paths);
+}
+
+export async function catalogPath(type: CatalogType, name: string): Promise<string> {
+  const store = new StateStore();
+  return resolveCatalogPath(type, name, store.paths);
 }
 
 export async function syncPack(id: string | undefined, refresh: GitRefresh): Promise<PackState> {

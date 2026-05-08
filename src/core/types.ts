@@ -154,6 +154,7 @@ export interface InitInput {
 export interface RuntimePaths {
   cwd: string;
   repoRoot: string;
+  configDir: string;
   stateDir: string;
   cacheDir: string;
   gitCacheDir: string;
@@ -167,4 +168,12 @@ export interface CleanResult {
   packIds: string[];
   repoHashes: string[];
   removed: string[];
+}
+
+export type CatalogType = "manifest" | "task" | "reference" | "skill";
+
+export interface CatalogEntry {
+  type: CatalogType;
+  name: string;
+  path: string;
 }

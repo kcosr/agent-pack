@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   brief,
+  catalogList,
   cleanCache,
   initPack,
   listPacks,
@@ -61,7 +62,7 @@ contract:
 
     const pack = await initPack({
       id: "design-review",
-      includes: [{ type: "manifest", ref: "pack.yaml" }],
+      includes: [{ type: "manifest", ref: "./pack.yaml" }],
       prompt: "Focus on concrete findings.",
       gitRefresh: "auto",
     });
@@ -121,7 +122,7 @@ skills:
         { type: "adHocTask", text: "Before manifest task" },
         { type: "reference", ref: { name: "before", ref: "./docs/before.md" } },
         { type: "skill", ref: { ref: "./skills/first/SKILL.md" } },
-        { type: "manifest", ref: "pack.yaml" },
+        { type: "manifest", ref: "./pack.yaml" },
         { type: "taskRef", ref: "./after-task.yaml" },
         { type: "reference", ref: { name: "after", ref: "./docs/after.md" } },
       ],
@@ -164,6 +165,84 @@ skills:
     });
   });
 
+  it("loads bare refs from the catalog across manifests, tasks, references, and skills", async () => {
+    const configDir = path.join(cwd, "config");
+    vi.stubEnv("AGENT_PACK_CONFIG_DIR", configDir);
+    await mkdir(path.join(configDir, "manifests/review"), { recursive: true });
+    await mkdir(path.join(configDir, "tasks/review"), { recursive: true });
+    await mkdir(path.join(configDir, "references/product"), { recursive: true });
+    await mkdir(path.join(configDir, "skills/engineering/fresh-eyes"), { recursive: true });
+    await mkdir("docs", { recursive: true });
+    await writeFile("docs/api.md", "# API\n");
+    await writeFile(
+      path.join(configDir, "tasks/review/security.yaml"),
+      "id: security\ntitle: Review security posture\n",
+    );
+    await writeFile(
+      path.join(configDir, "references/product/api.yaml"),
+      "name: product api\ndescription: API docs.\nref: ./docs/api.md\n",
+    );
+    await writeFile(
+      path.join(configDir, "skills/engineering/fresh-eyes/SKILL.md"),
+      "---\nname: fresh-eyes\ndescription: Review again.\n---\n",
+    );
+    await writeFile(
+      path.join(configDir, "manifests/review/code-review.yaml"),
+      `schemaVersion: 1
+name: catalog-review
+tasks:
+  - review/security
+references:
+  - product/api
+skills:
+  - engineering/fresh-eyes
+`,
+    );
+
+    const pack = await initPack({
+      includes: [{ type: "manifest", ref: "review/code-review" }],
+      gitRefresh: "auto",
+    });
+
+    expect(pack.id).toBe("catalog-review");
+    expect(pack.tasks[0]).toMatchObject({
+      sourceId: "security",
+      title: "Review security posture",
+    });
+    expect(pack.references[0]).toMatchObject({
+      name: "product api",
+      description: "API docs.",
+      path: "./docs/api.md",
+    });
+    expect(pack.skills[0]).toMatchObject({
+      name: "fresh-eyes",
+      description: "Review again.",
+    });
+  });
+
+  it("creates catalog directories when listing catalog entries", async () => {
+    const configDir = path.join(cwd, "config");
+    vi.stubEnv("AGENT_PACK_CONFIG_DIR", configDir);
+
+    await expect(catalogList()).resolves.toEqual([]);
+    await expectPathPresent(path.join(configDir, "manifests"));
+    await expectPathPresent(path.join(configDir, "tasks"));
+    await expectPathPresent(path.join(configDir, "references"));
+    await expectPathPresent(path.join(configDir, "skills"));
+  });
+
+  it("rejects ambiguous local refs that are missing an explicit path prefix", async () => {
+    await writeFile("pack.yaml", "tasks: []\n");
+
+    await expect(
+      initPack({
+        id: "ambiguous-local",
+        includes: [{ type: "manifest", ref: "pack.yaml" }],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow("invalid catalog ref");
+  });
+
   it("rejects unsupported manifest fields", async () => {
     await writeFile(
       "pack.yaml",
@@ -176,7 +255,7 @@ tasks:
     await expect(
       initPack({
         id: "unsupported-field-pack",
-        includes: [{ type: "manifest", ref: "pack.yaml" }],
+        includes: [{ type: "manifest", ref: "./pack.yaml" }],
         gitRefresh: "auto",
       }),
     ).rejects.toThrow("unsupported metadata field");
@@ -197,7 +276,7 @@ references:
     await expect(
       initPack({
         id: "unsupported-nested-pack",
-        includes: [{ type: "manifest", ref: "pack.yaml" }],
+        includes: [{ type: "manifest", ref: "./pack.yaml" }],
         gitRefresh: "auto",
       }),
     ).rejects.toThrow("tasks[0].unknownNested");
@@ -214,7 +293,7 @@ contract:
     await expect(
       initPack({
         id: "bad-contract",
-        includes: [{ type: "manifest", ref: "pack.yaml" }],
+        includes: [{ type: "manifest", ref: "./pack.yaml" }],
         gitRefresh: "auto",
       }),
     ).rejects.toThrow("contract.do must be an array of strings");
@@ -234,7 +313,7 @@ tasks:
     await expect(
       initPack({
         id: "bad-manifest-task",
-        includes: [{ type: "manifest", ref: "pack.yaml" }],
+        includes: [{ type: "manifest", ref: "./pack.yaml" }],
         gitRefresh: "auto",
       }),
     ).rejects.toThrow("tasks[0].title must be a string");
@@ -252,7 +331,7 @@ tasks:
     await expect(
       initPack({
         id: "alias-manifest-task",
-        includes: [{ type: "manifest", ref: "pack.yaml" }],
+        includes: [{ type: "manifest", ref: "./pack.yaml" }],
         gitRefresh: "auto",
       }),
     ).rejects.toThrow("tasks[0].name");

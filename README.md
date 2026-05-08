@@ -270,15 +270,15 @@ Common options:
 |---|---|
 | `--id <id>` | Use a specific pack ID. Must start with `A-Z`, `a-z`, or `0-9`; may contain `A-Z`, `a-z`, `0-9`, `.`, `_`, `-`; max 64 characters |
 | `--name <name>` | Set a display name |
-| `--manifest <ref>` | Load one manifest YAML file or git ref |
+| `--manifest <ref>` | Load one catalog manifest, local manifest YAML file, or git ref |
 | `--manifests <ref>` | Alias for `--manifest`; useful when passing several manifests |
 | `--instructions <path>` | Read a plain text or Markdown file verbatim as the pack instructions section |
 | `--add-task <text>` | Add one ad hoc task |
-| `--task <ref>` | Add one task YAML file, glob, or git ref |
+| `--task <ref>` | Add one catalog task, local task YAML file, glob, or git ref |
 | `--tasks <ref>` | Alias for `--task`; useful when passing several task sources |
-| `--reference <ref>` | Add one reference file, directory, glob, URL, or git ref |
+| `--reference <ref>` | Add one catalog reference, local reference file, directory, glob, URL, or git ref |
 | `--references <ref>` | Alias for `--reference`; useful when passing several references |
-| `--skill <ref>` | Add one `SKILL.md` file, directory scan, glob, or git ref |
+| `--skill <ref>` | Add one catalog skill, local `SKILL.md` file, directory scan, glob, or git ref |
 | `--skills <ref>` | Alias for `--skill`; useful when passing several skills |
 | `--git-refresh auto\|always\|never` | Control git fetching for this command |
 | `--state-dir <path>` | Override the state directory for `init`; use `AGENT_PACK_STATE_DIR` for other commands |
@@ -306,6 +306,8 @@ agent-pack init \
 
 That command composes content across types: the manifest can contribute instructions, tasks, references, skills, and contract rules; task flags add more tasks; reference flags add git, URL, and local reading material; skill flags add supplemental `SKILL.md` files.
 
+Bare refs are catalog refs loaded from the agent-pack config directory. Local filesystem paths must start with `./`, `../`, `~/`, or `/`.
+
 For a similar pack expressed mostly as one manifest, save this YAML as `reviewer-pack.yaml`. String entries use the same ref syntax as the corresponding CLI flag; object entries add inline task content or reference/skill metadata.
 
 ```yaml
@@ -315,10 +317,12 @@ instructions: Use the included docs and skills to complete the review.
 
 tasks:
   - title: Check local unstaged changes
+  - review/security
   - git+https://github.com/example/agent-packs.git//tasks/security-review.yaml#main
   - ./tasks/*.yaml
 
 references:
+  - product/api
   - name: product docs
     ref: git+https://github.com/example/product.git//docs/**/*.md#main
   - https://example.com/design-notes.md
@@ -327,6 +331,7 @@ references:
   - ./docs/**/*.md
 
 skills:
+  - engineering/fresh-eyes
   - ref: git+https://github.com/example/agent-skills.git//review/fresh-eyes/SKILL.md#v1.0.0
   - ./skills
 ```
@@ -473,11 +478,78 @@ Derived pack statuses:
 
 `agent-pack` exits `0` on success and `1` for user-visible errors such as validation failures, missing packs, missing files, and git failures. Error messages are printed to stderr.
 
-## Manifests
+## Catalog
 
-Manifests are YAML files that define reusable pack content. A manifest ref can be a local file or a git file ref:
+Catalog refs are reusable named pack inputs stored under the agent-pack config directory:
+
+```text
+$AGENT_PACK_CONFIG_DIR/
+  manifests/review/code-review.yaml
+  tasks/review/security.yaml
+  references/product/api.yaml
+  skills/engineering/fresh-eyes/SKILL.md
+```
+
+If `AGENT_PACK_CONFIG_DIR` is unset, the config directory is `$XDG_CONFIG_HOME/agent-pack`, or `~/.config/agent-pack` when `XDG_CONFIG_HOME` is unset, or `.agent-pack/config` in the current working directory when neither `XDG_CONFIG_HOME` nor `HOME` is set.
+
+Use catalog refs by name, without file extensions:
 
 ```bash
+agent-pack init \
+  --manifest review/code-review \
+  --task review/security \
+  --reference product/api \
+  --skill engineering/fresh-eyes
+```
+
+Catalog names may contain subdirectories, letters, numbers, `_`, and `-`. A catalog ref such as `review/code-review` is resolved by type:
+
+| Input | Resolved path |
+|---|---|
+| `--manifest review/code-review` | `manifests/review/code-review.yaml` |
+| `--task review/security` | `tasks/review/security.yaml` |
+| `--reference product/api` | `references/product/api.yaml` |
+| `--skill engineering/fresh-eyes` | `skills/engineering/fresh-eyes/SKILL.md` |
+
+Local paths are explicit. Use `./review/code-review.yaml`, `../review/code-review.yaml`, `~/packs/review.yaml`, or `/absolute/path.yaml` when reading from the filesystem. Bare refs inside manifests use the catalog too; they do not resolve relative to the manifest file.
+
+Catalog reference files define a reference alias:
+
+```yaml
+name: product api
+description: API docs for the current repository.
+ref: ./docs/api.md
+```
+
+Inspect installed catalog entries:
+
+```bash
+agent-pack catalog list
+agent-pack catalog list --type manifest
+agent-pack catalog show manifest review/code-review
+agent-pack catalog path skill engineering/fresh-eyes
+```
+
+### `catalog`
+
+List and inspect catalog entries.
+
+```bash
+agent-pack catalog list
+agent-pack catalog list --type task
+agent-pack catalog list --json
+agent-pack catalog show manifest review/code-review
+agent-pack catalog path task review/security
+```
+
+Text `catalog list` output is tab-separated: type, catalog name, and absolute path. `catalog list` creates the catalog directories when they do not exist.
+
+## Manifests
+
+Manifests are YAML files that define reusable pack content. A manifest ref can be a catalog name, a local file, or a git file ref:
+
+```bash
+agent-pack init --manifest review/code-review
 agent-pack init --manifest ./pack.yaml
 agent-pack init --manifests git+https://github.com/org/packs.git//review.yaml#main
 ```
@@ -500,6 +572,7 @@ Rules:
 - A string entry in `tasks` is equivalent to `--task <ref>`.
 - A string entry in `references` is equivalent to `--reference <ref>`.
 - A string entry in `skills` is equivalent to `--skill <ref>`.
+- Bare string refs are catalog refs. Local paths must start with `./`, `../`, `~/`, or `/`.
 - Each inline task object must have `id` or `title`.
 - `doneWhen`, `contract.do`, and `contract.dont` are arrays of non-empty strings.
 - Reference and skill object `ref` values are non-empty strings.
@@ -625,13 +698,14 @@ Authentication is delegated to normal `git` behavior: SSH agent, credential help
 | Variable | Purpose | Default |
 |---|---|---|
 | `AGENT_PACK_ID` | Default pack target | unset |
+| `AGENT_PACK_CONFIG_DIR` | Catalog config directory | `$XDG_CONFIG_HOME/agent-pack`, or `~/.config/agent-pack` when `XDG_CONFIG_HOME` is unset, or `<cwd>/.agent-pack/config` when neither `XDG_CONFIG_HOME` nor `HOME` is set |
 | `AGENT_PACK_STATE_DIR` | Pack state directory | `<cwd>/.agent-pack/state` |
 | `AGENT_PACK_CACHE_DIR` | Cache root | `$XDG_CACHE_HOME/agent-pack`, or `~/.cache/agent-pack` when `XDG_CACHE_HOME` is unset, or `<cwd>/.agent-pack/cache` when neither `XDG_CACHE_HOME` nor `HOME` is set |
 | `AGENT_PACK_GIT_REFRESH` | Default git fetch policy for `init` and `sync` | `auto` |
 | `AGENT_PACK_CMD` | Command name rendered in brief task commands; set when invoking through a wrapper | `agent-pack` |
 | `AGENT_PACK_BRIEF_TASK_CONTENT` | Include task body and `doneWhen` checklist in rendered briefs; set to `false` to render only task status, ID, and title | `true` |
 
-Relative path values resolve from the current working directory.
+Relative path values resolve from the current working directory. Bare refs for manifests, tasks, references, and skills resolve from the catalog config directory.
 
 Set a default pack ID when working on one pack for a while. This is the recommended handoff shape before launching an agent CLI from the same shell:
 

@@ -1,12 +1,13 @@
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import fg from "fast-glob";
+import { resolveCatalogPath } from "../catalog.js";
 import { AgentPackError } from "../errors.js";
 import { errorMessage } from "../fs.js";
 import { materializeGitRef } from "../git/cache.js";
 import { isGitRef } from "../git/ref.js";
-import { nameFromRef } from "../manifest/parse.js";
-import { resolveInputPath, toDisplayPath } from "../paths.js";
+import { nameFromRef, readReferenceFile } from "../manifest/parse.js";
+import { isExplicitPathRef, resolveInputPath, toDisplayPath } from "../paths.js";
 import { extractSkillMetadata } from "../skills/parse.js";
 import type {
   GitRefresh,
@@ -25,7 +26,7 @@ export async function resolveReferences(
 ): Promise<PackReference[]> {
   const references: PackReference[] = [];
   for (const entry of refs) {
-    const resolved = await resolveReference(entry, paths, refresh);
+    const resolved = await resolveReference(entry, paths, refresh, new Set());
     references.push({ ...resolved, id: `r${String(references.length + 1).padStart(3, "0")}` });
   }
   return references;
@@ -38,9 +39,7 @@ export async function resolveSkills(
 ): Promise<PackSkill[]> {
   const skills: PackSkill[] = [];
   for (const entry of refs) {
-    const files = isGitRef(entry.ref)
-      ? await resolveGitSkillFiles(entry.ref, paths, refresh)
-      : await resolveLocalSkillFiles(entry.ref, paths);
+    const files = await resolveSkillFiles(entry.ref, paths, refresh);
     if (files.length === 0) {
       throw new AgentPackError(`skill source resolved no SKILL.md files: ${entry.ref}`);
     }
@@ -103,6 +102,7 @@ async function resolveReference(
   entry: ManifestReference,
   paths: RuntimePaths,
   refresh: GitRefresh,
+  seenCatalogRefs: Set<string>,
 ): Promise<Omit<PackReference, "id">> {
   if (isGitRef(entry.ref)) {
     return resolveGitReference(entry, paths, refresh);
@@ -110,7 +110,34 @@ async function resolveReference(
   if (isHttpUrl(entry.ref)) {
     return resolveUrlReference(entry);
   }
+  if (!isExplicitPathRef(entry.ref)) {
+    return resolveCatalogReference(entry, paths, refresh, seenCatalogRefs);
+  }
   return resolveLocalReference(entry, paths);
+}
+
+async function resolveCatalogReference(
+  entry: ManifestReference,
+  paths: RuntimePaths,
+  refresh: GitRefresh,
+  seenCatalogRefs: Set<string>,
+): Promise<Omit<PackReference, "id">> {
+  if (seenCatalogRefs.has(entry.ref)) {
+    throw new AgentPackError(`catalog reference cycle: ${entry.ref}`);
+  }
+  seenCatalogRefs.add(entry.ref);
+  const absPath = await resolveCatalogPath("reference", entry.ref, paths);
+  const catalogEntry = await readReferenceFile(absPath);
+  return resolveReference(
+    {
+      ...catalogEntry,
+      name: entry.name ?? catalogEntry.name,
+      description: entry.description ?? catalogEntry.description,
+    },
+    paths,
+    refresh,
+    seenCatalogRefs,
+  );
 }
 
 function resolveUrlReference(entry: ManifestReference): Omit<PackReference, "id"> {
@@ -211,6 +238,34 @@ async function resolveLocalSkillFiles(
     });
   }
   return resolved;
+}
+
+async function resolveSkillFiles(
+  ref: string,
+  paths: RuntimePaths,
+  refresh: GitRefresh,
+): Promise<Array<{ absPath: string; displayPath: string; source: PackSkill["source"] }>> {
+  if (isGitRef(ref)) {
+    return resolveGitSkillFiles(ref, paths, refresh);
+  }
+  if (isExplicitPathRef(ref)) {
+    return resolveLocalSkillFiles(ref, paths);
+  }
+  return resolveCatalogSkillFiles(ref, paths);
+}
+
+async function resolveCatalogSkillFiles(
+  ref: string,
+  paths: RuntimePaths,
+): Promise<Array<{ absPath: string; displayPath: string; source: PackSkill["source"] }>> {
+  const absPath = await resolveCatalogPath("skill", ref, paths);
+  return [
+    {
+      absPath,
+      displayPath: toDisplayPath(absPath, paths.repoRoot),
+      source: { kind: "file" as const, path: toDisplayPath(absPath, paths.repoRoot) },
+    },
+  ];
 }
 
 async function localSkillFileRefs(ref: string, paths: RuntimePaths): Promise<string[]> {

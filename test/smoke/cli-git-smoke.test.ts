@@ -150,6 +150,50 @@ references:
     expect(oldSyncAll.stderr).toContain("unknown option '--all'");
   });
 
+  it("lists, shows, and resolves catalog entries", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-catalog-smoke-"));
+    const configDir = path.join(workspace, "config");
+    await mkdir(path.join(configDir, "manifests/review"), { recursive: true });
+    await mkdir(path.join(configDir, "tasks/review"), { recursive: true });
+    await writeFile(
+      path.join(configDir, "manifests/review/code-review.yaml"),
+      "name: code-review\ntasks:\n  - review/security\n",
+    );
+    await writeFile(
+      path.join(configDir, "tasks/review/security.yaml"),
+      "id: security\ntitle: Review security\n",
+    );
+    const env = { AGENT_PACK_CONFIG_DIR: configDir };
+
+    const list = await runCli(["catalog", "list"], { cwd: workspace, env });
+    expect(list.stdout).toContain("manifest\treview/code-review\t");
+    expect(list.stdout).toContain("task\treview/security\t");
+
+    const listJson = await runCli(["catalog", "list", "--type", "task", "--json"], {
+      cwd: workspace,
+      env,
+    });
+    expect(JSON.parse(listJson.stdout)).toMatchObject([{ type: "task", name: "review/security" }]);
+
+    const shown = await runCli(["catalog", "show", "manifest", "review/code-review"], {
+      cwd: workspace,
+      env,
+    });
+    expect(shown.stdout).toContain("name: code-review");
+
+    const resolvedPath = await runCli(["catalog", "path", "task", "review/security"], {
+      cwd: workspace,
+      env,
+    });
+    expect(resolvedPath.stdout.trim()).toBe(path.join(configDir, "tasks/review/security.yaml"));
+
+    const init = await runCli(["init", "--manifest", "review/code-review"], {
+      cwd: workspace,
+      env,
+    });
+    expect(init.stdout).toContain("Created pack code-review");
+  });
+
   it("clones git sources, materializes snapshots, syncs missing cache, and renders brief", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "agent-pack-smoke-"));
     const repo = path.join(root, "fixture");
