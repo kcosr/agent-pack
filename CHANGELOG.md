@@ -17,3 +17,4 @@
 ### Fixed
 
 - Hardened git path validation, catalog read errors, manifest include metadata validation, and skill frontmatter parsing.
+- Improved catalog skill listing, skill-source errors, task count validation, and test isolation around agent-pack environment variables.

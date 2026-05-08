@@ -24,7 +24,6 @@ import {
   updateTask,
 } from "../core/operations.js";
 import type {
-  CatalogType,
   GitRefresh,
   InitInclude,
   PackState,

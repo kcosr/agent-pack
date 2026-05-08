@@ -1,8 +1,12 @@
 import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveRuntimePaths } from "../../src/core/paths.js";
 
 describe("resolveRuntimePaths", () => {
+  beforeEach(() => {
+    vi.stubEnv("AGENT_PACK_STATE_DIR", undefined);
+  });
+
   afterEach(() => {
     vi.unstubAllEnvs();
   });

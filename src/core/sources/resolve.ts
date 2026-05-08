@@ -279,7 +279,7 @@ async function localSkillFileRefs(ref: string, paths: RuntimePaths): Promise<str
     return matches.map((match) => toDisplayPath(path.join(absPath, match), paths.repoRoot));
   }
   if (path.basename(ref) !== "SKILL.md") {
-    throw new AgentPackError(`--skill requires a SKILL.md file or directory: ${ref}`);
+    throw new AgentPackError(`skill source must be a SKILL.md file, directory, or glob: ${ref}`);
   }
   return [toDisplayPath(absPath, paths.repoRoot)];
 }

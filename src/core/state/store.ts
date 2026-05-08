@@ -44,7 +44,8 @@ const referenceFields = new Set([
 const skillFields = new Set(["id", "name", "description", "source", "path"]);
 const fileSourceFields = new Set(["kind", "path"]);
 const urlSourceFields = new Set(["kind", "url"]);
-const taskCountFields = new Set(["total", "pending", "inProgress", "completed", "blocked"]);
+const taskCountFieldNames = ["total", "pending", "inProgress", "completed", "blocked"] as const;
+const taskCountFields = new Set<string>(taskCountFieldNames);
 const gitSourceFields = new Set([
   "kind",
   "url",
@@ -277,7 +278,7 @@ function validatePack(value: unknown, filePath: string): PackState {
   validatePackReferences(references, filePath);
   validatePackSkills(skills, filePath);
   const expectedCounts = taskCounts(value.tasks as PackState["tasks"]);
-  if (JSON.stringify(counts) !== JSON.stringify(expectedCounts)) {
+  if (!taskCountFieldNames.every((field) => counts[field] === expectedCounts[field])) {
     throw new AgentPackError(`invalid pack state field 'taskCounts': ${filePath}`);
   }
   if (value.status !== derivePackStatus(value.tasks as PackState["tasks"])) {
@@ -338,7 +339,7 @@ function validateTaskCounts(value: unknown, filePath: string): TaskCounts {
     throw new AgentPackError(`invalid pack state field 'taskCounts': ${filePath}`);
   }
   validateKnownFields(value, taskCountFields, "taskCounts", filePath);
-  for (const field of ["total", "pending", "inProgress", "completed", "blocked"]) {
+  for (const field of taskCountFieldNames) {
     if (!Number.isInteger(value[field]) || Number(value[field]) < 0) {
       throw new AgentPackError(`invalid pack taskCounts field '${field}': ${filePath}`);
     }

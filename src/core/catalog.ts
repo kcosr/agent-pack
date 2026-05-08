@@ -108,7 +108,7 @@ function catalogRoot(paths: RuntimePaths, type: CatalogType): string {
 function catalogGlob(type: CatalogType): string {
   const layout = catalogLayouts[type];
   if (layout.fileName) {
-    return `**/${layout.fileName}`;
+    return `*/**/${layout.fileName}`;
   }
   return `**/*${layout.suffix}`;
 }

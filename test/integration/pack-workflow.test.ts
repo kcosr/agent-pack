@@ -24,7 +24,11 @@ describe("pack workflow", () => {
     originalCwd = process.cwd();
     cwd = await mkdtemp(path.join(os.tmpdir(), "agent-pack-workflow-"));
     process.chdir(cwd);
+    vi.stubEnv("AGENT_PACK_BRIEF_TASK_CONTENT", undefined);
+    vi.stubEnv("AGENT_PACK_CONFIG_DIR", undefined);
+    vi.stubEnv("AGENT_PACK_ID", undefined);
     vi.stubEnv("AGENT_PACK_CACHE_DIR", path.join(cwd, ".agent-pack/cache"));
+    vi.stubEnv("AGENT_PACK_STATE_DIR", undefined);
   });
 
   afterEach(() => {
@@ -282,6 +286,18 @@ skills:
     await expectPathPresent(path.join(configDir, "tasks"));
     await expectPathPresent(path.join(configDir, "references"));
     await expectPathPresent(path.join(configDir, "skills"));
+  });
+
+  it("ignores a top-level catalog SKILL.md that has no catalog name", async () => {
+    const configDir = path.join(cwd, "config");
+    vi.stubEnv("AGENT_PACK_CONFIG_DIR", configDir);
+    await mkdir(path.join(configDir, "skills/review"), { recursive: true });
+    await writeFile(path.join(configDir, "skills/SKILL.md"), "# Root Skill\n");
+    await writeFile(path.join(configDir, "skills/review/SKILL.md"), "# Review Skill\n");
+
+    const entries = await catalogList("skill");
+
+    expect(entries.map((entry) => entry.name)).toEqual(["review"]);
   });
 
   it("wraps catalog show read failures", async () => {
@@ -542,6 +558,30 @@ unknown: true`,
     await writeFile(".agent-pack/state/packs/bad.json", JSON.stringify({ schemaVersion: 99 }));
 
     await expect(summaryPack("bad")).rejects.toThrow("schemaVersion 99 is not supported");
+  });
+
+  it("accepts persisted taskCounts with non-canonical key order", async () => {
+    await mkdir(".agent-pack/state/packs", { recursive: true });
+    await writeFile(
+      ".agent-pack/state/packs/reordered-counts.json",
+      JSON.stringify({
+        schemaVersion: 1,
+        id: "reordered-counts",
+        status: "no_tasks",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        repoRoot: ".",
+        taskCounts: { blocked: 0, completed: 0, inProgress: 0, pending: 0, total: 0 },
+        tasks: [],
+        references: [],
+        skills: [],
+      }),
+    );
+
+    await expect(summaryPack("reordered-counts")).resolves.toMatchObject({
+      id: "reordered-counts",
+      taskCounts: { total: 0, pending: 0, inProgress: 0, completed: 0, blocked: 0 },
+    });
   });
 
   it("rejects unknown pack state fields", async () => {
