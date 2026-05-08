@@ -19,6 +19,7 @@ import { isExplicitPathRef, resolveInputPath, toDisplayPath } from "./paths.js";
 import { fileGlobOptions, hasGlobMagic } from "./sources/glob.js";
 import { resolveReferences, resolveSkills } from "./sources/resolve.js";
 import { StateStore, assertValidPackId } from "./state/store.js";
+import { formatTaskId } from "./tasks/id.js";
 import { loadTasks } from "./tasks/load.js";
 import type { TaskInput } from "./tasks/load.js";
 import type {
@@ -551,10 +552,6 @@ function nextTaskId(tasks: PackTask[]): string {
     candidate = formatTaskId(next);
   }
   return candidate;
-}
-
-function formatTaskId(value: number): string {
-  return `t${String(value).padStart(3, "0")}`;
 }
 
 function requiredString(value: string, label: string): string {

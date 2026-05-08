@@ -161,6 +161,8 @@ tasks:
 
     const loaded = await summaryPack("add-task-pack");
     expect(loaded.tasks[1]).toMatchObject(task);
+    await expect(brief("add-task-pack")).resolves.toContain("  Inspect request handling.");
+    await expect(brief("add-task-pack")).resolves.toContain("  - Findings cite files");
     const events = await readEvents("add-task-pack");
     expect(events.at(-1)).toMatchObject({
       type: "task.added",
@@ -178,6 +180,12 @@ tasks:
     const { task } = await addTask({ packId: "task-id-sequence", title: "Next task" });
 
     expect(task.id).toBe("t011");
+  });
+
+  it("rejects task add for a missing pack", async () => {
+    await expect(addTask({ packId: "missing-pack", title: "New task" })).rejects.toThrow(
+      "pack not found: missing-pack",
+    );
   });
 
   it("rejects empty task add fields before mutating state", async () => {
