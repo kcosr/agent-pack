@@ -845,7 +845,7 @@ Create a code-review pack:
 ```bash
 agent-pack init \
   --manifest ./examples/code-review.yaml \
-  --reference . \
+  --reference ./ \
   "Review scope: unstaged changes."
 
 export AGENT_PACK_ID=<generated-id>
@@ -857,7 +857,7 @@ Create a documentation-review pack:
 ```bash
 agent-pack init \
   --manifest ./examples/docs-review.yaml \
-  --reference . \
+  --reference ./ \
   "Review the repository documentation against the current code."
 
 export AGENT_PACK_ID=<generated-id>
