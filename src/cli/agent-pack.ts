@@ -18,7 +18,7 @@ import {
   syncPack,
   updateTask,
 } from "../core/operations.js";
-import type { GitRefresh, InitInclude, PackState } from "../core/types.js";
+import type { GitRefresh, InitInclude, PackState, TaskStatus } from "../core/types.js";
 
 const program = new Command();
 let startupError: AgentPackError | undefined;
@@ -259,18 +259,13 @@ function configureTaskCommands(root: Command): void {
       });
     });
 
-  task
-    .command("start")
-    .description("Mark a task in progress.")
-    .argument("<taskId>", "task ID")
-    .option("--id <id>", "pack ID")
-    .option("--note <note>", "progress note")
-    .action(async (taskId, options) => {
-      await run(async () => {
-        const pack = await updateTask(taskId, "in_progress", options.note, options.id);
-        process.stdout.write(renderSummary(pack));
-      });
-    });
+  configureTaskStatusCommand(
+    task,
+    "start",
+    "Mark a task in progress.",
+    "in_progress",
+    "progress note",
+  );
 
   task
     .command("note")
@@ -285,28 +280,32 @@ function configureTaskCommands(root: Command): void {
       });
     });
 
-  task
-    .command("done")
-    .description("Mark a task completed.")
-    .argument("<taskId>", "task ID")
-    .option("--id <id>", "pack ID")
-    .option("--note <note>", "completion evidence")
-    .action(async (taskId, options) => {
-      await run(async () => {
-        const pack = await updateTask(taskId, "completed", options.note, options.id);
-        process.stdout.write(renderSummary(pack));
-      });
-    });
+  configureTaskStatusCommand(
+    task,
+    "done",
+    "Mark a task completed.",
+    "completed",
+    "completion evidence",
+  );
+  configureTaskStatusCommand(task, "block", "Mark a task blocked.", "blocked", "blocker note");
+}
 
+function configureTaskStatusCommand(
+  task: Command,
+  name: string,
+  description: string,
+  status: TaskStatus,
+  noteDescription: string,
+): void {
   task
-    .command("block")
-    .description("Mark a task blocked.")
+    .command(name)
+    .description(description)
     .argument("<taskId>", "task ID")
     .option("--id <id>", "pack ID")
-    .option("--note <note>", "blocker note")
+    .option("--note <note>", noteDescription)
     .action(async (taskId, options) => {
       await run(async () => {
-        const pack = await updateTask(taskId, "blocked", options.note, options.id);
+        const pack = await updateTask(taskId, status, options.note, options.id);
         process.stdout.write(renderSummary(pack));
       });
     });

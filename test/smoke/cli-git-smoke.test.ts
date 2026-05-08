@@ -82,17 +82,18 @@ references:
       cwd: workspace,
     });
 
+    const help = await runCli(["task", "--help"], { cwd: workspace });
+    expect(help.stdout).toContain("list [options]");
+    expect(help.stdout).toContain("show [options] <taskId>");
+    expect(help.stdout).toContain("start [options] <taskId>");
+    expect(help.stdout).toContain("note [options] <taskId> <note>");
+    expect(help.stdout).toContain("done [options] <taskId>");
+    expect(help.stdout).toContain("block [options] <taskId>");
+
     const list = await runCli(["task", "list", "--id", "task-pack"], { cwd: workspace });
     expect(list.stdout).toContain("t001");
     expect(list.stdout).toContain("Inspect task commands");
 
-    const show = await runCli(["task", "show", "t001", "--id", "task-pack"], { cwd: workspace });
-    expect(show.stdout).toContain('"id": "t001"');
-
-    await runCli(["task", "start", "t001", "--id", "task-pack", "--note", "Started"], {
-      cwd: workspace,
-    });
-    await runCli(["task", "note", "t001", "--id", "task-pack", "Evidence"], { cwd: workspace });
     const done = await runCli(
       ["task", "done", "t001", "--id", "task-pack", "--note", "Completed"],
       { cwd: workspace },

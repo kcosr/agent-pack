@@ -38,17 +38,19 @@ export function renderBrief(
   }
   if (pack.tasks.length) {
     lines.push("", "Commands:");
-    lines.push(`  ${commandName} task list --id ${pack.id}`);
-    lines.push(`  ${commandName} task show <task-id> --id ${pack.id}`);
-    lines.push(`  ${commandName} task start <task-id> --id ${pack.id}`);
-    lines.push(`  ${commandName} task note <task-id> --id ${pack.id} "evidence"`);
-    lines.push(`  ${commandName} task done <task-id> --id ${pack.id} --note "completion evidence"`);
-    lines.push(`  ${commandName} task block <task-id> --id ${pack.id} --note "blocker"`);
+    lines.push(`  ${taskCommand(commandName, pack.id, "list")}`);
+    lines.push(`  ${taskCommand(commandName, pack.id, "show", "<task-id>")}`);
+    lines.push(`  ${taskCommand(commandName, pack.id, "start", "<task-id>")}`);
+    lines.push(`  ${taskCommand(commandName, pack.id, "note", "<task-id>", '"evidence"')}`);
+    lines.push(
+      `  ${taskCommand(commandName, pack.id, "done", "<task-id>", '--note "completion evidence"')}`,
+    );
+    lines.push(`  ${taskCommand(commandName, pack.id, "block", "<task-id>", '--note "blocker"')}`);
     lines.push("Use `task list` to see task status and `task show` before working a task.");
     lines.push(
       "For multi-line notes, pass one shell argument with command substitution or a heredoc:",
     );
-    lines.push(`  ${commandName} task note <task-id> --id ${pack.id} "$(cat <<'EOF'`);
+    lines.push(`  ${taskCommand(commandName, pack.id, "note", "<task-id>", `"$(cat <<'EOF'`)}`);
     lines.push("multi-line evidence");
     lines.push("EOF");
     lines.push(')"');
@@ -117,7 +119,12 @@ export function renderBrief(
     });
     if (!includeTaskContent) {
       lines.push(
-        `Task content is omitted from this brief. Run \`${commandName} task show <task-id> --id ${pack.id}\` before working a task.`,
+        `Task content is omitted from this brief. Run \`${taskCommand(
+          commandName,
+          pack.id,
+          "show",
+          "<task-id>",
+        )}\` before working a task.`,
       );
     }
   }
@@ -146,6 +153,18 @@ export function renderSummary(pack: PackState): string {
 
 function formatTaskSummary(task: PackTask): string {
   return `- [${task.status}] ${task.id} - ${task.title}`;
+}
+
+function taskCommand(
+  commandName: string,
+  packId: string,
+  verb: string,
+  taskId?: string,
+  trailingArgs?: string,
+): string {
+  return [commandName, "task", verb, taskId, "--id", packId, trailingArgs]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function hasDetailedTasks(tasks: PackTask[]): boolean {
