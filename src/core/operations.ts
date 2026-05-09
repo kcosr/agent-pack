@@ -434,7 +434,7 @@ export async function addSkill(input: AddSkillInput): Promise<AddSkillsResult> {
       const existingBySource = new Map(
         pack.skills.map((skill) => [sourceKey(skill.source), skill]),
       );
-      const skillNameCounts = skillNameCountsFrom(pack.skills);
+      const usedSkillNames = skillNamesFrom(pack.skills);
       let nextId = nextSkillId(pack.skills);
       for (const skill of resolved) {
         const existing = existingBySource.get(sourceKey(skill.source));
@@ -446,7 +446,7 @@ export async function addSkill(input: AddSkillInput): Promise<AddSkillsResult> {
         const addedSkill = {
           ...skill,
           id: formatSkillId(nextId),
-          name: nextSkillName(skill.name, skillNameCounts),
+          name: nextSkillName(skill.name, usedSkillNames),
         };
         nextId += 1;
         pack.skills.push(addedSkill);
@@ -716,27 +716,43 @@ function nextEntityNumber(ids: string[], prefix: string): number {
 }
 
 function sourceKey(source: SourceInfo): string {
-  return JSON.stringify(source);
-}
-
-function skillNameCountsFrom(skills: PackSkill[]): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const skill of skills) {
-    const baseName = baseSkillName(skill.name);
-    counts.set(baseName, (counts.get(baseName) ?? 0) + 1);
+  switch (source.kind) {
+    case "file":
+    case "directory":
+    case "glob":
+      return JSON.stringify([source.kind, source.path]);
+    case "url":
+      return JSON.stringify([source.kind, source.url]);
+    case "git":
+      return JSON.stringify([
+        source.kind,
+        source.url,
+        source.requestedRef ?? null,
+        source.resolvedRef,
+        source.resolvedCommit,
+        source.repoHash,
+        source.path ?? null,
+      ]);
   }
-  return counts;
 }
 
-function nextSkillName(name: string, counts: Map<string, number>): string {
-  const baseName = baseSkillName(name);
-  const count = (counts.get(baseName) ?? 0) + 1;
-  counts.set(baseName, count);
-  return count === 1 ? baseName : `${baseName} (${count})`;
+function skillNamesFrom(skills: PackSkill[]): Set<string> {
+  return new Set(skills.map((skill) => skill.name));
 }
 
-function baseSkillName(name: string): string {
-  return name.replace(/ \(\d+\)$/, "");
+function nextSkillName(name: string, usedNames: Set<string>): string {
+  if (!usedNames.has(name)) {
+    usedNames.add(name);
+    return name;
+  }
+  let suffix = 2;
+  let candidate = `${name} (${suffix})`;
+  while (usedNames.has(candidate)) {
+    suffix += 1;
+    candidate = `${name} (${suffix})`;
+  }
+  usedNames.add(candidate);
+  return candidate;
 }
 
 function requiredString(value: string, label: string): string {
