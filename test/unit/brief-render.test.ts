@@ -72,6 +72,42 @@ describe("brief rendering", () => {
     expect(renderSummary(state)).toContain("Blocked:\n- t001 - Inspect API");
   });
 
+  it("renders inputs before prompt and hides locked tasks from the brief", () => {
+    const state = pack({
+      inputSchema: {
+        scope: {
+          type: "string",
+          required: true,
+          description: "Review scope.",
+        },
+      },
+      inputs: { scope: "auth changes" },
+      inputSources: { scope: { source: "cli" } },
+      taskCounts: { total: 1, pending: 1, inProgress: 0, completed: 0, blocked: 0 },
+      tasks: [
+        pack().tasks[0],
+        {
+          id: "t002",
+          title: "Deep review",
+          status: "pending",
+          notes: [],
+          activation: "locked",
+          when: "scope",
+        },
+      ],
+    });
+
+    const brief = renderBrief(state);
+
+    expect(brief).toContain("Inputs:");
+    expect(brief).toContain("| scope | auth changes | yes | string | Review scope. |");
+    expect(brief.indexOf("Name: Review Pack")).toBeLessThan(brief.indexOf("Inputs:"));
+    expect(brief.indexOf("Inputs:")).toBeLessThan(brief.indexOf("Prompt:"));
+    expect(brief).toContain("- [pending] t001 - Inspect API");
+    expect(brief).not.toContain("Deep review");
+    expect(renderBrief(pack())).not.toContain("Inputs:");
+  });
+
   it("can render only task ids and titles without task content", () => {
     const brief = renderBrief(pack(), "ap", { includeTaskContent: false });
 

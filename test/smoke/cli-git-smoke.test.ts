@@ -62,6 +62,44 @@ describe("agent-pack CLI git smoke", () => {
       env,
     });
     expect(candidates.stdout).toBe("docs-review\n");
+
+    await runCli(
+      [
+        "init",
+        "--id",
+        "feature-design",
+        "--manifest",
+        "feature-design-summary",
+        "--input",
+        "create_branch=false",
+        "Design summary for: add a dry-run flag.",
+      ],
+      { cwd: workspace, env },
+    );
+    const featureBrief = await runCli(["brief", "--id", "feature-design"], {
+      cwd: workspace,
+      env,
+    });
+    expect(featureBrief.stdout).toContain("Resolve the reusable feature slug");
+    expect(featureBrief.stdout).not.toContain("Create the feature branch");
+
+    await runCli(
+      [
+        "init",
+        "--id",
+        "feature-design-default",
+        "--manifest",
+        "feature-design-summary",
+        "Design summary for: add an import preview command.",
+      ],
+      { cwd: workspace, env },
+    );
+    const defaultFeatureBrief = await runCli(["brief", "--id", "feature-design-default"], {
+      cwd: workspace,
+      env,
+    });
+    expect(defaultFeatureBrief.stdout).toContain("Resolve the reusable feature slug");
+    expect(defaultFeatureBrief.stdout).toContain("Create the feature branch");
   });
 
   it("generates a suffixed pack id when init has no explicit id", async () => {
@@ -151,11 +189,22 @@ references:
     expect(list.stdout).toContain("t001");
     expect(list.stdout).toContain("Inspect task commands");
 
+    const started = await runCli(
+      ["task", "start", "t001", "--id", "task-pack", "--note", "Starting"],
+      { cwd: workspace },
+    );
+    expect(started.stdout).toContain("Updated t001: started");
+    expect(started.stdout).toContain("Tasks: 0/1 completed, 0 blocked");
+    expect(started.stdout).not.toContain("References:");
+
     const done = await runCli(
       ["task", "done", "t001", "--id", "task-pack", "--note", "Completed"],
       { cwd: workspace },
     );
+    expect(done.stdout).toContain("Updated t001: completed");
     expect(done.stdout).toContain("Tasks: 1/1 completed, 0 blocked");
+    expect(done.stdout).not.toContain("References:");
+    expect(done.stdout).not.toContain("Skills:");
 
     const shown = await runCli(["task", "show", "t001", "--id", "task-pack"], {
       cwd: workspace,
@@ -225,6 +274,117 @@ references:
 
     const oldSyncAll = await runCli(["sync", "--all"], { cwd: workspace, reject: false });
     expect(oldSyncAll.stderr).toContain("unknown option '--all'");
+  });
+
+  it("captures inputs, unlocks conditional tasks, and completes input names", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-input-smoke-"));
+    await writeFile(
+      path.join(workspace, "pack.yaml"),
+      `schemaVersion: 1
+name: input-review
+inputs:
+  scope:
+    required: true
+    description: Review scope.
+  severity:
+    type: enum
+    values: [low, medium, high]
+    default: medium
+  include_tests:
+    type: boolean
+    default: true
+  report_path:
+    type: string
+tasks:
+  - id: baseline
+    title: Baseline review
+  - id: deep
+    title: Deep review
+    when:
+      severity: high
+  - id: publish
+    title: Publish report
+    when: report_path
+`,
+    );
+
+    await runCli(
+      ["init", "--id", "input-pack", "--manifest", "./pack.yaml", "--input", "scope=auth changes"],
+      { cwd: workspace },
+    );
+
+    const brief = await runCli(["brief", "--id", "input-pack"], { cwd: workspace });
+    expect(brief.stdout).toContain("Inputs:");
+    expect(brief.stdout).toContain("| scope | auth changes | yes | string | Review scope. |");
+    expect(brief.stdout).toContain("Baseline review");
+    expect(brief.stdout).not.toContain("Deep review");
+
+    const activeTasks = await runCli(["task", "list", "--id", "input-pack"], { cwd: workspace });
+    expect(activeTasks.stdout).toContain("Baseline review");
+    expect(activeTasks.stdout).not.toContain("Deep review");
+
+    const lockedTasks = await runCli(["task", "list", "--id", "input-pack", "--locked"], {
+      cwd: workspace,
+    });
+    expect(lockedTasks.stdout).toContain("[locked]");
+    expect(lockedTasks.stdout).toContain("Deep review");
+
+    const allTasks = await runCli(["task", "list", "--id", "input-pack", "--all"], {
+      cwd: workspace,
+    });
+    expect(allTasks.stdout).toContain("Baseline review");
+    expect(allTasks.stdout).toContain("Deep review");
+
+    const inputList = await runCli(["input", "list", "--id", "input-pack", "--json"], {
+      cwd: workspace,
+    });
+    expect(JSON.parse(inputList.stdout)).toMatchObject([
+      { name: "scope", value: "auth changes", source: "cli" },
+      { name: "severity", value: "medium", source: "default" },
+      { name: "include_tests", value: true, source: "default" },
+      { name: "report_path" },
+    ]);
+
+    const severity = await runCli(["input", "get", "severity", "--id", "input-pack"], {
+      cwd: workspace,
+    });
+    expect(severity.stdout.trim()).toBe("medium");
+
+    const setSeverity = await runCli(["input", "set", "severity", "high", "--id", "input-pack"], {
+      cwd: workspace,
+    });
+    expect(setSeverity.stdout).toContain("Updated input severity.");
+    expect(setSeverity.stdout).toContain("- t002 Deep review");
+
+    const unlockedTasks = await runCli(["task", "list", "--id", "input-pack"], {
+      cwd: workspace,
+    });
+    expect(unlockedTasks.stdout).toContain("Deep review");
+
+    const completionEnv = { AGENT_PACK_ID: "input-pack" };
+    const inputSubcommands = await runCli(["__complete", "g", "input"], {
+      cwd: workspace,
+      env: completionEnv,
+    });
+    expect(inputSubcommands.stdout).toBe("get\n");
+
+    const inputKeys = await runCli(["__complete", "se", "input", "get"], {
+      cwd: workspace,
+      env: completionEnv,
+    });
+    expect(inputKeys.stdout).toBe("severity\n");
+
+    const enumValues = await runCli(["__complete", "h", "input", "set", "severity"], {
+      cwd: workspace,
+      env: completionEnv,
+    });
+    expect(enumValues.stdout).toBe("high\n");
+
+    const booleanValues = await runCli(["__complete", "f", "input", "set", "include_tests"], {
+      cwd: workspace,
+      env: completionEnv,
+    });
+    expect(booleanValues.stdout).toBe("false\n");
   });
 
   it("adds references and skills through command groups", async () => {

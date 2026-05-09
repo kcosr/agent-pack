@@ -1,4 +1,5 @@
-import type { PackState, PackTask } from "../types.js";
+import { activeTasks } from "../inputs.js";
+import type { PackInputDef, PackInputValue, PackState, PackTask } from "../types.js";
 
 export interface BriefRenderOptions {
   includeTaskContent?: boolean;
@@ -16,6 +17,20 @@ export function renderBrief(
   lines.push(`You are working from pack ${pack.id}.`);
   if (pack.name) {
     lines.push(`Name: ${pack.name}`);
+  }
+  if (pack.inputSchema && Object.keys(pack.inputSchema).length > 0) {
+    lines.push(
+      "",
+      "Inputs:",
+      "",
+      "Treat these inputs as caller-provided context for this pack.",
+      "",
+    );
+    lines.push("| Name | Value | Required | Type | Description |");
+    lines.push("|---|---|---:|---|---|");
+    for (const [name, definition] of Object.entries(pack.inputSchema)) {
+      lines.push(inputTableRow(name, definition, pack.inputs?.[name]));
+    }
   }
   if (pack.prompt) {
     lines.push("", "Prompt:", pack.prompt);
@@ -38,7 +53,8 @@ export function renderBrief(
       }
     }
   }
-  if (pack.tasks.length) {
+  const visibleTasks = activeTasks(pack.tasks);
+  if (visibleTasks.length) {
     lines.push("", "Commands:");
     lines.push(`  ${taskCommand(commandName, pack.id, "list", { includePackIdInCommands })}`);
     lines.push(
@@ -132,11 +148,11 @@ export function renderBrief(
     });
   }
   lines.push("", "Tasks:");
-  if (pack.tasks.length === 0) {
+  if (visibleTasks.length === 0) {
     lines.push("- No tasks in this pack.");
   } else {
-    const spaceTaskEntries = includeTaskContent && hasDetailedTasks(pack.tasks);
-    pack.tasks.forEach((task, index) => {
+    const spaceTaskEntries = includeTaskContent && hasDetailedTasks(visibleTasks);
+    visibleTasks.forEach((task, index) => {
       if (spaceTaskEntries && index > 0) {
         lines.push("");
       }
@@ -169,6 +185,7 @@ export function renderBrief(
 }
 
 export function renderSummary(pack: PackState): string {
+  const blocked = activeTasks(pack.tasks).filter((task) => task.status === "blocked");
   const lines = [
     `Pack: ${pack.id}`,
     pack.name ? `Name: ${pack.name}` : undefined,
@@ -178,7 +195,6 @@ export function renderSummary(pack: PackState): string {
     `Skills: ${pack.skills.length}`,
     `Last updated: ${pack.updatedAt}`,
   ].filter(Boolean);
-  const blocked = pack.tasks.filter((task) => task.status === "blocked");
   if (blocked.length) {
     lines.push("", "Blocked:");
     for (const task of blocked) {
@@ -287,7 +303,8 @@ function formatTaskSummary(task: PackTask): string {
 }
 
 function formatTaskReportEntry(task: PackTask): string {
-  const lines = [`- ${task.id} [${task.status}] ${task.title}`];
+  const activation = task.activation === "locked" ? "locked" : task.status;
+  const lines = [`- ${task.id} [${activation}] ${task.title}`];
   if (task.category) {
     lines.push(`  Category: ${task.category}`);
   }
@@ -300,6 +317,9 @@ function formatTaskReportEntry(task: PackTask): string {
   if (task.blockedAt) {
     lines.push(`  Blocked: ${task.blockedAt}`);
   }
+  if (task.unlockedAt) {
+    lines.push(`  Unlocked: ${task.unlockedAt}`);
+  }
   if (task.notes.length) {
     lines.push("  Notes:");
     for (const note of task.notes) {
@@ -307,6 +327,24 @@ function formatTaskReportEntry(task: PackTask): string {
     }
   }
   return lines.join("\n");
+}
+
+function inputTableRow(
+  name: string,
+  definition: PackInputDef,
+  value: PackInputValue | undefined,
+): string {
+  return `| ${markdownCell(name)} | ${markdownCell(formatInputValue(value))} | ${
+    definition.required ? "yes" : "no"
+  } | ${definition.type} | ${markdownCell(definition.description ?? "")} |`;
+}
+
+function formatInputValue(value: PackInputValue | undefined): string {
+  return value === undefined ? "" : String(value);
+}
+
+function markdownCell(value: string): string {
+  return value.replace(/\|/g, "\\|").replace(/\n/g, " ");
 }
 
 function taskCommand(

@@ -11,6 +11,7 @@ import {
   writeJson,
 } from "../fs.js";
 import { normalizeGitPathInRepo } from "../git/ref.js";
+import { validatePackInputs, validateTaskActivation } from "../inputs.js";
 import { lockNamespace, withDirectoryLock } from "../lock.js";
 import { resolveRuntimePaths } from "../paths.js";
 import type { PackState, RuntimePaths, TaskCounts, TaskStatus } from "../types.js";
@@ -28,6 +29,9 @@ const taskFields = new Set([
   "status",
   "notes",
   "source",
+  "activation",
+  "when",
+  "unlockedAt",
   "startedAt",
   "completedAt",
   "blockedAt",
@@ -275,6 +279,7 @@ function validatePack(value: unknown, filePath: string): PackState {
   validatePackContract(value.contract, filePath);
   const counts = validateTaskCounts(value.taskCounts, filePath);
   validatePackTasks(tasks, filePath);
+  validatePackInputs(value as unknown as PackState, filePath);
   validatePackReferences(references, filePath);
   validatePackSkills(skills, filePath);
   const expectedCounts = taskCounts(value.tasks as PackState["tasks"]);
@@ -299,6 +304,9 @@ function validateKnownPackFields(value: Record<string, unknown>, filePath: strin
     "prompt",
     "instructions",
     "taskCounts",
+    "inputSchema",
+    "inputs",
+    "inputSources",
     "tasks",
     "references",
     "skills",
@@ -367,7 +375,15 @@ function validatePackTasks(value: unknown[], filePath: string): void {
     if (!Array.isArray(task.notes) || task.notes.some((note) => typeof note !== "string")) {
       throw new AgentPackError(`invalid pack task field 'tasks[${index}].notes': ${filePath}`);
     }
-    for (const field of ["sourceId", "category", "body", "startedAt", "completedAt", "blockedAt"]) {
+    for (const field of [
+      "sourceId",
+      "category",
+      "body",
+      "unlockedAt",
+      "startedAt",
+      "completedAt",
+      "blockedAt",
+    ]) {
       validateOptionalString(task[field], `tasks[${index}].${field}`, filePath);
     }
     if (
@@ -379,6 +395,11 @@ function validatePackTasks(value: unknown[], filePath: string): void {
     if (task.source !== undefined) {
       validateSource(task.source, `tasks[${index}].source`, filePath);
     }
+    validateTaskActivation(
+      task as unknown as PackState["tasks"][number],
+      `tasks[${index}]`,
+      filePath,
+    );
   }
 }
 

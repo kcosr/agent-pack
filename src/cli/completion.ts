@@ -10,11 +10,22 @@ const completionShells = ["bash", "zsh", "fish"] as const;
 type CompletionShell = (typeof completionShells)[number];
 type CompletionValueSource =
   | { kind: "catalog"; type: CatalogType }
-  | { kind: "catalogFromOperand"; index: number };
+  | { kind: "catalogFromOperand"; index: number }
+  | { kind: "inputName" }
+  | { kind: "inputValue"; inputNameIndex: number };
 type RunAction = (fn: () => Promise<void>) => Promise<void>;
+type InputCompletionProvider = {
+  names: () => Promise<string[]>;
+  values: (name: string) => Promise<string[]>;
+};
 
 const completionValueSources = new WeakMap<Option | Argument, CompletionValueSource>();
 const hiddenCommands = new WeakSet<Command>();
+let inputCompletionProvider: InputCompletionProvider | undefined;
+
+export function configureInputCompletion(provider: InputCompletionProvider): void {
+  inputCompletionProvider = provider;
+}
 
 export function configureCompletionCommands(root: Command, run: RunAction): void {
   const completion = root
@@ -53,6 +64,22 @@ export function configureCompletionCommands(root: Command, run: RunAction): void
 export function catalogNameArgument(): Argument {
   const argument = new Argument("<name>", "catalog name");
   completionValueSources.set(argument, { kind: "catalogFromOperand", index: 0 });
+  return argument;
+}
+
+export function inputNameArgument(flags: string, description: string): Argument {
+  const argument = new Argument(flags, description);
+  completionValueSources.set(argument, { kind: "inputName" });
+  return argument;
+}
+
+export function inputValueArgument(
+  flags: string,
+  description: string,
+  inputNameIndex: number,
+): Argument {
+  const argument = new Argument(flags, description);
+  completionValueSources.set(argument, { kind: "inputValue", inputNameIndex });
   return argument;
 }
 
@@ -282,6 +309,20 @@ async function valueCandidates(
     return [];
   }
 
+  if (source.kind === "inputName") {
+    return safeInputCandidates(() => inputCompletionProvider?.names() ?? Promise.resolve([]));
+  }
+
+  if (source.kind === "inputValue") {
+    const inputName = operands[source.inputNameIndex];
+    if (!inputName) {
+      return [];
+    }
+    return safeInputCandidates(
+      () => inputCompletionProvider?.values(inputName) ?? Promise.resolve([]),
+    );
+  }
+
   const catalogType =
     source.kind === "catalog" ? source.type : catalogTypeFromOperand(operands[source.index]);
   if (!catalogType || isExplicitCompletionPath(prefix)) {
@@ -291,6 +332,14 @@ async function valueCandidates(
   return (await catalogList(catalogType, { createDirs: false }))
     .map((entry) => entry.name)
     .filter(isCatalogName);
+}
+
+async function safeInputCandidates(load: () => Promise<string[]>): Promise<string[]> {
+  try {
+    return await load();
+  } catch {
+    return [];
+  }
 }
 
 function catalogTypeFromOperand(value: string | undefined): CatalogType | undefined {

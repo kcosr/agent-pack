@@ -49,8 +49,10 @@ export async function loadTasks(
     category: task.category,
     body: task.body,
     doneWhen: task.doneWhen,
+    when: task.when,
     status: "pending",
     notes: [],
+    activation: "active",
     source,
   }));
 }
