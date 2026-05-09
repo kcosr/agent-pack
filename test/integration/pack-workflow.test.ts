@@ -25,6 +25,7 @@ describe("pack workflow", () => {
     originalCwd = process.cwd();
     cwd = await mkdtemp(path.join(os.tmpdir(), "agent-pack-workflow-"));
     process.chdir(cwd);
+    cwd = process.cwd();
     vi.stubEnv("AGENT_PACK_BRIEF_TASK_CONTENT", undefined);
     vi.stubEnv("AGENT_PACK_CONFIG_DIR", undefined);
     vi.stubEnv("AGENT_PACK_ID", undefined);

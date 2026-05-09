@@ -10,6 +10,8 @@
 
 ### Fixed
 
+- Fixed zsh completion at the top-level command position.
+
 ### Removed
 
 ## [0.1.1] - 2026-05-09

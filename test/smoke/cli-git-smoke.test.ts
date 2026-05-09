@@ -377,6 +377,7 @@ references:
 
     const zshScript = await runCli(["completion", "script", "zsh"], { cwd: workspace, env });
     expect(zshScript.stdout).toContain("compdef _agent_pack agent-pack");
+    expect(zshScript.stdout).toContain("if (( CURRENT > 2 )); then");
     expect(zshScript.stdout).toContain('agent-pack __complete -- "$current"');
 
     const fishScript = await runCli(["completion", "script", "fish"], { cwd: workspace, env });
