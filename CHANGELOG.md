@@ -10,7 +10,7 @@
 
 ### Fixed
 
-- Fixed zsh completion at the top-level command position.
+- Fixed zsh completion at the top-level command position ([#4](https://github.com/kcosr/agent-pack/pull/4)).
 
 ### Removed
 
