@@ -350,8 +350,10 @@ function zshCompletionScript(): string {
 
 _agent_pack() {
   local current="\${words[CURRENT]}"
-  local -a prior
-  prior=("\${words[2,$(( CURRENT - 1 ))]}")
+  local -a prior=()
+  if (( CURRENT > 2 )); then
+    prior=("\${words[2,$(( CURRENT - 1 ))]}")
+  fi
   local -a names
   names=("\${(@f)$(agent-pack __complete -- "$current" "\${prior[@]}" 2>/dev/null)}")
   compadd -a names

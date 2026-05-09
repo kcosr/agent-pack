@@ -10,6 +10,8 @@
 
 ### Fixed
 
+- Fixed zsh completion at the top-level command position ([#4](https://github.com/kcosr/agent-pack/pull/4)).
+
 ### Removed
 
 ## [0.1.1] - 2026-05-09
