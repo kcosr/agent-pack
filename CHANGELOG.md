@@ -6,7 +6,7 @@
 
 - Regenerate saved shell completion files after upgrading; the hidden completion
   helper signature changed and older generated scripts will not match the new
-  helper contract.
+  helper contract ([#3](https://github.com/kcosr/agent-pack/pull/3)).
 
 ### Added
 
@@ -14,14 +14,14 @@
 - Added a bundled `feature-design-summary` example manifest for creating a
   repository-grounded feature design summary markdown file ([#2](https://github.com/kcosr/agent-pack/pull/2)).
 - Added shell completion candidates for command names, subcommands, option names,
-  known enum values, and completion shell names.
+  known enum values, and completion shell names ([#3](https://github.com/kcosr/agent-pack/pull/3)).
 
 ### Changed
 
 - Changed completion setup instructions to recommend generating a static
-  completion file for permanent shell startup setup.
+  completion file for permanent shell startup setup ([#3](https://github.com/kcosr/agent-pack/pull/3)).
 - Changed shell completion to suggest active command options when no app-known
-  positional completions are available.
+  positional completions are available ([#3](https://github.com/kcosr/agent-pack/pull/3)).
 
 ### Fixed
 
