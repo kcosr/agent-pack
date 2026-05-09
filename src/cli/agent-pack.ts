@@ -6,6 +6,8 @@ import { renderReport, renderSummary, renderTask } from "../core/brief/render.js
 import { catalogTypes } from "../core/catalog.js";
 import { AgentPackError } from "../core/errors.js";
 import {
+  addReference,
+  addSkill,
   addTask,
   brief,
   catalogList,
@@ -32,6 +34,7 @@ import type {
 } from "../core/types.js";
 import {
   catalogNameArgument,
+  catalogRefArgument,
   catalogRefOption,
   configureCompletionCommands,
 } from "./completion.js";
@@ -113,6 +116,8 @@ export function configureProgram(): Command {
     });
 
   configureTaskCommands(root);
+  configureReferenceCommands(root);
+  configureSkillCommands(root);
   configureCatalogCommands(root);
   configureCompletionCommands(root, run);
 
@@ -384,6 +389,77 @@ function configureTaskStatusCommand(
     });
 }
 
+function configureReferenceCommands(root: Command): void {
+  const reference = root.command("reference").description("Add pack references.");
+
+  reference
+    .command("add")
+    .description("Add a reference to a pack.")
+    .addArgument(catalogRefArgument("<ref>", "catalog, local, URL, or git reference", "reference"))
+    .option("--id <id>", "pack ID")
+    .addOption(gitRefreshOption())
+    .option("--json", "emit machine-readable output")
+    .action(async (ref, options) => {
+      await run(async () => {
+        const result = await addReference({
+          packId: options.id,
+          ref,
+          gitRefresh: options.gitRefresh,
+        });
+        if (options.json) {
+          printJson({
+            references: result.references,
+            skipped: result.skipped,
+            summary: statusJson(result.pack),
+          });
+        } else {
+          process.stdout.write(
+            addResultLine(
+              "reference",
+              result.pack.id,
+              result.references.length,
+              result.skipped.length,
+            ),
+          );
+          process.stdout.write(renderSummary(result.pack));
+        }
+      });
+    });
+}
+
+function configureSkillCommands(root: Command): void {
+  const skill = root.command("skill").description("Add pack skills.");
+
+  skill
+    .command("add")
+    .description("Add a skill to a pack.")
+    .addArgument(catalogRefArgument("<ref>", "catalog, local, or git skill", "skill"))
+    .option("--id <id>", "pack ID")
+    .addOption(gitRefreshOption())
+    .option("--json", "emit machine-readable output")
+    .action(async (ref, options) => {
+      await run(async () => {
+        const result = await addSkill({
+          packId: options.id,
+          ref,
+          gitRefresh: options.gitRefresh,
+        });
+        if (options.json) {
+          printJson({
+            skills: result.skills,
+            skipped: result.skipped,
+            summary: statusJson(result.pack),
+          });
+        } else {
+          process.stdout.write(
+            addResultLine("skill", result.pack.id, result.skills.length, result.skipped.length),
+          );
+          process.stdout.write(renderSummary(result.pack));
+        }
+      });
+    });
+}
+
 function configureCatalogCommands(root: Command): void {
   const catalog = root.command("catalog").description("List and inspect catalog entries.");
 
@@ -508,6 +584,20 @@ function taskJson(task: PackState["tasks"][number]) {
 
 function statusRow(pack: PackState): string {
   return `${pack.id}\t${pack.name ?? ""}\t${pack.status}\t${pack.taskCounts.completed}/${pack.taskCounts.total}\tblocked:${pack.taskCounts.blocked}\n`;
+}
+
+function addResultLine(
+  kind: "reference" | "skill",
+  packId: string,
+  added: number,
+  skipped: number,
+): string {
+  const plural = kind === "reference" ? "references" : "skills";
+  const noun = added === 1 ? kind : plural;
+  if (added === 0) {
+    return `No new ${plural} added to pack ${packId}; skipped ${skipped} already present.\n`;
+  }
+  return `Added ${added} ${noun} to pack ${packId}; skipped ${skipped} already present.\n`;
 }
 
 function printJson(value: unknown): void {

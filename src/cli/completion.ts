@@ -56,6 +56,16 @@ export function catalogNameArgument(): Argument {
   return argument;
 }
 
+export function catalogRefArgument(
+  flags: string,
+  description: string,
+  type: CatalogType,
+): Argument {
+  const argument = new Argument(flags, description);
+  completionValueSources.set(argument, { kind: "catalog", type });
+  return argument;
+}
+
 export function catalogRefOption(
   flags: string,
   description: string,
