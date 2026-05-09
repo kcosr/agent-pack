@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  addReference,
+  addSkill,
   addTask,
   brief,
   catalogList,
@@ -211,6 +213,104 @@ tasks:
 
     const loaded = await summaryPack("reject-empty-add");
     expect(loaded.tasks).toHaveLength(1);
+  });
+
+  it("adds references to an existing pack and skips duplicate sources", async () => {
+    const configDir = path.join(cwd, "config");
+    vi.stubEnv("AGENT_PACK_CONFIG_DIR", configDir);
+    await mkdir("docs", { recursive: true });
+    await mkdir(path.join(configDir, "references/product"), { recursive: true });
+    await writeFile("docs/intro.md", "# Intro\n");
+    await writeFile("docs/api.md", "# API\n");
+    await writeFile(
+      path.join(configDir, "references/product/api.yaml"),
+      "name: product api\ndescription: API docs.\nref: ./docs/api.md\n",
+    );
+    await initPack({
+      id: "reference-add-pack",
+      includes: [{ type: "reference", ref: { ref: "./docs/intro.md" } }],
+      gitRefresh: "auto",
+    });
+
+    const added = await addReference({
+      packId: "reference-add-pack",
+      ref: "product/api",
+      gitRefresh: "auto",
+    });
+
+    expect(added.references).toMatchObject([
+      {
+        id: "r002",
+        name: "product api",
+        description: "API docs.",
+        source: { kind: "file", path: "./docs/api.md" },
+        path: "./docs/api.md",
+      },
+    ]);
+    expect(added.skipped).toEqual([]);
+
+    const duplicate = await addReference({
+      packId: "reference-add-pack",
+      ref: "./docs/api.md",
+      gitRefresh: "auto",
+    });
+
+    expect(duplicate.references).toEqual([]);
+    expect(duplicate.skipped).toMatchObject([{ id: "r002", name: "product api" }]);
+    const loaded = await summaryPack("reference-add-pack");
+    expect(loaded.references.map((reference) => reference.id)).toEqual(["r001", "r002"]);
+    expect(loaded.references).toHaveLength(2);
+    const events = await readEvents("reference-add-pack");
+    expect(events.at(-2)).toMatchObject({
+      type: "reference.added",
+      data: { ref: "product/api", addedCount: 1, skippedCount: 0, added: ["r002"] },
+    });
+    expect(events.at(-1)).toMatchObject({
+      type: "reference.added",
+      data: { ref: "./docs/api.md", addedCount: 0, skippedCount: 1, skipped: ["r002"] },
+    });
+  });
+
+  it("adds skills to an existing pack and skips duplicate sources", async () => {
+    vi.stubEnv("AGENT_PACK_ID", "skill-add-pack");
+    await mkdir("skills/first", { recursive: true });
+    await mkdir("skills/second", { recursive: true });
+    await writeFile("skills/first/SKILL.md", "---\nname: review\ndescription: First skill.\n---\n");
+    await writeFile(
+      "skills/second/SKILL.md",
+      "---\nname: review\ndescription: Second skill.\n---\n",
+    );
+    await initPack({
+      id: "skill-add-pack",
+      includes: [{ type: "skill", ref: { ref: "./skills/first/SKILL.md" } }],
+      gitRefresh: "auto",
+    });
+
+    const result = await addSkill({ ref: "./skills", gitRefresh: "auto" });
+
+    expect(result.skills).toMatchObject([
+      {
+        id: "s002",
+        name: "review (2)",
+        description: "Second skill.",
+        source: { kind: "file", path: "./skills/second/SKILL.md" },
+      },
+    ]);
+    expect(result.skipped).toMatchObject([{ id: "s001", name: "review" }]);
+
+    const duplicate = await addSkill({
+      packId: "skill-add-pack",
+      ref: "./skills",
+      gitRefresh: "auto",
+    });
+
+    expect(duplicate.skills).toEqual([]);
+    expect(duplicate.skipped.map((skill) => skill.id)).toEqual(["s001", "s002"]);
+    const loaded = await summaryPack("skill-add-pack");
+    expect(loaded.skills.map((skill) => [skill.id, skill.name])).toEqual([
+      ["s001", "review"],
+      ["s002", "review (2)"],
+    ]);
   });
 
   it("updates status and counts when adding to a completed pack", async () => {

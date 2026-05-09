@@ -77,7 +77,17 @@ Use these flags with `agent-pack init`:
 - `--skill <ref>`: catalog skill, local `SKILL.md` file, directory scan, glob, or git-backed skill source
 - `--instructions <path>`: raw text instructions file
 
-After a pack exists, use `agent-pack task add <title>` to append an ad hoc pending task. It accepts optional `--category`, `--body`, repeatable `--done-when`, and `--json`.
+After a pack exists, use additive commands to compose it further:
+
+```bash
+agent-pack task add "Review follow-up"
+agent-pack reference add ./docs/api.md
+agent-pack reference add product/api
+agent-pack skill add ./skills/review/SKILL.md
+agent-pack skill add engineering/fresh-eyes
+```
+
+`task add` accepts optional `--category`, `--body`, repeatable `--done-when`, and `--json`. `reference add` and `skill add` accept the same ref formats as `init --reference` and `init --skill`, infer names and descriptions from the existing resolvers, skip sources already present in the pack, and support `--git-refresh auto|always|never` plus `--json`.
 
 Manifest `tasks`, `references`, and `skills` arrays can use the same refs as these CLI flags:
 

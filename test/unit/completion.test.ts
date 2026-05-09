@@ -53,6 +53,15 @@ describe("shell completion", () => {
     );
     expect(catalogNameArguments).toHaveLength(2);
     expect(catalogNameArguments.every(hasCatalogCompletionSource)).toBe(true);
+
+    const catalogRefArguments = allArguments(root).filter((argument) =>
+      argument.description.startsWith("catalog, local"),
+    );
+    expect(catalogRefArguments.map((argument) => argument.description).sort()).toEqual([
+      "catalog, local, URL, or git reference",
+      "catalog, local, or git skill",
+    ]);
+    expect(catalogRefArguments.every(hasCatalogCompletionSource)).toBe(true);
   });
 
   it.each([
@@ -74,6 +83,15 @@ describe("shell completion", () => {
     await expect(
       completionCandidates(configureProgram(), "review/", ["catalog", "show", "manifest"]),
     ).resolves.toBe("review/code-review\n");
+  });
+
+  it.each([
+    ["reference", "review/api\n"],
+    ["skill", "review/fresh-eyes\n"],
+  ])("resolves catalog candidates for %s add", async (command, expected) => {
+    await expect(
+      completionCandidates(configureProgram(), "review/", [command, "add"]),
+    ).resolves.toBe(expected);
   });
 });
 

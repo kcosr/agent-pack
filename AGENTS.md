@@ -8,7 +8,7 @@ This file is a lightweight internal onboarding note for agents working in this r
 - Read `docs/usage.md` for compact installed usage examples.
 - Use README sections for pack state, manifest, reference, skill, and cache semantics.
 - Source code lives in `src/cli/` and `src/core/`.
-- Current CLI entrypoint is `src/cli/agent-pack.ts`.
+- Current CLI bin entrypoint is `src/cli/main.ts`; command configuration lives in `src/cli/agent-pack.ts`.
 - Tests live in `test/unit/`, `test/integration/`, and `test/smoke/`.
 - CLI smoke tests run with `npm run test:smoke`.
 - Example manifests live in `examples/`.

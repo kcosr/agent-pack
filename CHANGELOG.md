@@ -6,6 +6,9 @@
 
 ### Added
 
+- Added `agent-pack reference add <ref>` and `agent-pack skill add <ref>` for
+  additive pack composition after `init`.
+
 ### Changed
 
 ### Fixed

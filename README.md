@@ -383,13 +383,13 @@ agent-pack sync --id reviewer-001 --json
 
 With `--json`, `sync` emits the synced pack as JSON.
 
-`sync` is explicit. Other commands do not fetch or clone git sources. If a pack is resumed on a new host, run `sync` before `brief`:
+`sync` is explicit for existing pack material. `reference add` and `skill add` also resolve git refs when adding new material. Other commands do not fetch or clone git sources. If a pack is resumed on a new host, run `sync` before `brief`:
 
 ```text
 Continue work on reviewer-001. Run agent-pack sync --id reviewer-001, then agent-pack brief --id reviewer-001 and proceed.
 ```
 
-`--git-refresh` applies only to `init` and `sync`:
+`--git-refresh` applies to `init`, `sync`, `reference add`, and `skill add`:
 
 | Value | Meaning |
 |---|---|
@@ -451,6 +451,23 @@ agent-pack task block t002 --id reviewer-001 --note "Need user decision."
 
 `agent-pack task note` takes the note text as a positional argument. `agent-pack task start`, `agent-pack task done`, and `agent-pack task block` take optional note text with `--note`.
 
+### Reference and Skill Commands
+
+```bash
+agent-pack reference add ./docs/api.md --id reviewer-001
+agent-pack reference add product/api --id reviewer-001
+agent-pack reference add https://example.com/docs/design.md --id reviewer-001 --json
+agent-pack skill add ./skills/review/SKILL.md --id reviewer-001
+agent-pack skill add engineering/fresh-eyes --id reviewer-001 --git-refresh never
+agent-pack skill add ./skills --id reviewer-001 --json
+```
+
+`agent-pack reference add <ref>` appends resolved reference material to an existing pack. The ref accepts the same catalog, local path, URL, and git formats as `init --reference`.
+
+`agent-pack skill add <ref>` appends resolved supplemental skills to an existing pack. The ref accepts the same catalog, local `SKILL.md`, directory, glob, and git formats as `init --skill`.
+
+Both commands infer names, descriptions, paths, and source metadata from the existing resolvers. If the resolved source is already present in the pack, it is skipped instead of added again. Git-backed refs resolve and materialize at add time using `--git-refresh auto|always|never`.
+
 ### Status and Reports
 
 ```bash
@@ -479,6 +496,8 @@ JSON output shapes:
 | `list --json` | Array of status objects |
 | `status --json` | Resolved paths and current defaults |
 | `summary --json` | `{ id, name, status, tasks, references, skills }` |
+| `reference add <ref> --json` | `{ references, skipped, summary }` |
+| `skill add <ref> --json` | `{ skills, skipped, summary }` |
 | `task add <title> --json` | `{ task, summary }` |
 | `task show <task-id> --json` | Task state object |
 | `report --json` | Full pack state object |

@@ -33,6 +33,8 @@ import type {
   ManifestSkill,
   PackContract,
   PackManifest,
+  PackReference,
+  PackSkill,
   PackState,
   PackTask,
   RuntimePaths,
@@ -344,6 +346,123 @@ export async function addTask(input: AddTaskInput): Promise<{ pack: PackState; t
   return { pack, task: addedTask };
 }
 
+export interface AddReferenceInput {
+  packId?: string;
+  ref: string;
+  gitRefresh: GitRefresh;
+}
+
+export interface AddReferencesResult {
+  pack: PackState;
+  references: PackReference[];
+  skipped: PackReference[];
+}
+
+export async function addReference(input: AddReferenceInput): Promise<AddReferencesResult> {
+  const ref = requiredString(input.ref, "reference ref");
+  const store = new StateStore();
+  await store.loadPack(input.packId);
+  const resolved = await resolveReferences([{ ref }], store.paths, input.gitRefresh);
+  const added: PackReference[] = [];
+  const skipped: PackReference[] = [];
+  const eventData = {
+    ref,
+    addedCount: 0,
+    skippedCount: 0,
+    added: [] as string[],
+    skipped: [] as string[],
+  };
+  const pack = await store.updatePack(
+    input.packId,
+    (pack) => {
+      const existingBySource = new Map(
+        pack.references.map((reference) => [sourceKey(reference.source), reference]),
+      );
+      let nextId = nextReferenceId(pack.references);
+      for (const reference of resolved) {
+        const existing = existingBySource.get(sourceKey(reference.source));
+        if (existing) {
+          skipped.push(existing);
+          eventData.skipped.push(existing.id);
+          continue;
+        }
+        const addedReference = { ...reference, id: formatReferenceId(nextId) };
+        nextId += 1;
+        pack.references.push(addedReference);
+        existingBySource.set(sourceKey(addedReference.source), addedReference);
+        added.push(addedReference);
+        eventData.added.push(addedReference.id);
+      }
+      eventData.addedCount = added.length;
+      eventData.skippedCount = skipped.length;
+    },
+    "reference.added",
+    eventData,
+  );
+  return { pack, references: added, skipped };
+}
+
+export interface AddSkillInput {
+  packId?: string;
+  ref: string;
+  gitRefresh: GitRefresh;
+}
+
+export interface AddSkillsResult {
+  pack: PackState;
+  skills: PackSkill[];
+  skipped: PackSkill[];
+}
+
+export async function addSkill(input: AddSkillInput): Promise<AddSkillsResult> {
+  const ref = requiredString(input.ref, "skill ref");
+  const store = new StateStore();
+  await store.loadPack(input.packId);
+  const resolved = await resolveSkills([{ ref }], store.paths, input.gitRefresh);
+  const added: PackSkill[] = [];
+  const skipped: PackSkill[] = [];
+  const eventData = {
+    ref,
+    addedCount: 0,
+    skippedCount: 0,
+    added: [] as string[],
+    skipped: [] as string[],
+  };
+  const pack = await store.updatePack(
+    input.packId,
+    (pack) => {
+      const existingBySource = new Map(
+        pack.skills.map((skill) => [sourceKey(skill.source), skill]),
+      );
+      const skillNameCounts = skillNameCountsFrom(pack.skills);
+      let nextId = nextSkillId(pack.skills);
+      for (const skill of resolved) {
+        const existing = existingBySource.get(sourceKey(skill.source));
+        if (existing) {
+          skipped.push(existing);
+          eventData.skipped.push(existing.id);
+          continue;
+        }
+        const addedSkill = {
+          ...skill,
+          id: formatSkillId(nextId),
+          name: nextSkillName(skill.name, skillNameCounts),
+        };
+        nextId += 1;
+        pack.skills.push(addedSkill);
+        existingBySource.set(sourceKey(addedSkill.source), addedSkill);
+        added.push(addedSkill);
+        eventData.added.push(addedSkill.id);
+      }
+      eventData.addedCount = added.length;
+      eventData.skippedCount = skipped.length;
+    },
+    "skill.added",
+    eventData,
+  );
+  return { pack, skills: added, skipped };
+}
+
 export async function updateTask(
   taskId: string,
   status: TaskStatus | undefined,
@@ -555,6 +674,69 @@ function nextTaskId(tasks: PackTask[]): string {
     candidate = formatTaskId(next);
   }
   return candidate;
+}
+
+function nextReferenceId(references: PackReference[]): number {
+  return nextEntityNumber(
+    references.map((reference) => reference.id),
+    "r",
+  );
+}
+
+function formatReferenceId(value: number): string {
+  return `r${String(value).padStart(3, "0")}`;
+}
+
+function nextSkillId(skills: PackSkill[]): number {
+  return nextEntityNumber(
+    skills.map((skill) => skill.id),
+    "s",
+  );
+}
+
+function formatSkillId(value: number): string {
+  return `s${String(value).padStart(3, "0")}`;
+}
+
+function nextEntityNumber(ids: string[], prefix: string): number {
+  const usedIds = new Set(ids);
+  let next = 1;
+  const pattern = new RegExp(`^${prefix}(\\d+)$`);
+  for (const id of ids) {
+    const match = pattern.exec(id);
+    if (!match) {
+      continue;
+    }
+    next = Math.max(next, Number(match[1]) + 1);
+  }
+  while (usedIds.has(`${prefix}${String(next).padStart(3, "0")}`)) {
+    next += 1;
+  }
+  return next;
+}
+
+function sourceKey(source: SourceInfo): string {
+  return JSON.stringify(source);
+}
+
+function skillNameCountsFrom(skills: PackSkill[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const skill of skills) {
+    const baseName = baseSkillName(skill.name);
+    counts.set(baseName, (counts.get(baseName) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function nextSkillName(name: string, counts: Map<string, number>): string {
+  const baseName = baseSkillName(name);
+  const count = (counts.get(baseName) ?? 0) + 1;
+  counts.set(baseName, count);
+  return count === 1 ? baseName : `${baseName} (${count})`;
+}
+
+function baseSkillName(name: string): string {
+  return name.replace(/ \(\d+\)$/, "");
 }
 
 function requiredString(value: string, label: string): string {

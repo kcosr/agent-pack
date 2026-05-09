@@ -227,6 +227,48 @@ references:
     expect(oldSyncAll.stderr).toContain("unknown option '--all'");
   });
 
+  it("adds references and skills through command groups", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-compose-smoke-"));
+    await mkdir(path.join(workspace, "docs"), { recursive: true });
+    await mkdir(path.join(workspace, "skills/review"), { recursive: true });
+    await writeFile(path.join(workspace, "docs/api.md"), "# API\n");
+    await writeFile(
+      path.join(workspace, "skills/review/SKILL.md"),
+      "---\nname: review\ndescription: Review skill.\n---\n",
+    );
+
+    await runCli(["init", "--id", "compose-pack", "Compose later."], { cwd: workspace });
+
+    const reference = await runCli(["reference", "add", "./docs/api.md", "--id", "compose-pack"], {
+      cwd: workspace,
+    });
+    expect(reference.stdout).toContain("Added 1 reference to pack compose-pack");
+    expect(reference.stdout).toContain("References: 1");
+
+    const duplicateReference = await runCli(
+      ["reference", "add", "./docs/api.md", "--id", "compose-pack", "--json"],
+      { cwd: workspace },
+    );
+    expect(JSON.parse(duplicateReference.stdout)).toMatchObject({
+      references: [],
+      skipped: [{ id: "r001", name: "api.md" }],
+      summary: { id: "compose-pack", references: 1 },
+    });
+
+    const skill = await runCli(["skill", "add", "./skills", "--id", "compose-pack", "--json"], {
+      cwd: workspace,
+    });
+    expect(JSON.parse(skill.stdout)).toMatchObject({
+      skills: [{ id: "s001", name: "review" }],
+      skipped: [],
+      summary: { id: "compose-pack", skills: 1 },
+    });
+
+    const report = await runCli(["report", "--id", "compose-pack"], { cwd: workspace });
+    expect(report.stdout).toContain("References:\n- r001 - api.md");
+    expect(report.stdout).toContain("Skills:\n- s001 - review");
+  });
+
   it("adds ad hoc tasks through the task add command", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-task-add-smoke-"));
 
@@ -388,6 +430,8 @@ references:
     const topLevelCandidates = await runCli(["__complete", ""], { cwd: workspace, env });
     expect(topLevelCandidates.stdout).toContain("init\n");
     expect(topLevelCandidates.stdout).toContain("task\n");
+    expect(topLevelCandidates.stdout).toContain("reference\n");
+    expect(topLevelCandidates.stdout).toContain("skill\n");
 
     const taskSubcommandCandidates = await runCli(["__complete", "d", "task"], {
       cwd: workspace,
@@ -447,6 +491,41 @@ references:
       env,
     });
     expect(catalogSubcommandCandidates.stdout).toBe("path\n");
+
+    const referenceSubcommandCandidates = await runCli(["__complete", "a", "reference"], {
+      cwd: workspace,
+      env,
+    });
+    expect(referenceSubcommandCandidates.stdout).toBe("add\n");
+
+    const skillSubcommandCandidates = await runCli(["__complete", "a", "skill"], {
+      cwd: workspace,
+      env,
+    });
+    expect(skillSubcommandCandidates.stdout).toBe("add\n");
+
+    const referenceAddCandidates = await runCli(["__complete", "review/a", "reference", "add"], {
+      cwd: workspace,
+      env,
+    });
+    expect(referenceAddCandidates.stdout).toBe("review/api\n");
+
+    const skillAddCandidates = await runCli(["__complete", "review/f", "skill", "add"], {
+      cwd: workspace,
+      env,
+    });
+    expect(skillAddCandidates.stdout).toBe("review/fresh-eyes\n");
+
+    const referenceAddOptionCandidates = await runCli(
+      ["__complete", "--", "--", "reference", "add", "review/api"],
+      {
+        cwd: workspace,
+        env,
+      },
+    );
+    expect(referenceAddOptionCandidates.stdout).toContain("--id\n");
+    expect(referenceAddOptionCandidates.stdout).toContain("--git-refresh\n");
+    expect(referenceAddOptionCandidates.stdout).toContain("--json\n");
 
     const shellCandidates = await runCli(["__complete", "b", "completion", "script"], {
       cwd: workspace,
@@ -551,8 +630,10 @@ references:
     git(["config", "user.name", "Test User"], repo);
     await mkdir(path.join(repo, "docs"), { recursive: true });
     await mkdir(path.join(repo, "tasks"), { recursive: true });
+    await mkdir(path.join(repo, "extras/skill"), { recursive: true });
     await mkdir(path.join(repo, "skills/review"), { recursive: true });
     await writeFile(path.join(repo, "docs/reference.md"), "# Reference\n");
+    await writeFile(path.join(repo, "docs/extra-reference.md"), "# Extra Reference\n");
     await writeFile(
       path.join(repo, "tasks/review.yaml"),
       "id: inspect-git\ntitle: Inspect git material\n",
@@ -564,6 +645,10 @@ references:
     await writeFile(
       path.join(repo, "skills/review/SKILL.md"),
       "---\nname: review-skill\ndescription: Review with evidence.\n---\n",
+    );
+    await writeFile(
+      path.join(repo, "extras/skill/SKILL.md"),
+      "---\nname: extra-skill\ndescription: Extra git skill.\n---\n",
     );
     await writeFile(
       path.join(repo, "pack.yaml"),
@@ -630,6 +715,75 @@ skills:
     expect(manifestTask.source.kind).toBe("git");
     expect(manifestTask.source.path).toBe("pack.yaml");
     expect(manifestTask.source.resolvedCommit).toMatch(/^[a-f0-9]{40}$/);
+
+    const addedGitReference = await runCli(
+      [
+        "reference",
+        "add",
+        `git+${remoteUrl}//docs/extra-reference.md#main`,
+        "--id",
+        "git-pack",
+        "--git-refresh",
+        "never",
+        "--json",
+      ],
+      { cwd: workspace },
+    );
+    expect(JSON.parse(addedGitReference.stdout)).toMatchObject({
+      references: [
+        {
+          id: "r003",
+          name: "extra-reference.md",
+          source: { kind: "git", path: "docs/extra-reference.md" },
+        },
+      ],
+      skipped: [],
+      summary: { id: "git-pack", references: 3 },
+    });
+
+    const addedGitSkill = await runCli(
+      [
+        "skill",
+        "add",
+        `git+${remoteUrl}//extras/skill/SKILL.md#main`,
+        "--id",
+        "git-pack",
+        "--git-refresh",
+        "never",
+        "--json",
+      ],
+      { cwd: workspace },
+    );
+    expect(JSON.parse(addedGitSkill.stdout)).toMatchObject({
+      skills: [
+        {
+          id: "s003",
+          name: "extra-skill",
+          source: { kind: "git", path: "extras/skill/SKILL.md" },
+        },
+      ],
+      skipped: [],
+      summary: { id: "git-pack", skills: 3 },
+    });
+
+    const duplicateGitReference = await runCli(
+      [
+        "reference",
+        "add",
+        `git+${remoteUrl}//docs/extra-reference.md#main`,
+        "--id",
+        "git-pack",
+        "--git-refresh",
+        "never",
+        "--json",
+      ],
+      { cwd: workspace },
+    );
+    expect(JSON.parse(duplicateGitReference.stdout)).toMatchObject({
+      references: [],
+      skipped: [{ id: "r003", name: "extra-reference.md" }],
+      summary: { id: "git-pack", references: 3 },
+    });
 
     await rm(path.join(workspace, ".agent-pack/cache"), { recursive: true, force: true });
     const missing = await runCli(["brief", "--id", "git-pack"], { cwd: workspace, reject: false });
