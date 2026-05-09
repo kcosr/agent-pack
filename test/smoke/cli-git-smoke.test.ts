@@ -62,6 +62,44 @@ describe("agent-pack CLI git smoke", () => {
       env,
     });
     expect(candidates.stdout).toBe("docs-review\n");
+
+    await runCli(
+      [
+        "init",
+        "--id",
+        "feature-design",
+        "--manifest",
+        "feature-design-summary",
+        "--input",
+        "create_branch=false",
+        "Design summary for: add a dry-run flag.",
+      ],
+      { cwd: workspace, env },
+    );
+    const featureBrief = await runCli(["brief", "--id", "feature-design"], {
+      cwd: workspace,
+      env,
+    });
+    expect(featureBrief.stdout).toContain("Resolve the reusable feature slug");
+    expect(featureBrief.stdout).not.toContain("Create the feature branch");
+
+    await runCli(
+      [
+        "init",
+        "--id",
+        "feature-design-default",
+        "--manifest",
+        "feature-design-summary",
+        "Design summary for: add an import preview command.",
+      ],
+      { cwd: workspace, env },
+    );
+    const defaultFeatureBrief = await runCli(["brief", "--id", "feature-design-default"], {
+      cwd: workspace,
+      env,
+    });
+    expect(defaultFeatureBrief.stdout).toContain("Resolve the reusable feature slug");
+    expect(defaultFeatureBrief.stdout).toContain("Create the feature branch");
   });
 
   it("generates a suffixed pack id when init has no explicit id", async () => {
@@ -150,6 +188,14 @@ references:
     const list = await runCli(["task", "list", "--id", "task-pack"], { cwd: workspace });
     expect(list.stdout).toContain("t001");
     expect(list.stdout).toContain("Inspect task commands");
+
+    const started = await runCli(
+      ["task", "start", "t001", "--id", "task-pack", "--note", "Starting"],
+      { cwd: workspace },
+    );
+    expect(started.stdout).toContain("Updated t001: started");
+    expect(started.stdout).toContain("Tasks: 0/1 completed, 0 blocked");
+    expect(started.stdout).not.toContain("References:");
 
     const done = await runCli(
       ["task", "done", "t001", "--id", "task-pack", "--note", "Completed"],

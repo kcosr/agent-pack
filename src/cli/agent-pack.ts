@@ -404,7 +404,7 @@ function configureTaskStatusCommand(
     .action(async (taskId, options) => {
       await run(async () => {
         const pack = await updateTask(taskId, status, options.note, options.id);
-        process.stdout.write(renderTaskMutation(pack, taskId, status));
+        process.stdout.write(renderTaskMutation(pack, taskId, taskMutationLabel(status)));
       });
     });
 }
@@ -697,12 +697,15 @@ function statusRow(pack: PackState): string {
 }
 
 function renderTaskMutation(pack: PackState, taskId: string, action: string): string {
-  const task = pack.tasks.find((candidate) => candidate.id === taskId);
   return [
-    `Updated ${task?.id ?? taskId}: ${action}`,
+    `Updated ${taskId}: ${action}`,
     `Tasks: ${pack.taskCounts.completed}/${pack.taskCounts.total} completed, ${pack.taskCounts.blocked} blocked`,
     "",
   ].join("\n");
+}
+
+function taskMutationLabel(status: TaskStatus): string {
+  return status === "in_progress" ? "started" : status;
 }
 
 function inputRow(entry: Awaited<ReturnType<typeof listInputs>>[number]): string {

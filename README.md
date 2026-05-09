@@ -1048,6 +1048,11 @@ export AGENT_PACK_ID=<generated-id>
 agent-pack brief
 ```
 
+The feature design-summary manifest creates a feature branch from `main` by
+default. Pass `--input create_branch=false` to keep planning in the existing
+tree, and optionally pass `--input slug=<slug>` when the agent should use a
+specific slug for branch and design artifact names.
+
 Use the generated id printed by `init`, or pass `--id <id>` when you want a deterministic pack id. Setting `AGENT_PACK_ID` before `init` also provides the pack id for that new pack.
 
 To use examples as catalog refs, point the catalog config directory at the examples root:

@@ -172,7 +172,9 @@ AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR" agent-pack init --manifest code-review "Re
 
 Other bundled manifests include `docs-review` for documentation review and
 `feature-design-summary` for creating a repository-grounded feature design
-summary markdown file from a feature brief.
+summary markdown file from a feature brief. The feature design-summary manifest
+creates a feature branch from `main` by default; pass
+`--input create_branch=false` to plan in the existing tree.
 
 Enable shell completion for the current shell session:
 

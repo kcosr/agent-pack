@@ -11,11 +11,11 @@ instructions: |
   with targeted questions instead of guessing.
 
   Create one markdown file as the deliverable. If the prompt names an output
-  path, use that path. Otherwise create
-  `docs/design/design-summary-<kebab-feature-slug>.md` when `docs/design/` exists, or
-  `design-summary-<kebab-feature-slug>.md` at the repo root when it does not.
-  Do not create extra workflow artifacts, worktrees, implementation branches,
-  commits, or PRs.
+  path, use that path. Otherwise use the resolved `slug` input in
+  `docs/design/design-summary-<slug>.md` when `docs/design/` exists, or
+  `design-summary-<slug>.md` at the repo root when it does not. Do not create
+  extra workflow artifacts, worktrees, commits, or PRs. Create a feature branch
+  only when the `create_branch` input is true.
 
   The summary must use these sections:
 
@@ -38,6 +38,15 @@ instructions: |
   "No user-visible surfaces are introduced, changed, or removed by this
   feature." line when those sections are genuinely empty. Do not leave
   placeholders in the final file.
+
+inputs:
+  create_branch:
+    type: boolean
+    default: true
+    description: Whether the agent should create a new branch from main or work in the existing tree.
+  slug:
+    type: string
+    description: Reusable feature slug used for branch and design artifact names. Optional at init; if unset, the agent derives one during resolve-slug and persists it.
 
 tasks:
   - id: orient
@@ -97,6 +106,60 @@ tasks:
     doneWhen:
       - Notes restate the feature, scope, feature type, resolved dimensions, and assumptions.
       - Ambiguous contract dimensions are either resolved or this task is blocked with targeted questions.
+
+  - id: resolve-slug
+    title: Resolve the reusable feature slug
+    category: planning
+    body: |
+      This task runs regardless of `create_branch` because the design summary
+      filename uses the slug.
+
+      If the brief's Inputs section shows `slug` is already set, treat it as
+      user-provided. Use it consistently for the branch name, any worktree name
+      if the user explicitly requested a separate worktree, pack references, and
+      the design artifact name. Do not replace a user-provided slug.
+
+      If `slug` is not set, derive a short kebab-case slug from the feature
+      brief after resolving ambiguity. Keep it stable, readable, and specific
+      enough to reuse across branch and file names. Then persist it:
+
+          agent-pack input set slug <slug>
+
+      Once the slug is persisted and used for a branch or summary path, do not
+      change it unless the user explicitly instructs you to rename the workflow
+      artifacts.
+
+      Record whether the slug was user-provided or agent-derived.
+    doneWhen:
+      - The `slug` input is set or confirmed as already set.
+      - Notes record the slug and whether it was user-provided or agent-derived.
+
+  - id: create-branch
+    title: Create the feature branch
+    category: planning
+    when:
+      create_branch: true
+    body: |
+      Create a new feature branch from `main` using the resolved `slug` input.
+
+      If the `slug` input is not set, complete `resolve-slug` first. Use the
+      existing slug; do not derive a different branch name.
+
+      Inspect the current git state before switching branches. Do not discard,
+      overwrite, or hide existing user changes. If local changes would make
+      switching unsafe, block with a concise explanation instead of forcing the
+      branch change.
+
+      Prefer the repository's normal branch naming pattern when one is obvious.
+      Otherwise use a simple branch name such as `feature/<slug>`.
+
+      If the branch already exists, switch to it only when doing so is safe.
+      Record the final branch name in notes. Do not change the `slug` input
+      after creating or selecting the branch unless the user explicitly asks for
+      a rename.
+    doneWhen:
+      - Notes record the branch name created or selected from `main`.
+      - No user changes were discarded or overwritten.
 
   - id: survey-impact
     title: Survey the impact surface
@@ -218,9 +281,10 @@ tasks:
     category: deliverable
     body: |
       Create the markdown summary file. If the prompt names an output path, use
-      that path. Otherwise use `docs/design/design-summary-<kebab-feature-slug>.md`
-      when `docs/design/` exists, or `design-summary-<kebab-feature-slug>.md` at the
-      repo root when it does not.
+      that path. Otherwise use the resolved `slug` input in
+      `docs/design/design-summary-<slug>.md` when `docs/design/` exists, or
+      `design-summary-<slug>.md` at the repo root when it does not. If `slug` is
+      not set, complete `resolve-slug` first.
 
       Render the required sections from prior task notes:
         - Overview: one paragraph describing the feature.
@@ -242,6 +306,7 @@ tasks:
       - The summary markdown file exists at the selected path.
       - The file contains all required sections.
       - Contract, Surface Inventory, and Open Assumptions match the earlier task notes.
+      - Notes record the final summary path that uses the resolved slug unless the prompt explicitly named an output path.
       - No placeholder markers remain.
 
   - id: self-check
@@ -255,6 +320,7 @@ tasks:
         - the surface inventory covers every user-visible name from the contract
         - risks and test strategy cover the impacted shared paths
         - no extra workflow artifact, worktree, nested review, commit, PR, or implementation execution instructions were included
+        - the summary path uses the resolved slug unless the prompt explicitly named an output path
 
       Record the final summary path and a concise quality note.
     doneWhen:
@@ -266,9 +332,11 @@ contract:
     - Ground the design summary in repository evidence and file paths.
     - Block on unresolved contract ambiguity instead of inventing behavior.
     - Create exactly one markdown summary file unless the user explicitly requests more artifacts.
+    - Use the resolved slug consistently for branch and design artifact names.
     - Keep the summary focused on design, scope, implementation shape, risks, and tests.
   dont:
     - Implement the feature.
-    - Create extra workflow artifacts, worktrees, commits, branches, or PRs.
+    - Create extra workflow artifacts, worktrees, commits, or PRs.
+    - Create a branch when the `create_branch` input is false.
     - Add compatibility fallbacks, alias fields, bridge routes, or dual-shape parsers unless the prompt explicitly requires them.
     - Leave placeholders or unsupported claims in the final summary.

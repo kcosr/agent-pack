@@ -15,6 +15,8 @@
 
 - Changed task status and note command output to print compact task-focused
   confirmations instead of full pack summaries.
+- Changed the bundled `feature-design-summary` manifest to resolve a reusable
+  slug and optionally create a feature branch from `main`.
 
 ### Fixed
 
