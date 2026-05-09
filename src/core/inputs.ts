@@ -3,6 +3,7 @@ import type {
   InputSource,
   ManifestInputDef,
   PackInputDef,
+  PackInputType,
   PackInputValue,
   PackState,
   PackTask,
@@ -10,9 +11,18 @@ import type {
   TaskWhenCondition,
 } from "./types.js";
 
-const inputTypes = new Set(["string", "enum", "boolean", "number"]);
+export const inputTypeNames: readonly PackInputType[] = ["string", "enum", "boolean", "number"];
+export const inputDefinitionFieldNames = [
+  "type",
+  "required",
+  "description",
+  "default",
+  "values",
+] as const;
+
+const inputTypes: ReadonlySet<string> = new Set(inputTypeNames);
 const inputNamePattern = /^[A-Za-z_][A-Za-z0-9_-]*$/;
-const inputDefinitionFields = new Set(["type", "required", "description", "default", "values"]);
+const inputDefinitionFields: ReadonlySet<string> = new Set(inputDefinitionFieldNames);
 
 export interface ResolvedInputs {
   inputSchema?: Record<string, PackInputDef>;
@@ -173,6 +183,10 @@ export function inputValueCandidates(pack: PackState, name: string): string[] {
   return [];
 }
 
+export function isInputName(name: string): boolean {
+  return inputNamePattern.test(name);
+}
+
 export function validatePackInputs(pack: PackState, filePath: string): void {
   const schema = pack.inputSchema;
   if (schema === undefined) {
@@ -247,6 +261,9 @@ export function validateTaskActivation(task: PackTask, label: string, filePath: 
     throw new AgentPackError(`invalid pack task field '${label}.unlockedAt': ${filePath}`);
   }
   if (task.activation === "locked") {
+    if (task.when === undefined) {
+      throw new AgentPackError(`invalid pack task field '${label}.when': ${filePath}`);
+    }
     if (task.status !== "pending") {
       throw new AgentPackError(`invalid pack task field '${label}.status': ${filePath}`);
     }
@@ -264,7 +281,7 @@ function mergeInputSchemas(
     for (const [name, rawDefinition] of Object.entries(schema ?? {})) {
       const definition = normalizeInputDefinition(name, rawDefinition);
       const existing = merged[name];
-      if (existing && JSON.stringify(existing) !== JSON.stringify(definition)) {
+      if (existing && !inputDefinitionsEqual(existing, definition)) {
         throw new AgentPackError(`conflicting input definition: ${name}`);
       }
       merged[name] = definition;
@@ -385,6 +402,9 @@ function coerceInputValue(
     throw new AgentPackError(`${label} ${name} must be a boolean`);
   }
   if (definition.type === "number") {
+    if (typeof value === "string" && !value.trim()) {
+      throw new AgentPackError(`${label} ${name} must be a finite number`);
+    }
     const numberValue = typeof value === "number" ? value : Number(value);
     if (!Number.isFinite(numberValue)) {
       throw new AgentPackError(`${label} ${name} must be a finite number`);
@@ -511,9 +531,26 @@ function rejectUnexpectedInputState(
 }
 
 function assertInputName(name: string, label: string): void {
-  if (!inputNamePattern.test(name)) {
+  if (!isInputName(name)) {
     throw new AgentPackError(`invalid ${label}`);
   }
+}
+
+function inputDefinitionsEqual(a: PackInputDef, b: PackInputDef): boolean {
+  return (
+    a.type === b.type &&
+    a.required === b.required &&
+    a.description === b.description &&
+    a.default === b.default &&
+    arrayEqual(a.values, b.values)
+  );
+}
+
+function arrayEqual(a: readonly string[] | undefined, b: readonly string[] | undefined): boolean {
+  if (a === undefined || b === undefined) {
+    return a === b;
+  }
+  return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
 function requiredInputString(value: unknown, label: string): void {

@@ -374,7 +374,7 @@ function configureTaskCommands(root: Command): void {
     .action(async (taskId, note, options) => {
       await run(async () => {
         const pack = await updateTask(taskId, undefined, note, options.id);
-        process.stdout.write(renderSummary(pack));
+        process.stdout.write(renderTaskMutation(pack, taskId, "note added"));
       });
     });
 
@@ -404,7 +404,7 @@ function configureTaskStatusCommand(
     .action(async (taskId, options) => {
       await run(async () => {
         const pack = await updateTask(taskId, status, options.note, options.id);
-        process.stdout.write(renderSummary(pack));
+        process.stdout.write(renderTaskMutation(pack, taskId, status));
       });
     });
 }
@@ -694,6 +694,15 @@ function taskJson(task: PackState["tasks"][number]) {
 
 function statusRow(pack: PackState): string {
   return `${pack.id}\t${pack.name ?? ""}\t${pack.status}\t${pack.taskCounts.completed}/${pack.taskCounts.total}\tblocked:${pack.taskCounts.blocked}\n`;
+}
+
+function renderTaskMutation(pack: PackState, taskId: string, action: string): string {
+  const task = pack.tasks.find((candidate) => candidate.id === taskId);
+  return [
+    `Updated ${task?.id ?? taskId}: ${action}`,
+    `Tasks: ${pack.taskCounts.completed}/${pack.taskCounts.total} completed, ${pack.taskCounts.blocked} blocked`,
+    "",
+  ].join("\n");
 }
 
 function inputRow(entry: Awaited<ReturnType<typeof listInputs>>[number]): string {

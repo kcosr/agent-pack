@@ -13,7 +13,13 @@
 
 ### Changed
 
+- Changed task status and note command output to print compact task-focused
+  confirmations instead of full pack summaries.
+
 ### Fixed
+
+- Fixed numeric input validation so empty or whitespace-only CLI values are
+  rejected instead of being coerced to `0`.
 
 ### Removed
 

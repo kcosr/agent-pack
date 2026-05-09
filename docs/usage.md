@@ -57,7 +57,7 @@ agent-pack summary
 agent-pack report
 ```
 
-`task show`, `summary`, and `report` print text for humans and agents by default. Use `task add <title> --json`, `task show <task-id> --json`, `summary --json`, or `report --json` for scripts that need saved state objects.
+`task start`, `task note`, `task done`, and `task block` print compact task-count confirmations. `task show`, `summary`, and `report` print text for humans and agents by default. Use `task add <title> --json`, `task show <task-id> --json`, `summary --json`, or `report --json` for scripts that need saved state objects.
 
 Inspect resolved paths and defaults:
 

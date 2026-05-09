@@ -1,10 +1,16 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { Argument, Command, Option } from "commander";
+import { type Argument, Command, type Option } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configureProgram } from "../../src/cli/agent-pack.js";
-import { completionCandidates, hasCatalogCompletionSource } from "../../src/cli/completion.js";
+import {
+  completionCandidates,
+  configureInputCompletion,
+  hasCatalogCompletionSource,
+  inputNameArgument,
+  inputValueArgument,
+} from "../../src/cli/completion.js";
 
 describe("shell completion", () => {
   let configDir: string;
@@ -93,6 +99,45 @@ describe("shell completion", () => {
       completionCandidates(configureProgram(), "review/", [command, "add"]),
     ).resolves.toBe(expected);
   });
+
+  it("resolves input key and value candidates", async () => {
+    configureInputCompletion({
+      names: async () => ["scope", "severity", "include_tests"],
+      values: async (name) => {
+        if (name === "severity") {
+          return ["low", "medium", "high"];
+        }
+        if (name === "include_tests") {
+          return ["true", "false"];
+        }
+        return [];
+      },
+    });
+    const root = inputCompletionProgram();
+
+    await expect(completionCandidates(root, "se", ["input", "get"])).resolves.toBe("severity\n");
+    await expect(completionCandidates(root, "h", ["input", "set", "severity"])).resolves.toBe(
+      "high\n",
+    );
+    await expect(completionCandidates(root, "f", ["input", "set", "include_tests"])).resolves.toBe(
+      "false\n",
+    );
+  });
+
+  it("silently omits dynamic input candidates when pack state cannot load", async () => {
+    configureInputCompletion({
+      names: async () => {
+        throw new Error("no pack");
+      },
+      values: async () => {
+        throw new Error("no pack");
+      },
+    });
+    const root = inputCompletionProgram();
+
+    await expect(completionCandidates(root, "", ["input", "get"])).resolves.toBe("");
+    await expect(completionCandidates(root, "", ["input", "set", "severity"])).resolves.toBe("");
+  });
 });
 
 function allOptions(command: Command): Option[] {
@@ -107,4 +152,15 @@ function allArguments(command: Command): Argument[] {
 
 function allSubcommands(command: Command): Command[] {
   return command.commands.flatMap((child) => [child, ...allSubcommands(child)]);
+}
+
+function inputCompletionProgram(): Command {
+  const root = new Command();
+  const input = root.command("input");
+  input.command("get").addArgument(inputNameArgument("<name>", "input name"));
+  input
+    .command("set")
+    .addArgument(inputNameArgument("<name>", "input name"))
+    .addArgument(inputValueArgument("<value>", "input value", 0));
+  return root;
 }

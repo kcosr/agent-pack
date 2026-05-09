@@ -155,7 +155,10 @@ references:
       ["task", "done", "t001", "--id", "task-pack", "--note", "Completed"],
       { cwd: workspace },
     );
+    expect(done.stdout).toContain("Updated t001: completed");
     expect(done.stdout).toContain("Tasks: 1/1 completed, 0 blocked");
+    expect(done.stdout).not.toContain("References:");
+    expect(done.stdout).not.toContain("Skills:");
 
     const shown = await runCli(["task", "show", "t001", "--id", "task-pack"], {
       cwd: workspace,
@@ -279,6 +282,12 @@ tasks:
     });
     expect(lockedTasks.stdout).toContain("[locked]");
     expect(lockedTasks.stdout).toContain("Deep review");
+
+    const allTasks = await runCli(["task", "list", "--id", "input-pack", "--all"], {
+      cwd: workspace,
+    });
+    expect(allTasks.stdout).toContain("Baseline review");
+    expect(allTasks.stdout).toContain("Deep review");
 
     const inputList = await runCli(["input", "list", "--id", "input-pack", "--json"], {
       cwd: workspace,

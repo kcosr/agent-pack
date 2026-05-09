@@ -229,6 +229,9 @@ tasks:
       value: "reports/out.md",
       source: "set",
     });
+    await expect(unsetInput("scope", "input-review")).rejects.toThrow(
+      "required input cannot be unset: scope",
+    );
     await expect(listInputs("input-review")).resolves.toHaveLength(4);
   });
 
@@ -276,6 +279,75 @@ tasks:
     await expect(summaryPack("missing-required-input")).rejects.toThrow(
       "pack not found: missing-required-input",
     );
+
+    await writeFile(
+      "number-pack.yaml",
+      `schemaVersion: 1
+inputs:
+  count:
+    type: number
+    default: 1
+  include_tests:
+    type: boolean
+tasks:
+  - title: Inspect
+`,
+    );
+
+    const numberPack = await initPack({
+      id: "number-inputs",
+      includes: [{ type: "manifest", ref: "./number-pack.yaml" }],
+      inputAssignments: ["count=2", "include_tests=1"],
+      gitRefresh: "auto",
+    });
+
+    expect(numberPack.inputs).toMatchObject({ count: 2, include_tests: true });
+    await expect(
+      initPack({
+        id: "empty-number-init",
+        includes: [{ type: "manifest", ref: "./number-pack.yaml" }],
+        inputAssignments: ["count="],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow("input count must be a finite number");
+    await expect(setInput("count", "", "number-inputs")).rejects.toThrow(
+      "input count must be a finite number",
+    );
+    await expect(setInput("include_tests", "0", "number-inputs")).resolves.toMatchObject({
+      input: { name: "include_tests", value: false },
+    });
+    await expect(getInput("count", "number-inputs")).resolves.toMatchObject({ value: 2 });
+
+    await writeFile(
+      "input-a.yaml",
+      `schemaVersion: 1
+inputs:
+  severity:
+    type: enum
+    values: [low, high]
+    default: low
+`,
+    );
+    await writeFile(
+      "input-b.yaml",
+      `schemaVersion: 1
+inputs:
+  severity:
+    type: enum
+    values: [low, high]
+    default: high
+`,
+    );
+    await expect(
+      initPack({
+        id: "conflicting-inputs",
+        includes: [
+          { type: "manifest", ref: "./input-a.yaml" },
+          { type: "manifest", ref: "./input-b.yaml" },
+        ],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow("conflicting input definition: severity");
   });
 
   it("rejects invalid task conditions and locked task updates", async () => {

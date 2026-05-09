@@ -467,6 +467,8 @@ agent-pack task block t002 --id reviewer-001 --note "Need user decision."
 
 `agent-pack task list` shows only active tasks by default. Use `--locked` to inspect locked conditional tasks, or `--all` to show both active and locked tasks.
 
+`agent-pack task start`, `task note`, `task done`, and `task block` print compact confirmation with the updated task ID and active task counts.
+
 `agent-pack task add` appends a pending ad hoc task to an existing pack. The title is required and must not be empty after trimming. Optional `--category`, `--body`, and repeatable `--done-when` values must also be non-empty when provided. With `--json`, it prints the added task plus the updated pack summary.
 
 `agent-pack task note` takes the note text as a positional argument. `agent-pack task start`, `agent-pack task done`, and `agent-pack task block` take optional note text with `--note`.
@@ -482,7 +484,7 @@ agent-pack input set severity high --id reviewer-001
 agent-pack input unset severity --id reviewer-001
 ```
 
-`agent-pack input list` shows declared inputs, effective values, required flags, types, descriptions, and value sources. `input get` prints one effective value.
+`agent-pack input list` shows declared inputs, effective values, required flags, types, value sources, and descriptions. `input get` prints one effective value.
 
 `agent-pack input set` validates the new value against the stored manifest schema, updates the pack, and unlocks any conditional tasks whose `when` conditions are now satisfied. `input unset` clears optional inputs without defaults, reverts inputs with defaults back to those defaults, and rejects required inputs that have no default. Once a task unlocks, it stays active even if a later input change would no longer satisfy its condition.
 

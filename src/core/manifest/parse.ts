@@ -2,13 +2,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
 import { AgentPackError } from "../errors.js";
-import type {
-  ManifestReference,
-  ManifestTask,
-  PackContract,
-  PackInputType,
-  PackManifest,
-} from "../types.js";
+import { inputDefinitionFieldNames, inputTypeNames, isInputName } from "../inputs.js";
+import type { ManifestReference, ManifestTask, PackContract, PackManifest } from "../types.js";
 
 const manifestKeys = new Set([
   "schemaVersion",
@@ -21,10 +16,10 @@ const manifestKeys = new Set([
   "contract",
 ]);
 const taskKeys = new Set(["id", "title", "category", "body", "doneWhen", "when"]);
-const inputKeys = new Set(["type", "required", "description", "default", "values"]);
+const inputKeys = new Set(inputDefinitionFieldNames);
 const includeKeys = new Set(["name", "description", "ref"]);
 const contractKeys = new Set(["do", "dont"]);
-const inputTypes = new Set<PackInputType>(["string", "enum", "boolean", "number"]);
+const inputTypes: ReadonlySet<string> = new Set(inputTypeNames);
 
 export async function readManifest(filePath: string): Promise<PackManifest> {
   const content = await readText(filePath, "manifest");
@@ -145,7 +140,7 @@ function validateInputs(value: unknown, filePath: string): void {
     throw new AgentPackError(`manifest inputs must be an object: ${filePath}`);
   }
   for (const [name, input] of Object.entries(value)) {
-    if (!inputName(name)) {
+    if (!isInputName(name)) {
       throw new AgentPackError(`manifest input name is invalid: ${name}`);
     }
     if (!isObject(input)) {
@@ -154,7 +149,7 @@ function validateInputs(value: unknown, filePath: string): void {
     assertKnownKeys(input, inputKeys, `inputs.${name}`);
     if (
       input.type !== undefined &&
-      (typeof input.type !== "string" || !inputTypes.has(input.type as PackInputType))
+      (typeof input.type !== "string" || !inputTypes.has(input.type))
     ) {
       throw new AgentPackError(`manifest inputs.${name}.type is not supported: ${filePath}`);
     }
@@ -221,7 +216,7 @@ function validateWhen(value: unknown, label: string, filePath: string): void {
     return;
   }
   if (typeof value === "string") {
-    if (!inputName(value)) {
+    if (!isInputName(value)) {
       throw new AgentPackError(`${label} must be an input name or object: ${filePath}`);
     }
     return;
@@ -230,7 +225,7 @@ function validateWhen(value: unknown, label: string, filePath: string): void {
     throw new AgentPackError(`${label} must be an input name or object: ${filePath}`);
   }
   for (const [name, condition] of Object.entries(value)) {
-    if (!inputName(name)) {
+    if (!isInputName(name)) {
       throw new AgentPackError(`${label}.${name} must be an input name: ${filePath}`);
     }
     validateWhenCondition(condition, `${label}.${name}`, filePath);
@@ -355,10 +350,6 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && Boolean(value.trim());
-}
-
-function inputName(value: string): boolean {
-  return /^[A-Za-z_][A-Za-z0-9_-]*$/.test(value);
 }
 
 async function readText(filePath: string, label: string): Promise<string> {
