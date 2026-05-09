@@ -25,9 +25,6 @@
 
 ### Fixed
 
-- Fixed CLI startup through symlinked installed bins by splitting the executable
-  wrapper from the side-effect-free CLI module.
-
 ### Removed
 
 ## [0.1.0] - 2026-05-08
