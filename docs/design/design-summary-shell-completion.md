@@ -60,6 +60,8 @@ Completion model:
 - Prefer Commander choice declarations over separate completion lists. `gitRefreshOption()`, `catalogTypeOption()`, and `catalogTypeArgument()` already use `.choices(...)`; `completion` shell arguments should be refactored to use `Argument(...).choices(completionShells)` instead of relying only on `normalizeShell()`.
 - Attach only non-Commander completion semantics with a small local metadata layer, preferably a `WeakMap<Option | Argument, CompletionValueSource>` populated by helper constructors. Required metadata includes catalog value sources for `--manifest`, `--manifests`, `--task`, `--tasks`, `--reference`, `--references`, `--skill`, `--skills`, and the catalog-name positional after `catalog show|path <type>`.
 - Keep catalog value generation through `catalogList(...)` and keep `isExplicitCompletionPath(...)` as the explicit path-prefix suppression gate.
+- Catalog value completion should use read-only catalog listing and must not create missing catalog directories as a TAB side effect.
+- Catalog names emitted to shell completion should be filtered through the catalog-name contract before they reach shell helpers.
 - When no app-known positional candidate exists for the active command, return that command's option names.
 - Avoid a manually duplicated command/option table. If an option is added to Commander, its name should become completable automatically unless it is hidden.
 
@@ -150,9 +152,9 @@ _No schema changes._
 
 | File | Responsibility | Existing tests |
 |---|---|---|
-| `src/cli/agent-pack.ts` | Registers all commands and options, defines shell completion setup, owns `__complete`, `completionCandidates`, `isExplicitCompletionPath`, and generated bash/zsh/fish scripts. Top-level commands are registered at lines 45-159; completion code is at lines 170-199 and 523-676. | `test/smoke/cli-git-smoke.test.ts` covers CLI completion setup and catalog candidates. |
+| `src/cli/agent-pack.ts` | Registers all commands and options, defines shell completion setup, owns `__complete`, `completionCandidates`, `isExplicitCompletionPath`, and generated bash/zsh/fish scripts. Top-level command registration lives in `configureProgram`; completion command wiring lives in `configureCompletionCommands`; completion resolution and shell script generation live in the completion helper section below the command definitions. | `test/smoke/cli-git-smoke.test.ts` covers CLI completion setup and catalog candidates. |
 | `node_modules/commander/typings/index.d.ts` | Confirms Commander exposes the structured metadata needed for derived completion: `Command.commands`, `Command.options`, `Command.registeredArguments`, `Option.argChoices`, and `Argument.argChoices`. | Dependency type surface used by TypeScript. |
-| `src/core/catalog.ts` | Exports `catalogTypes` and lists catalog entries used by completion. `catalogTypes` is derived from the catalog layout at line 16. | Smoke tests cover catalog listing and existing catalog completion. |
+| `src/core/catalog.ts` | Exports `catalogTypes`, validates catalog-name shape, and lists catalog entries used by completion. Completion should use read-only listing so TAB does not create catalog directories. | Smoke tests cover catalog listing and existing catalog completion. |
 | `src/core/types.ts` | Defines `GitRefresh` as `auto | always | never`, matching `--git-refresh` completion values. | Typecheck covers the union; smoke tests exercise CLI values. |
 | `test/smoke/cli-git-smoke.test.ts` | End-to-end CLI tests through the built `dist/cli/agent-pack.js`; current completion coverage is at lines 311-356. | Existing completion smoke test asserts generated scripts, catalog candidates, and explicit path-prefix suppression. |
 | `test/helpers/cli.ts` | Runs the built CLI in isolated test environments with agent-pack env vars reset. | Used by all smoke tests. |
@@ -168,6 +170,7 @@ _No schema changes._
 - Add helper constructors for options/arguments that need custom completion metadata, backed by a `WeakMap<Option | Argument, CompletionValueSource>`.
 - Refactor shell arguments for `completion` and `completion script` to use Commander `Argument.choices(...)`, keeping `normalizeShell()` for validation and detection.
 - Keep catalog candidate resolution through `catalogList` and keep `isExplicitCompletionPath` as the catalog explicit path-prefix suppression gate.
+- Use read-only catalog listing for completion callers, and filter returned catalog names through the catalog-name validator before shell emission.
 - Update bash, zsh, and fish script generators so each shell passes consistent context into the helper.
 - Keep completion app-driven: shell scripts should not invoke default file completion when the helper returns no candidates.
 - Expand smoke tests for top-level commands, nested subcommands, option names, enum values, catalog values, explicit path fallback, and generated script wiring.

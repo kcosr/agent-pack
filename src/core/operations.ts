@@ -212,9 +212,12 @@ async function readManifestRef(
   };
 }
 
-export async function catalogList(type?: CatalogType): Promise<CatalogEntry[]> {
+export async function catalogList(
+  type?: CatalogType,
+  options: { createDirs?: boolean } = {},
+): Promise<CatalogEntry[]> {
   const store = new StateStore();
-  return listCatalogEntries(store.paths, type);
+  return listCatalogEntries(store.paths, type, options);
 }
 
 export async function catalogShow(

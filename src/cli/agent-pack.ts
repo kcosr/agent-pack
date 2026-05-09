@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Argument, Command, Option } from "commander";
 import { renderReport, renderSummary, renderTask } from "../core/brief/render.js";
-import { catalogTypes } from "../core/catalog.js";
+import { catalogTypes, isCatalogName } from "../core/catalog.js";
 import { AgentPackError } from "../core/errors.js";
 import {
   addTask,
@@ -43,6 +43,7 @@ type CompletionValueSource =
   | { kind: "catalogFromOperand"; index: number };
 
 const completionValueSources = new WeakMap<Option | Argument, CompletionValueSource>();
+const hiddenCommands = new WeakSet<Command>();
 
 const program = configureProgram();
 
@@ -186,7 +187,7 @@ function configureCompletionCommands(root: Command): void {
   const completion = root
     .command("completion")
     .description("Print shell completion setup instructions.")
-    .addArgument(shellArgument("[shell]", "shell to configure: bash, zsh, or fish").argOptional())
+    .addArgument(shellArgument("[shell]", "shell to configure: bash, zsh, or fish"))
     .action(async (shell) => {
       await run(async () => {
         process.stdout.write(completionInstructions(normalizeShell(shell)));
@@ -203,7 +204,7 @@ function configureCompletionCommands(root: Command): void {
       });
     });
 
-  root
+  const hiddenComplete = root
     .command("__complete", { hidden: true })
     .allowUnknownOption()
     .argument("<prefix>", "current word prefix")
@@ -213,6 +214,7 @@ function configureCompletionCommands(root: Command): void {
         process.stdout.write(await completionCandidates(root, prefix, words));
       });
     });
+  hiddenCommands.add(hiddenComplete);
 }
 
 function configureInitCommand(root: Command): void {
@@ -547,7 +549,9 @@ function normalizeShell(value: unknown): CompletionShell {
     if (detected === "bash" || detected === "zsh" || detected === "fish") {
       return detected;
     }
-    throw new AgentPackError("could not detect shell; pass bash, zsh, or fish");
+    throw new AgentPackError(
+      `could not detect shell from SHELL=${detected || "(unset)"}; pass bash, zsh, or fish`,
+    );
   }
   throw new AgentPackError(`unsupported shell: ${String(value)}; expected bash, zsh, or fish`);
 }
@@ -601,8 +605,6 @@ function completionScript(shell: CompletionShell): string {
       return zshCompletionScript();
     case "fish":
       return fishCompletionScript();
-    default:
-      throw new AgentPackError(`unsupported shell: ${shell}`);
   }
 }
 
@@ -741,7 +743,9 @@ async function valueCandidates(
     return [];
   }
 
-  return (await catalogList(catalogType)).map((entry) => entry.name);
+  return (await catalogList(catalogType, { createDirs: false }))
+    .map((entry) => entry.name)
+    .filter(isCatalogName);
 }
 
 function catalogTypeFromOperand(value: string | undefined): CatalogType | undefined {
@@ -771,7 +775,7 @@ function visibleSubcommand(command: Command, name: string): Command | undefined 
 }
 
 function isHiddenCommand(command: Command): boolean {
-  return (command as Command & { _hidden?: boolean })._hidden === true;
+  return hiddenCommands.has(command);
 }
 
 function isCatalogType(value: string): value is CatalogType {

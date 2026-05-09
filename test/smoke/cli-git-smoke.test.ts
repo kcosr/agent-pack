@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -316,8 +317,16 @@ references:
     const configDir = path.join(workspace, "config");
     await mkdir(path.join(configDir, "manifests/review"), { recursive: true });
     await mkdir(path.join(configDir, "tasks/review"), { recursive: true });
+    await mkdir(path.join(configDir, "references/review"), { recursive: true });
+    await mkdir(path.join(configDir, "skills/review/fresh-eyes"), { recursive: true });
     await writeFile(path.join(configDir, "manifests/review/code-review.yaml"), "tasks: []\n");
+    await writeFile(path.join(configDir, "manifests/$(touch owned).yaml"), "tasks: []\n");
     await writeFile(path.join(configDir, "tasks/review/security.yaml"), "title: Security\n");
+    await writeFile(path.join(configDir, "references/review/api.yaml"), "ref: ./docs/api.md\n");
+    await writeFile(
+      path.join(configDir, "skills/review/fresh-eyes/SKILL.md"),
+      "---\ndescription: Review skill\n---\n",
+    );
     const env = { AGENT_PACK_CONFIG_DIR: configDir };
 
     const instructions = await runCli(["completion", "bash"], { cwd: workspace, env });
@@ -428,11 +437,39 @@ references:
     });
     expect(manifestCandidates.stdout).toBe("review/code-review\n");
 
+    const allManifestCandidates = await runCli(["__complete", "", "init", "--manifest"], {
+      cwd: workspace,
+      env,
+    });
+    expect(allManifestCandidates.stdout).toContain("review/code-review\n");
+    expect(allManifestCandidates.stdout).not.toContain("$(touch owned)");
+
     const taskCandidates = await runCli(["__complete", "review/s", "init", "--task"], {
       cwd: workspace,
       env,
     });
     expect(taskCandidates.stdout).toBe("review/security\n");
+
+    const referenceCandidates = await runCli(["__complete", "review/a", "init", "--reference"], {
+      cwd: workspace,
+      env,
+    });
+    expect(referenceCandidates.stdout).toBe("review/api\n");
+
+    const skillCandidates = await runCli(["__complete", "review/f", "init", "--skill"], {
+      cwd: workspace,
+      env,
+    });
+    expect(skillCandidates.stdout).toBe("review/fresh-eyes\n");
+
+    const repeatedOptionCandidates = await runCli(
+      ["__complete", "review/", "init", "--manifest", "review/code-review", "--manifest"],
+      {
+        cwd: workspace,
+        env,
+      },
+    );
+    expect(repeatedOptionCandidates.stdout).toBe("review/code-review\n");
 
     const catalogNameCandidates = await runCli(
       ["__complete", "review/", "catalog", "show", "manifest"],
@@ -448,6 +485,34 @@ references:
       env,
     });
     expect(pathCandidates.stdout).toBe("");
+
+    const absolutePathCandidates = await runCli(["__complete", "/tmp/tasks", "init", "--task"], {
+      cwd: workspace,
+      env,
+    });
+    expect(absolutePathCandidates.stdout).toBe("");
+
+    const homePathCandidates = await runCli(["__complete", "~", "init", "--task"], {
+      cwd: workspace,
+      env,
+    });
+    expect(homePathCandidates.stdout).toBe("");
+
+    const homeSlashPathCandidates = await runCli(["__complete", "~/tasks", "init", "--task"], {
+      cwd: workspace,
+      env,
+    });
+    expect(homeSlashPathCandidates.stdout).toBe("");
+
+    const emptyWorkspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-empty-completion-"));
+    const missingConfigDir = path.join(emptyWorkspace, "missing-config");
+    const missingConfigEnv = { AGENT_PACK_CONFIG_DIR: missingConfigDir };
+    const missingCatalogCandidates = await runCli(["__complete", "", "init", "--manifest"], {
+      cwd: emptyWorkspace,
+      env: missingConfigEnv,
+    });
+    expect(missingCatalogCandidates.stdout).toBe("");
+    expect(existsSync(path.join(missingConfigDir, "manifests"))).toBe(false);
   });
 
   it("clones git sources, materializes snapshots, syncs missing cache, and renders brief", async () => {

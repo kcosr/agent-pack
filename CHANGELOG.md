@@ -4,6 +4,10 @@
 
 ### Breaking Changes
 
+- Regenerate saved shell completion files after upgrading; the hidden completion
+  helper signature changed and older generated scripts will not match the new
+  helper contract.
+
 ### Added
 
 - Added `agent-pack task add <title>` for appending ad hoc tasks to existing packs ([#2](https://github.com/kcosr/agent-pack/pull/2)).
