@@ -9,19 +9,23 @@
 - Added `agent-pack reference add <ref>` and `agent-pack skill add <ref>` for
   additive pack composition after `init` ([#5](https://github.com/kcosr/agent-pack/pull/5)).
 - Added manifest `inputs`, repeatable `init --input key=value`, an `input`
-  command group, and conditional task unlocking via YAML `when` rules.
+  command group, and conditional task unlocking via YAML `when` rules
+  ([#6](https://github.com/kcosr/agent-pack/pull/6)).
 
 ### Changed
 
 - Changed task status and note command output to print compact task-focused
-  confirmations instead of full pack summaries.
+  confirmations instead of full pack summaries
+  ([#6](https://github.com/kcosr/agent-pack/pull/6)).
 - Changed the bundled `feature-design-summary` manifest to resolve a reusable
-  slug and optionally create a feature branch from `main`.
+  slug and optionally create a feature branch from `main`
+  ([#6](https://github.com/kcosr/agent-pack/pull/6)).
 
 ### Fixed
 
 - Fixed numeric input validation so empty or whitespace-only CLI values are
-  rejected instead of being coerced to `0`.
+  rejected instead of being coerced to `0`
+  ([#6](https://github.com/kcosr/agent-pack/pull/6)).
 
 ### Removed
 
