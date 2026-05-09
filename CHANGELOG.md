@@ -14,6 +14,11 @@
 
 ### Changed
 
+- Changed completion setup instructions to recommend generating a static
+  completion file for permanent shell startup setup.
+- Changed shell completion to suggest active command options when no app-known
+  positional completions are available.
+
 ### Fixed
 
 ### Removed

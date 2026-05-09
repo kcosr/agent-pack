@@ -553,22 +553,44 @@ function normalizeShell(value: unknown): CompletionShell {
 }
 
 function completionInstructions(shell: CompletionShell): string {
-  const command =
+  const currentShellCommand =
     shell === "fish"
       ? "agent-pack completion script fish | source"
       : `source <(agent-pack completion script ${shell})`;
-  const rcFile =
-    shell === "bash" ? "~/.bashrc" : shell === "zsh" ? "~/.zshrc" : "~/.config/fish/config.fish";
   return [
     `Detected shell: ${shell}`,
     "",
     "For this shell only:",
-    `  ${command}`,
+    `  ${currentShellCommand}`,
     "",
-    `To enable permanently, add this to ${rcFile}:`,
-    `  ${command}`,
+    "To enable permanently, generate a completion file once:",
+    ...permanentCompletionCommands(shell).map((command) => `  ${command}`),
+    "",
+    "Regenerate that file after upgrading agent-pack.",
     "",
   ].join("\n");
+}
+
+function permanentCompletionCommands(shell: CompletionShell): string[] {
+  switch (shell) {
+    case "bash":
+      return [
+        "mkdir -p ~/.local/share/agent-pack",
+        "agent-pack completion script bash > ~/.local/share/agent-pack/completion.bash",
+        "printf '\\nsource ~/.local/share/agent-pack/completion.bash\\n' >> ~/.bashrc",
+      ];
+    case "zsh":
+      return [
+        "mkdir -p ~/.local/share/agent-pack",
+        "agent-pack completion script zsh > ~/.local/share/agent-pack/completion.zsh",
+        "printf '\\nsource ~/.local/share/agent-pack/completion.zsh\\n' >> ~/.zshrc",
+      ];
+    case "fish":
+      return [
+        "mkdir -p ~/.config/fish/completions",
+        "agent-pack completion script fish > ~/.config/fish/completions/agent-pack.fish",
+      ];
+  }
 }
 
 function completionScript(shell: CompletionShell): string {
@@ -628,7 +650,8 @@ async function resolveCompletionCandidates(
     candidates.push(...(await valueCandidates(argument, context.operands, prefix)));
   }
 
-  return unique(candidates);
+  const appCandidates = unique(candidates);
+  return appCandidates.length > 0 ? appCandidates : optionCandidates(context.command);
 }
 
 function completionContext(
@@ -779,7 +802,7 @@ function bashCompletionScript(): string {
   COMPREPLY=( $(compgen -W "$(agent-pack __complete -- "$cur" "\${words[@]}" 2>/dev/null)" -- "$cur") )
 }
 
-complete -o default -o bashdefault -F _agent_pack_completion agent-pack
+complete -F _agent_pack_completion agent-pack
 `;
 }
 
@@ -792,10 +815,6 @@ _agent_pack() {
   prior=("\${words[2,$(( CURRENT - 1 ))]}")
   local -a names
   names=("\${(@f)$(agent-pack __complete -- "$current" "\${prior[@]}" 2>/dev/null)}")
-  if (( \${#names[@]} == 0 )); then
-    _files
-    return
-  fi
   compadd -a names
 }
 
@@ -816,7 +835,7 @@ function fishCompletionScript(): string {
   agent-pack __complete -- "$current" $words 2>/dev/null
 end
 
-complete -c agent-pack -a '(__agent_pack_complete)'
+complete -c agent-pack -f -a '(__agent_pack_complete)'
 `;
 }
 

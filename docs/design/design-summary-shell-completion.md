@@ -14,9 +14,10 @@ In scope:
 
 - Complete top-level command names and nested subcommands.
 - Complete option names for the current command path.
+- Complete option names at command positions when no app-known positional value exists.
 - Complete explicit enum values for `--git-refresh`, `--type`, catalog type positionals, and completion shell arguments.
 - Preserve existing catalog-name completion for manifest, task, reference, skill, and `catalog show|path` values.
-- Preserve filesystem fallback for explicit path prefixes `/`, `./`, `../`, `~`, and `~/`.
+- Preserve explicit path-prefix suppression for catalog-backed values: `/`, `./`, `../`, `~`, and `~/` return no catalog candidates.
 - Update generated bash, zsh, and fish scripts, tests, README, usage docs, and changelog.
 
 Out of scope:
@@ -24,6 +25,7 @@ Out of scope:
 - Do not change ordinary CLI command behavior, text output, JSON output, or exit codes.
 - Do not add command aliases, bridge routes, fallback parsers, or dual helper contracts.
 - Do not add completions for dynamic pack IDs or task IDs.
+- Do not fall through to shell filesystem completion for ordinary empty app candidate sets.
 - Do not change persisted pack state or catalog schemas.
 
 ## Contract
@@ -57,7 +59,8 @@ Completion model:
 - Derive enum candidates from Commander choices where available: `Option.argChoices` for option values and `Argument.argChoices` for positional values.
 - Prefer Commander choice declarations over separate completion lists. `gitRefreshOption()`, `catalogTypeOption()`, and `catalogTypeArgument()` already use `.choices(...)`; `completion` shell arguments should be refactored to use `Argument(...).choices(completionShells)` instead of relying only on `normalizeShell()`.
 - Attach only non-Commander completion semantics with a small local metadata layer, preferably a `WeakMap<Option | Argument, CompletionValueSource>` populated by helper constructors. Required metadata includes catalog value sources for `--manifest`, `--manifests`, `--task`, `--tasks`, `--reference`, `--references`, `--skill`, `--skills`, and the catalog-name positional after `catalog show|path <type>`.
-- Keep catalog value generation through `catalogList(...)` and keep `isExplicitCompletionPath(...)` as the filesystem fallback gate.
+- Keep catalog value generation through `catalogList(...)` and keep `isExplicitCompletionPath(...)` as the explicit path-prefix suppression gate.
+- When no app-known positional candidate exists for the active command, return that command's option names.
 - Avoid a manually duplicated command/option table. If an option is added to Commander, its name should become completable automatically unless it is hidden.
 
 Command candidates:
@@ -83,6 +86,8 @@ Option candidates:
 - `task start`, `task done`, `task block`: `--id`, `--note`.
 - `task note`: `--id`.
 - `catalog list`: `--type`, `--json`.
+
+At command positions with no app-known positional values, completion returns option candidates. For example, `agent-pack brief <TAB>` returns `--id`, and `agent-pack task done <TAB>` returns `--id` and `--note`.
 
 Enum and value candidates:
 
@@ -117,7 +122,7 @@ Compatibility and migration:
 
 - Hot cut only for generated completion scripts and the hidden helper.
 - No aliases, bridge routes, or dual-shape completion parsers.
-- Existing catalog value completion and explicit-path fallback must continue to work.
+- Existing catalog value completion and explicit path-prefix suppression must continue to work.
 
 ## Surface Inventory
 
@@ -135,7 +140,7 @@ Compatibility and migration:
 | `auto`, `always`, `never` | Added as completion values | Commander `Option.argChoices`; `--git-refresh` value context; tests. | `gitRefreshOption()` choices. | None. |
 | `manifest`, `task`, `reference`, `skill` | Changed | `--type`, catalog type positional, and catalog-name completion contexts. | `catalogTypes`, `catalogTypeOption()`, `catalogTypeArgument()`. | None. |
 | `bash`, `zsh`, `fish` | Added as completion values | Commander `Argument.argChoices` on `completion` and `completion script`; tests. | `normalizeShell()`. | None. |
-| Catalog ref/name completions | Preserved | `catalogList`, explicit path fallback, generated shell scripts, smoke tests. | Catalog command and init ref options. | None. |
+| Catalog ref/name completions | Preserved | `catalogList`, explicit path-prefix suppression, generated shell scripts, smoke tests. | Catalog command and init ref options. | None. |
 
 ## Schema
 
@@ -149,10 +154,10 @@ _No schema changes._
 | `node_modules/commander/typings/index.d.ts` | Confirms Commander exposes the structured metadata needed for derived completion: `Command.commands`, `Command.options`, `Command.registeredArguments`, `Option.argChoices`, and `Argument.argChoices`. | Dependency type surface used by TypeScript. |
 | `src/core/catalog.ts` | Exports `catalogTypes` and lists catalog entries used by completion. `catalogTypes` is derived from the catalog layout at line 16. | Smoke tests cover catalog listing and existing catalog completion. |
 | `src/core/types.ts` | Defines `GitRefresh` as `auto | always | never`, matching `--git-refresh` completion values. | Typecheck covers the union; smoke tests exercise CLI values. |
-| `test/smoke/cli-git-smoke.test.ts` | End-to-end CLI tests through the built `dist/cli/agent-pack.js`; current completion coverage is at lines 311-356. | Existing completion smoke test asserts generated scripts, catalog candidates, and path fallback. |
+| `test/smoke/cli-git-smoke.test.ts` | End-to-end CLI tests through the built `dist/cli/agent-pack.js`; current completion coverage is at lines 311-356. | Existing completion smoke test asserts generated scripts, catalog candidates, and explicit path-prefix suppression. |
 | `test/helpers/cli.ts` | Runs the built CLI in isolated test environments with agent-pack env vars reset. | Used by all smoke tests. |
 | `README.md` | Full command reference and completion behavior docs. Completion section currently documents catalog-name completion only at lines 573-592. | Documentation is not currently test-enforced. |
-| `docs/usage.md` | Compact installed usage reference. Completion docs currently mention catalog names and path fallback at lines 141-149. | Documentation is not currently test-enforced. |
+| `docs/usage.md` | Compact installed usage reference. Completion docs currently mention catalog names and explicit path-prefix behavior at lines 141-149. | Documentation is not currently test-enforced. |
 | `CHANGELOG.md` | User-facing completion change should be added under `## [Unreleased]`. | Repository convention, not test-enforced. |
 
 ## Higher-Level Implementation Steps
@@ -162,8 +167,9 @@ _No schema changes._
 - Implement a small completion resolver that walks the Commander command tree, identifies the active command path, detects option-name vs option-value position, and dispatches to derived command, option, choice, catalog, or empty candidates.
 - Add helper constructors for options/arguments that need custom completion metadata, backed by a `WeakMap<Option | Argument, CompletionValueSource>`.
 - Refactor shell arguments for `completion` and `completion script` to use Commander `Argument.choices(...)`, keeping `normalizeShell()` for validation and detection.
-- Keep catalog candidate resolution through `catalogList` and keep `isExplicitCompletionPath` as the catalog filesystem fallback gate.
-- Update bash, zsh, and fish script generators so each shell passes consistent context into the helper and otherwise allows normal file completion.
+- Keep catalog candidate resolution through `catalogList` and keep `isExplicitCompletionPath` as the catalog explicit path-prefix suppression gate.
+- Update bash, zsh, and fish script generators so each shell passes consistent context into the helper.
+- Keep completion app-driven: shell scripts should not invoke default file completion when the helper returns no candidates.
 - Expand smoke tests for top-level commands, nested subcommands, option names, enum values, catalog values, explicit path fallback, and generated script wiring.
 - Update README, docs usage, and changelog to describe the expanded completion behavior.
 
@@ -185,7 +191,8 @@ flowchart LR
 - A derived model reduces command/option drift, but custom value-source metadata can still drift if a catalog-backed option or positional is added without metadata.
 - Bash, zsh, and fish expose current-word and prior-word context differently, so scripts can accidentally pass inconsistent words to the helper.
 - The resolver can confuse option-name completion with option-value completion, especially around nested commands and optional `completion` shell arguments.
-- Catalog value completion can regress explicit path fallback and suppress normal file completion.
+- Catalog value completion can regress explicit path-prefix suppression.
+- Commands with unknown free-text positionals can feel empty if option fallback does not trigger.
 - Enum values can drift if new choices are not declared through Commander `choices(...)`.
 - The hidden helper hot cut requires updating tests that currently call `agent-pack __complete <catalog-type> <prefix>`.
 - Empty matches and unsupported internal contexts need predictable output so shell scripts do not show noisy errors.
@@ -197,7 +204,7 @@ New or expanded tests:
 - Smoke tests in `test/smoke/cli-git-smoke.test.ts` for top-level command completion, `task` subcommands, `catalog` subcommands, and `completion script`.
 - Smoke tests for option-name candidates on representative commands: `init`, `sync`, `task add`, `task done`, and `catalog list`.
 - Smoke tests for enum/value candidates: `--git-refresh`, `--type`, catalog type positionals, and `bash|zsh|fish`.
-- Preserve and expand existing catalog tests for manifest/task/ref/skill names and explicit path fallback.
+- Preserve and expand existing catalog tests for manifest/task/ref/skill names and explicit path-prefix suppression.
 - Script-generation assertions for bash, zsh, and fish to confirm all scripts delegate to the same context helper.
 - Unit tests for the pure completion resolver using a configured Commander root, including assertions that command and option candidates are derived from the actual command tree.
 - A drift guard test that walks known catalog-backed options and catalog-name arguments and verifies each has custom completion metadata.

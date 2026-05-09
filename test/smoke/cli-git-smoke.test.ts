@@ -323,9 +323,25 @@ references:
     const instructions = await runCli(["completion", "bash"], { cwd: workspace, env });
     expect(instructions.stdout).toContain("For this shell only:");
     expect(instructions.stdout).toContain("source <(agent-pack completion script bash)");
+    expect(instructions.stdout).toContain(
+      "agent-pack completion script bash > ~/.local/share/agent-pack/completion.bash",
+    );
+    expect(instructions.stdout).toContain("source ~/.local/share/agent-pack/completion.bash");
+    expect(instructions.stdout).toContain("Regenerate that file after upgrading agent-pack.");
+
+    const zshInstructions = await runCli(["completion", "zsh"], { cwd: workspace, env });
+    expect(zshInstructions.stdout).toContain(
+      "agent-pack completion script zsh > ~/.local/share/agent-pack/completion.zsh",
+    );
+    expect(zshInstructions.stdout).toContain("source ~/.local/share/agent-pack/completion.zsh");
+
+    const fishInstructions = await runCli(["completion", "fish"], { cwd: workspace, env });
+    expect(fishInstructions.stdout).toContain(
+      "agent-pack completion script fish > ~/.config/fish/completions/agent-pack.fish",
+    );
 
     const script = await runCli(["completion", "script", "bash"], { cwd: workspace, env });
-    expect(script.stdout).toContain("complete -o default -o bashdefault -F");
+    expect(script.stdout).toContain("complete -F _agent_pack_completion agent-pack");
     expect(script.stdout).toContain('agent-pack __complete -- "$cur"');
 
     const zshScript = await runCli(["completion", "script", "zsh"], { cwd: workspace, env });
@@ -335,6 +351,7 @@ references:
     const fishScript = await runCli(["completion", "script", "fish"], { cwd: workspace, env });
     expect(fishScript.stdout).toContain("function __agent_pack_complete");
     expect(fishScript.stdout).toContain('agent-pack __complete -- "$current"');
+    expect(fishScript.stdout).toContain("complete -c agent-pack -f");
 
     const topLevelCandidates = await runCli(["__complete", ""], { cwd: workspace, env });
     expect(topLevelCandidates.stdout).toContain("init\n");
@@ -352,12 +369,25 @@ references:
     });
     expect(initOptionCandidates.stdout).toBe("--manifest\n--manifests\n");
 
+    const briefOptionCandidates = await runCli(["__complete", "", "brief"], {
+      cwd: workspace,
+      env,
+    });
+    expect(briefOptionCandidates.stdout).toBe("--id\n");
+
     const taskOptionCandidates = await runCli(["__complete", "--", "--", "task", "done"], {
       cwd: workspace,
       env,
     });
     expect(taskOptionCandidates.stdout).toContain("--id\n");
     expect(taskOptionCandidates.stdout).toContain("--note\n");
+
+    const taskOptionCandidatesWithoutDash = await runCli(["__complete", "", "task", "done"], {
+      cwd: workspace,
+      env,
+    });
+    expect(taskOptionCandidatesWithoutDash.stdout).toContain("--id\n");
+    expect(taskOptionCandidatesWithoutDash.stdout).toContain("--note\n");
 
     const gitRefreshCandidates = await runCli(["__complete", "au", "sync", "--git-refresh"], {
       cwd: workspace,
