@@ -278,6 +278,7 @@ Common options:
 |---|---|
 | `--id <id>` | Use a specific pack ID. If omitted, `AGENT_PACK_ID` is used when set; otherwise `agent-pack` generates `<name>-<suffix>` |
 | `--name <name>` | Set a display name |
+| `--input <key=value>` | Set one declared manifest input; repeat for multiple inputs |
 | `--manifest <ref>` | Load one catalog manifest, local manifest YAML file, or git ref |
 | `--manifests <ref>` | Alias for `--manifest`; useful when passing several manifests |
 | `--instructions <path>` | Read a plain text or Markdown file verbatim as the pack instructions section |
@@ -300,6 +301,7 @@ Illustrative only: replace the `example/...` URLs and local paths with sources t
 agent-pack init \
   --id reviewer-001 \
   --add-task "Check local unstaged changes" \
+  --input scope="unstaged auth changes" \
   --manifest git+https://github.com/example/agent-packs.git//review/base.yaml#main \
   --task git+https://github.com/example/agent-packs.git//tasks/security-review.yaml#main \
   --task ./tasks/*.yaml \
@@ -323,8 +325,21 @@ schemaVersion: 1
 name: reviewer-001
 instructions: Use the included docs and skills to complete the review.
 
+inputs:
+  scope:
+    required: true
+    description: What should the agent inspect?
+  severity:
+    type: enum
+    values: [low, medium, high]
+    default: medium
+
 tasks:
   - title: Check local unstaged changes
+  - id: deep-review
+    title: Perform a strict review
+    when:
+      severity: high
   - review/security
   - git+https://github.com/example/agent-packs.git//tasks/security-review.yaml#main
   - ./tasks/*.yaml
@@ -350,6 +365,7 @@ Then initialize with the manifest and a one-off prompt:
 agent-pack init \
   --id reviewer-001 \
   --manifest ./reviewer-pack.yaml \
+  --input scope="unstaged auth changes" \
   "Use the included docs and skills to complete the review."
 ```
 
@@ -361,7 +377,7 @@ Print the agent-facing brief.
 agent-pack brief --id reviewer-001
 ```
 
-The brief includes the prompt, instructions, contract if defined, task commands when tasks exist, references, skills, and task list.
+The brief includes the prompt, resolved inputs when defined, instructions, contract if defined, task commands when tasks exist, references, skills, and the active task list. Locked conditional tasks are omitted until their conditions are satisfied.
 
 For long task lists, render a compact task section:
 
@@ -434,6 +450,8 @@ Text output is tab-separated: pack id, pack name, status, completed/total task c
 
 ```bash
 agent-pack task list --id reviewer-001
+agent-pack task list --id reviewer-001 --locked
+agent-pack task list --id reviewer-001 --all
 agent-pack task add "Review auth flow" --id reviewer-001
 agent-pack task add "Review auth flow" --id reviewer-001 --category review --body "Inspect session handling." --done-when "Findings cite files" --done-when "Test gaps are noted"
 agent-pack task add "Review auth flow" --id reviewer-001 --json
@@ -447,9 +465,26 @@ agent-pack task block t002 --id reviewer-001 --note "Need user decision."
 
 `agent-pack task show` prints a human-readable task detail by default, including status, body, `doneWhen`, and notes. Add `--json` when a script needs the task state object.
 
+`agent-pack task list` shows only active tasks by default. Use `--locked` to inspect locked conditional tasks, or `--all` to show both active and locked tasks.
+
 `agent-pack task add` appends a pending ad hoc task to an existing pack. The title is required and must not be empty after trimming. Optional `--category`, `--body`, and repeatable `--done-when` values must also be non-empty when provided. With `--json`, it prints the added task plus the updated pack summary.
 
 `agent-pack task note` takes the note text as a positional argument. `agent-pack task start`, `agent-pack task done`, and `agent-pack task block` take optional note text with `--note`.
+
+### Input Commands
+
+```bash
+agent-pack input list --id reviewer-001
+agent-pack input list --id reviewer-001 --json
+agent-pack input get severity --id reviewer-001
+agent-pack input get severity --id reviewer-001 --json
+agent-pack input set severity high --id reviewer-001
+agent-pack input unset severity --id reviewer-001
+```
+
+`agent-pack input list` shows declared inputs, effective values, required flags, types, descriptions, and value sources. `input get` prints one effective value.
+
+`agent-pack input set` validates the new value against the stored manifest schema, updates the pack, and unlocks any conditional tasks whose `when` conditions are now satisfied. `input unset` clears optional inputs without defaults, reverts inputs with defaults back to those defaults, and rejects required inputs that have no default. Once a task unlocks, it stays active even if a later input change would no longer satisfy its condition.
 
 ### Reference and Skill Commands
 
@@ -633,7 +668,7 @@ agent-pack completion script fish > ~/.config/fish/completions/agent-pack.fish
 
 Regenerate the completion file after upgrading `agent-pack`.
 
-Completions suggest command names, subcommands, option names, known enum values such as `--git-refresh auto|always|never` and `catalog list --type manifest|task|reference|skill`, shell names for `completion`, catalog names for `--manifest`, `--task`, `--reference`, and `--skill`, plus `catalog show|path` names. When no app-known positional value exists, completion suggests options for the active command; explicit filesystem path prefixes such as `/`, `./`, `../`, `~`, and `~/` return no catalog candidates.
+Completions suggest command names, subcommands, option names, known enum values such as `--git-refresh auto|always|never` and `catalog list --type manifest|task|reference|skill`, shell names for `completion`, catalog names for `--manifest`, `--task`, `--reference`, and `--skill`, input names for `input get|set|unset`, enum and boolean values for `input set`, plus `catalog show|path` names. When no app-known positional value exists, completion suggests options for the active command; explicit filesystem path prefixes such as `/`, `./`, `../`, `~`, and `~/` return no catalog candidates.
 
 ## Manifests
 
@@ -651,8 +686,9 @@ Manifest parsing is strict. Unknown fields are rejected.
 
 | Location | Allowed fields |
 |---|---|
-| Manifest | `schemaVersion`, `name`, `instructions`, `tasks`, `references`, `skills`, `contract` |
-| Inline task object | `id`, `title`, `category`, `body`, `doneWhen` |
+| Manifest | `schemaVersion`, `name`, `instructions`, `inputs`, `tasks`, `references`, `skills`, `contract` |
+| Input definition | `type`, `required`, `description`, `default`, `values` |
+| Inline task object | `id`, `title`, `category`, `body`, `doneWhen`, `when` |
 | Reference or skill object | `name`, `description`, `ref` |
 | Contract | `do`, `dont` |
 
@@ -665,15 +701,63 @@ Rules:
 - A string entry in `skills` is equivalent to `--skill <ref>`.
 - Bare string refs are catalog refs. Local paths must start with `./`, `../`, `~/`, or `/`.
 - Each inline task object must have `id` or `title`.
+- Input names must start with a letter or underscore and may contain letters, numbers, underscores, and dashes.
+- Input `type` defaults to `string`; supported types are `string`, `enum`, `boolean`, and `number`.
+- Enum inputs require a non-empty `values` list.
 - `doneWhen`, `contract.do`, and `contract.dont` are arrays of non-empty strings.
 - Reference and skill object `ref` values are non-empty strings.
 - `contract` must include at least one `do` or `dont` entry.
 - Manifest task `id` is preserved as `sourceId`; task commands use the runtime ID (`t001`, `t002`, ...) shown by `agent-pack task list`.
 - `category` is stored as task metadata but is not currently rendered in the brief.
 
+### Inputs and Conditional Tasks
+
+Manifest inputs capture caller-provided context and simple workflow state at `init` time:
+
+```yaml
+inputs:
+  scope:
+    required: true
+    description: What code, docs, or behavior should the agent inspect?
+  severity:
+    type: enum
+    values: [low, medium, high]
+    default: medium
+  include_tests:
+    type: boolean
+    default: true
+```
+
+Pass values with repeatable `--input key=value`. Unknown inputs, missing required inputs, invalid enum values, invalid booleans, and invalid numbers fail before pack state is written. Defaults satisfy missing optional or required inputs.
+
+Resolved inputs render near the top of `agent-pack brief` as caller-provided context. Inputs are not templates: they are not substituted into task titles, task bodies, instructions, references, skills, or YAML files.
+
+Tasks can declare simple YAML-only conditions with `when`:
+
+```yaml
+tasks:
+  - id: deep-review
+    title: Deep review
+    when:
+      severity: high
+  - id: write-report
+    title: Write report
+    when: report_path
+  - id: strict-review
+    title: Strict review
+    when:
+      severity:
+        in: [high]
+      include_tests: true
+```
+
+A map value means equality by default. A null or omitted map value means the input exists and is not empty. A string `when` value is shorthand for that same exists check against the named input. Multiple map entries use AND semantics.
+
+Conditional tasks whose conditions are not satisfied are stored as locked tasks and hidden from the default brief and `task list`. Use `agent-pack input set <name> <value>` to change inputs and unlock newly satisfied tasks. Tasks do not relock after they unlock.
+
 ### Task Files
 
-`--task` and `--tasks` load standalone YAML task files. Task objects use these fields: `id`, `title`, `category`, `body`, and `doneWhen`.
+`--task` and `--tasks` load standalone YAML task files. Task objects use these fields: `id`, `title`, `category`, `body`, `doneWhen`, and `when`.
 
 A task file may contain one task object:
 

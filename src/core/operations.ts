@@ -14,6 +14,20 @@ import {
   withGitCacheLock,
 } from "./git/cache.js";
 import { isGitRef, parseGitRef } from "./git/ref.js";
+import {
+  type InputEntry,
+  activeTasks,
+  getInputEntry,
+  initializeTaskActivation,
+  inputKeyCandidates,
+  inputValueCandidates,
+  listInputEntries,
+  lockedTasks,
+  resolveInitInputs,
+  setInputValue,
+  unlockSatisfiedTasks,
+  unsetInputValue,
+} from "./inputs.js";
 import { readInstructions, readManifest } from "./manifest/parse.js";
 import { isExplicitPathRef, resolveInputPath, toDisplayPath } from "./paths.js";
 import { fileGlobOptions, hasGlobMagic } from "./sources/glob.js";
@@ -32,6 +46,7 @@ import type {
   ManifestReference,
   ManifestSkill,
   PackContract,
+  PackInputValue,
   PackManifest,
   PackReference,
   PackSkill,
@@ -49,6 +64,7 @@ export async function initPack(input: InitInput): Promise<PackState> {
   const taskInputs: TaskInput[] = [];
   const referenceRefs: ManifestReference[] = [];
   const skillRefs: ManifestSkill[] = [];
+  const inputSchemas: Array<PackManifest["inputs"]> = [];
   const instructions: string[] = [];
   let name = input.name;
   let contract: PackContract | undefined;
@@ -65,6 +81,7 @@ export async function initPack(input: InitInput): Promise<PackState> {
         if (manifest.instructions) {
           instructions.push(manifest.instructions);
         }
+        inputSchemas.push(manifest.inputs);
         taskInputs.push(...manifestTaskInputs(manifest, manifestSource));
         referenceRefs.push(...manifestReferenceRefs(manifest));
         skillRefs.push(...manifestSkillRefs(manifest));
@@ -90,10 +107,12 @@ export async function initPack(input: InitInput): Promise<PackState> {
   }
 
   const packId = await resolveInitPackId(store, input.id, name);
+  const resolvedInputs = resolveInitInputs(inputSchemas, input.inputAssignments);
   const tasks = await loadTasks(taskInputs, paths, input.gitRefresh);
   const references = await resolveReferences(referenceRefs, paths, input.gitRefresh);
   const skills = await resolveSkills(skillRefs, paths, input.gitRefresh);
   const now = new Date().toISOString();
+  initializeTaskActivation(tasks, resolvedInputs.inputSchema, resolvedInputs.inputs, now);
   const pack: PackState = {
     schemaVersion: 1,
     id: packId,
@@ -109,6 +128,7 @@ export async function initPack(input: InitInput): Promise<PackState> {
         .filter(Boolean)
         .join("\n\n") || undefined,
     taskCounts: { total: 0, pending: 0, inProgress: 0, completed: 0, blocked: 0 },
+    ...resolvedInputs,
     tasks,
     references,
     skills,
@@ -290,16 +310,97 @@ export async function summaryPack(id?: string): Promise<PackState> {
   return store.loadPack(id);
 }
 
-export async function listTasks(id?: string): Promise<string> {
+export type TaskListMode = "active" | "all" | "locked";
+
+export async function listTasks(id?: string, mode: TaskListMode = "active"): Promise<string> {
   const store = new StateStore();
   const pack = await store.loadPack(id);
-  return `${pack.tasks.map((task) => `[${task.status}] ${task.id} - ${task.title}`).join("\n")}\n`;
+  return `${tasksForMode(pack, mode)
+    .map(
+      (task) =>
+        `[${task.activation === "locked" ? "locked" : task.status}] ${task.id} - ${task.title}`,
+    )
+    .join("\n")}\n`;
 }
 
 export async function showTask(taskId: string, id?: string): Promise<PackTask> {
   const store = new StateStore();
   const pack = await store.loadPack(id);
-  return getTask(pack, taskId);
+  const task = getTask(pack, taskId);
+  assertTaskActive(task);
+  return task;
+}
+
+export async function listInputs(id?: string): Promise<InputEntry[]> {
+  const store = new StateStore();
+  return listInputEntries(await store.loadPack(id));
+}
+
+export async function getInput(name: string, id?: string): Promise<InputEntry> {
+  const store = new StateStore();
+  return getInputEntry(await store.loadPack(id), name);
+}
+
+export interface InputMutationResult {
+  pack: PackState;
+  input: InputEntry;
+  unlocked: PackTask[];
+}
+
+export async function setInput(
+  name: string,
+  value: string,
+  id?: string,
+): Promise<InputMutationResult> {
+  let input: InputEntry | undefined;
+  let unlocked: PackTask[] = [];
+  const eventData = { name, unlocked: [] as string[] };
+  const store = new StateStore();
+  const pack = await store.updatePack(
+    id,
+    (pack) => {
+      input = setInputValue(pack, name, value);
+      unlocked = unlockSatisfiedTasks(pack, new Date().toISOString());
+      eventData.unlocked = unlocked.map((task) => task.id);
+    },
+    "input.set",
+    eventData,
+  );
+  if (!input) {
+    throw new AgentPackError("failed to set input");
+  }
+  return { pack, input, unlocked };
+}
+
+export async function unsetInput(name: string, id?: string): Promise<InputMutationResult> {
+  let input: InputEntry | undefined;
+  let unlocked: PackTask[] = [];
+  const eventData = { name, unlocked: [] as string[] };
+  const store = new StateStore();
+  const pack = await store.updatePack(
+    id,
+    (pack) => {
+      input = unsetInputValue(pack, name);
+      unlocked = unlockSatisfiedTasks(pack, new Date().toISOString());
+      eventData.unlocked = unlocked.map((task) => task.id);
+    },
+    "input.unset",
+    eventData,
+  );
+  if (!input) {
+    throw new AgentPackError("failed to unset input");
+  }
+  return { pack, input, unlocked };
+}
+
+export async function inputNameCandidates(id?: string): Promise<string[]> {
+  const store = new StateStore();
+  return inputKeyCandidates(await store.loadPack(id));
+}
+
+export async function inputValueCompletionCandidates(name: string, id?: string): Promise<string[]> {
+  const store = new StateStore();
+  return inputValueCandidates(await store.loadPack(id), name);
 }
 
 export interface AddTaskInput {
@@ -332,6 +433,7 @@ export async function addTask(input: AddTaskInput): Promise<{ pack: PackState; t
         doneWhen,
         status: "pending",
         notes: [],
+        activation: "active",
       };
       pack.tasks.push(addedTask);
       eventData.taskId = addedTask.id;
@@ -474,6 +576,7 @@ export async function updateTask(
     id,
     (pack) => {
       const task = getTask(pack, taskId);
+      assertTaskActive(task);
       const now = new Date().toISOString();
       if (status) {
         task.status = status;
@@ -530,7 +633,7 @@ export async function validateCachePaths(pack: PackState, paths: RuntimePaths): 
       addGitValidationSource(sourcesByRepo, skill.source, pack.id);
     }
   }
-  for (const task of pack.tasks) {
+  for (const task of activeTasks(pack.tasks)) {
     if (task.source?.kind === "git") {
       addGitValidationSource(sourcesByRepo, task.source, pack.id);
     }
@@ -656,6 +759,22 @@ function getTask(pack: PackState, taskId: string): PackTask {
     throw new AgentPackError(`task not found: ${taskId}`);
   }
   return task;
+}
+
+function assertTaskActive(task: PackTask): void {
+  if (task.activation === "locked") {
+    throw new AgentPackError(`task is locked: ${task.id}`);
+  }
+}
+
+function tasksForMode(pack: PackState, mode: TaskListMode): PackTask[] {
+  if (mode === "all") {
+    return pack.tasks;
+  }
+  if (mode === "locked") {
+    return lockedTasks(pack.tasks);
+  }
+  return activeTasks(pack.tasks);
 }
 
 function nextTaskId(tasks: PackTask[]): string {

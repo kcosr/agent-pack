@@ -6,6 +6,7 @@ import { renderReport, renderSummary, renderTask } from "../core/brief/render.js
 import { catalogTypes } from "../core/catalog.js";
 import { AgentPackError } from "../core/errors.js";
 import {
+  type TaskListMode,
   addReference,
   addSkill,
   addTask,
@@ -14,15 +15,21 @@ import {
   catalogPath,
   catalogShow,
   cleanCache,
+  getInput,
   initPack,
+  inputNameCandidates,
+  inputValueCompletionCandidates,
+  listInputs,
   listPacks,
   listTasks,
   report,
+  setInput,
   showTask,
   status,
   summary,
   summaryPack,
   syncPack,
+  unsetInput,
   updateTask,
 } from "../core/operations.js";
 import type {
@@ -37,6 +44,9 @@ import {
   catalogRefArgument,
   catalogRefOption,
   configureCompletionCommands,
+  configureInputCompletion,
+  inputNameArgument,
+  inputValueArgument,
 } from "./completion.js";
 
 let startupError: AgentPackError | undefined;
@@ -49,6 +59,10 @@ export function configureProgram(): Command {
     .version(packageVersion())
     .addHelpText("after", packageHelpText());
 
+  configureInputCompletion({
+    names: inputNameCandidates,
+    values: inputValueCompletionCandidates,
+  });
   configureInitCommand(root);
 
   root
@@ -116,6 +130,7 @@ export function configureProgram(): Command {
     });
 
   configureTaskCommands(root);
+  configureInputCommands(root);
   configureReferenceCommands(root);
   configureSkillCommands(root);
   configureCatalogCommands(root);
@@ -172,11 +187,13 @@ export function configureProgram(): Command {
 
 function configureInitCommand(root: Command): void {
   const includes: InitInclude[] = [];
+  const inputAssignments: string[] = [];
   root
     .command("init")
     .description("Create a pack.")
     .option("--id <id>", "use a specific pack ID")
     .option("--name <name>", "set a display name")
+    .option("--input <key=value>", "set a manifest input", collectString, inputAssignments)
     .addOption(
       catalogRefOption(
         "--manifest <ref>",
@@ -263,6 +280,7 @@ function configureInitCommand(root: Command): void {
           id: options.id,
           name: options.name,
           includes,
+          inputAssignments: options.input,
           prompt,
           stateDir: options.stateDir,
           gitRefresh: options.gitRefresh,
@@ -314,9 +332,11 @@ function configureTaskCommands(root: Command): void {
     .command("list")
     .description("List tasks in a pack.")
     .option("--id <id>", "pack ID")
+    .option("--all", "include locked tasks")
+    .option("--locked", "show only locked tasks")
     .action(async (options) => {
       await run(async () => {
-        process.stdout.write(await listTasks(options.id));
+        process.stdout.write(await listTasks(options.id, taskListMode(options)));
       });
     });
 
@@ -385,6 +405,80 @@ function configureTaskStatusCommand(
       await run(async () => {
         const pack = await updateTask(taskId, status, options.note, options.id);
         process.stdout.write(renderSummary(pack));
+      });
+    });
+}
+
+function configureInputCommands(root: Command): void {
+  const input = root.command("input").description("List and update pack inputs.");
+
+  input
+    .command("list")
+    .description("List pack inputs.")
+    .option("--id <id>", "pack ID")
+    .option("--json", "emit machine-readable output")
+    .action(async (options) => {
+      await run(async () => {
+        const entries = await listInputs(options.id);
+        if (options.json) {
+          printJson(entries);
+          return;
+        }
+        for (const entry of entries) {
+          process.stdout.write(inputRow(entry));
+        }
+      });
+    });
+
+  input
+    .command("get")
+    .description("Get a pack input value.")
+    .addArgument(inputNameArgument("<name>", "input name"))
+    .option("--id <id>", "pack ID")
+    .option("--json", "emit machine-readable output")
+    .action(async (name, options) => {
+      await run(async () => {
+        const entry = await getInput(name, options.id);
+        if (options.json) {
+          printJson(entry);
+        } else {
+          process.stdout.write(`${entry.value ?? ""}\n`);
+        }
+      });
+    });
+
+  input
+    .command("set")
+    .description("Set a pack input value.")
+    .addArgument(inputNameArgument("<name>", "input name"))
+    .addArgument(inputValueArgument("<value>", "input value", 0))
+    .option("--id <id>", "pack ID")
+    .option("--json", "emit machine-readable output")
+    .action(async (name, value, options) => {
+      await run(async () => {
+        const result = await setInput(name, value, options.id);
+        if (options.json) {
+          printJson(inputMutationJson(result));
+        } else {
+          process.stdout.write(inputMutationText("Updated", result.input.name, result.unlocked));
+        }
+      });
+    });
+
+  input
+    .command("unset")
+    .description("Unset a pack input value.")
+    .addArgument(inputNameArgument("<name>", "input name"))
+    .option("--id <id>", "pack ID")
+    .option("--json", "emit machine-readable output")
+    .action(async (name, options) => {
+      await run(async () => {
+        const result = await unsetInput(name, options.id);
+        if (options.json) {
+          printJson(inputMutationJson(result));
+        } else {
+          process.stdout.write(inputMutationText("Unset", result.input.name, result.unlocked));
+        }
       });
     });
 }
@@ -525,6 +619,19 @@ function collectString(value: string, previous: string[]): string[] {
   return previous;
 }
 
+function taskListMode(options: { all?: boolean; locked?: boolean }): TaskListMode {
+  if (options.all && options.locked) {
+    throw new AgentPackError("pass only one of --all or --locked");
+  }
+  if (options.all) {
+    return "all";
+  }
+  if (options.locked) {
+    return "locked";
+  }
+  return "active";
+}
+
 function gitRefreshOption(): Option {
   return new Option("--git-refresh <policy>", "git fetch policy")
     .choices(["auto", "always", "never"])
@@ -579,11 +686,48 @@ function taskJson(task: PackState["tasks"][number]) {
     body: task.body,
     doneWhen: task.doneWhen,
     status: task.status,
+    activation: task.activation,
+    when: task.when,
+    unlockedAt: task.unlockedAt,
   };
 }
 
 function statusRow(pack: PackState): string {
   return `${pack.id}\t${pack.name ?? ""}\t${pack.status}\t${pack.taskCounts.completed}/${pack.taskCounts.total}\tblocked:${pack.taskCounts.blocked}\n`;
+}
+
+function inputRow(entry: Awaited<ReturnType<typeof listInputs>>[number]): string {
+  return `${[
+    entry.name,
+    entry.value ?? "",
+    entry.required ? "required" : "optional",
+    entry.type,
+    entry.source ?? "",
+    entry.description ?? "",
+  ].join("\t")}\n`;
+}
+
+function inputMutationJson(result: Awaited<ReturnType<typeof setInput>>) {
+  return {
+    input: result.input,
+    unlocked: result.unlocked.map(taskJson),
+    summary: statusJson(result.pack),
+  };
+}
+
+function inputMutationText(
+  verb: "Updated" | "Unset",
+  name: string,
+  unlocked: PackState["tasks"],
+): string {
+  const lines = [`${verb} input ${name}.`];
+  if (unlocked.length) {
+    lines.push(`Unlocked ${unlocked.length} ${unlocked.length === 1 ? "task" : "tasks"}:`);
+    for (const task of unlocked) {
+      lines.push(`- ${task.id} ${task.title}`);
+    }
+  }
+  return `${lines.join("\n")}\n`;
 }
 
 function addResultLine(

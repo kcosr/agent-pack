@@ -11,10 +11,15 @@ import {
   catalogList,
   catalogShow,
   cleanCache,
+  getInput,
   initPack,
+  listInputs,
   listPacks,
+  listTasks,
+  setInput,
   status,
   summaryPack,
+  unsetInput,
   updateTask,
 } from "../../src/core/operations.js";
 import { resolveRuntimePaths } from "../../src/core/paths.js";
@@ -135,6 +140,189 @@ tasks:
     expect(pack.id).toBe("env-review");
   });
 
+  it("captures inputs, hides locked tasks, and unlocks them when inputs change", async () => {
+    await writeFile(
+      "pack.yaml",
+      `schemaVersion: 1
+name: input-review
+inputs:
+  scope:
+    required: true
+    description: Review scope.
+  severity:
+    type: enum
+    values: [low, medium, high]
+    default: medium
+  include_tests:
+    type: boolean
+    default: true
+  report_path:
+    type: string
+tasks:
+  - id: baseline
+    title: Baseline review
+  - id: deep
+    title: Deep review
+    when:
+      severity: high
+  - id: strict-tests
+    title: Strict test review
+    when:
+      severity: high
+      include_tests: true
+  - id: publish
+    title: Publish report
+    when: report_path
+`,
+    );
+
+    const pack = await initPack({
+      id: "input-review",
+      includes: [{ type: "manifest", ref: "./pack.yaml" }],
+      inputAssignments: ["scope=auth changes"],
+      gitRefresh: "auto",
+    });
+
+    expect(pack.inputs).toMatchObject({
+      scope: "auth changes",
+      severity: "medium",
+      include_tests: true,
+    });
+    expect(pack.inputSources).toMatchObject({
+      scope: { source: "cli" },
+      severity: { source: "default" },
+      include_tests: { source: "default" },
+    });
+    expect(pack.tasks.map((task) => [task.id, task.activation])).toEqual([
+      ["t001", "active"],
+      ["t002", "locked"],
+      ["t003", "locked"],
+      ["t004", "locked"],
+    ]);
+    expect(pack.taskCounts).toMatchObject({ total: 1, pending: 1 });
+
+    await expect(brief("input-review")).resolves.toContain("Inputs:");
+    await expect(brief("input-review")).resolves.toContain("| scope | auth changes | yes | string");
+    await expect(brief("input-review")).resolves.not.toContain("Deep review");
+    await expect(listTasks("input-review")).resolves.toContain("t001 - Baseline review");
+    await expect(listTasks("input-review")).resolves.not.toContain("Deep review");
+    await expect(listTasks("input-review", "locked")).resolves.toContain(
+      "[locked] t002 - Deep review",
+    );
+
+    const severity = await setInput("severity", "high", "input-review");
+
+    expect(severity.unlocked.map((task) => task.id)).toEqual(["t002", "t003"]);
+    expect(severity.pack.taskCounts).toMatchObject({ total: 3, pending: 3 });
+    await expect(listTasks("input-review")).resolves.toContain("t003 - Strict test review");
+
+    const reverted = await unsetInput("severity", "input-review");
+
+    expect(reverted.input).toMatchObject({ name: "severity", value: "medium", source: "default" });
+    expect(reverted.unlocked).toEqual([]);
+    expect(reverted.pack.tasks.find((task) => task.id === "t002")?.activation).toBe("active");
+
+    const reportPath = await setInput("report_path", "reports/out.md", "input-review");
+
+    expect(reportPath.unlocked.map((task) => task.id)).toEqual(["t004"]);
+    await expect(getInput("report_path", "input-review")).resolves.toMatchObject({
+      value: "reports/out.md",
+      source: "set",
+    });
+    await expect(listInputs("input-review")).resolves.toHaveLength(4);
+  });
+
+  it("rejects invalid inputs and condition shapes before writing state", async () => {
+    await writeFile(
+      "pack.yaml",
+      `schemaVersion: 1
+inputs:
+  scope:
+    required: true
+  severity:
+    type: enum
+    values: [low, high]
+tasks:
+  - title: Inspect
+`,
+    );
+
+    await expect(
+      initPack({
+        id: "missing-required-input",
+        includes: [{ type: "manifest", ref: "./pack.yaml" }],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow("missing required input: scope");
+
+    await expect(
+      initPack({
+        id: "bad-enum-input",
+        includes: [{ type: "manifest", ref: "./pack.yaml" }],
+        inputAssignments: ["scope=auth", "severity=medium"],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow("input severity must be one of");
+
+    await expect(
+      initPack({
+        id: "unknown-input",
+        includes: [{ type: "manifest", ref: "./pack.yaml" }],
+        inputAssignments: ["scope=auth", "unknown=value"],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow("unknown input: unknown");
+
+    await expect(summaryPack("missing-required-input")).rejects.toThrow(
+      "pack not found: missing-required-input",
+    );
+  });
+
+  it("rejects invalid task conditions and locked task updates", async () => {
+    await writeFile(
+      "bad-when.yaml",
+      `schemaVersion: 1
+inputs:
+  severity:
+    type: enum
+    values: [low, high]
+tasks:
+  - title: Bad expression
+    when: severity == high
+`,
+    );
+    await expect(
+      initPack({
+        id: "bad-when",
+        includes: [{ type: "manifest", ref: "./bad-when.yaml" }],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow("when must be an input name or object");
+
+    await writeFile(
+      "locked.yaml",
+      `schemaVersion: 1
+inputs:
+  gate:
+    type: boolean
+tasks:
+  - id: gated
+    title: Gated task
+    when:
+      gate: true
+`,
+    );
+    await initPack({
+      id: "locked-task-update",
+      includes: [{ type: "manifest", ref: "./locked.yaml" }],
+      gitRefresh: "auto",
+    });
+
+    await expect(
+      updateTask("t001", "in_progress", undefined, "locked-task-update"),
+    ).rejects.toThrow("task is locked: t001");
+  });
+
   it("adds an ad hoc task to an existing pack", async () => {
     await initPack({
       id: "add-task-pack",
@@ -157,6 +345,7 @@ tasks:
       body: "Inspect request handling.",
       doneWhen: ["Findings cite files", "Test gaps are noted"],
       status: "pending",
+      activation: "active",
       notes: [],
     });
     expect(pack.taskCounts).toMatchObject({ total: 2, pending: 2, completed: 0 });

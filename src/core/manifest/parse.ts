@@ -2,20 +2,29 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
 import { AgentPackError } from "../errors.js";
-import type { ManifestReference, ManifestTask, PackContract, PackManifest } from "../types.js";
+import type {
+  ManifestReference,
+  ManifestTask,
+  PackContract,
+  PackInputType,
+  PackManifest,
+} from "../types.js";
 
 const manifestKeys = new Set([
   "schemaVersion",
   "name",
   "instructions",
+  "inputs",
   "tasks",
   "references",
   "skills",
   "contract",
 ]);
-const taskKeys = new Set(["id", "title", "category", "body", "doneWhen"]);
+const taskKeys = new Set(["id", "title", "category", "body", "doneWhen", "when"]);
+const inputKeys = new Set(["type", "required", "description", "default", "values"]);
 const includeKeys = new Set(["name", "description", "ref"]);
 const contractKeys = new Set(["do", "dont"]);
+const inputTypes = new Set<PackInputType>(["string", "enum", "boolean", "number"]);
 
 export async function readManifest(filePath: string): Promise<PackManifest> {
   const content = await readText(filePath, "manifest");
@@ -89,6 +98,7 @@ export function normalizeTask(task: unknown, label = "task"): ManifestTask {
     category: stringValue(raw.category),
     body: stringValue(raw.body),
     doneWhen,
+    when: normalizeWhen(raw.when, label),
   };
 }
 
@@ -120,10 +130,55 @@ function validateManifest(manifest: Record<string, unknown>, filePath: string): 
   if (manifest.instructions !== undefined && typeof manifest.instructions !== "string") {
     throw new AgentPackError(`manifest instructions must be a string: ${filePath}`);
   }
+  validateInputs(manifest.inputs, filePath);
   validateTasks(manifest.tasks, filePath);
   validateIncludes(manifest.references, "references", filePath);
   validateIncludes(manifest.skills, "skills", filePath);
   validateContract(manifest.contract, filePath);
+}
+
+function validateInputs(value: unknown, filePath: string): void {
+  if (value === undefined) {
+    return;
+  }
+  if (!isObject(value)) {
+    throw new AgentPackError(`manifest inputs must be an object: ${filePath}`);
+  }
+  for (const [name, input] of Object.entries(value)) {
+    if (!inputName(name)) {
+      throw new AgentPackError(`manifest input name is invalid: ${name}`);
+    }
+    if (!isObject(input)) {
+      throw new AgentPackError(`manifest inputs.${name} must be an object: ${filePath}`);
+    }
+    assertKnownKeys(input, inputKeys, `inputs.${name}`);
+    if (
+      input.type !== undefined &&
+      (typeof input.type !== "string" || !inputTypes.has(input.type as PackInputType))
+    ) {
+      throw new AgentPackError(`manifest inputs.${name}.type is not supported: ${filePath}`);
+    }
+    if (input.required !== undefined && typeof input.required !== "boolean") {
+      throw new AgentPackError(`manifest inputs.${name}.required must be a boolean: ${filePath}`);
+    }
+    validateIncludeString(input.description, `inputs.${name}.description`, filePath);
+    if (
+      input.default !== undefined &&
+      typeof input.default !== "string" &&
+      typeof input.default !== "number" &&
+      typeof input.default !== "boolean"
+    ) {
+      throw new AgentPackError(`manifest inputs.${name}.default must be a scalar: ${filePath}`);
+    }
+    if (
+      input.values !== undefined &&
+      (!Array.isArray(input.values) ||
+        input.values.length === 0 ||
+        input.values.some((entry) => typeof entry !== "string" || !entry.trim()))
+    ) {
+      throw new AgentPackError(`manifest inputs.${name}.values must be strings: ${filePath}`);
+    }
+  }
 }
 
 function validateTasks(value: unknown, filePath: string): void {
@@ -146,9 +201,64 @@ function validateTasks(value: unknown, filePath: string): void {
     validateTaskString(task.category, `tasks[${index}].category`, filePath);
     validateTaskString(task.body, `tasks[${index}].body`, filePath);
     validateStringList(task.doneWhen, `tasks[${index}].doneWhen`, filePath);
+    validateWhen(task.when, `tasks[${index}].when`, filePath);
     if (task.id === undefined && task.title === undefined) {
       throw new AgentPackError(`manifest tasks[${index}] requires id or title: ${filePath}`);
     }
+  }
+}
+
+function normalizeWhen(value: unknown, label: string): ManifestTask["when"] {
+  if (value === undefined) {
+    return undefined;
+  }
+  validateWhen(value, `${label}.when`, "task");
+  return value as ManifestTask["when"];
+}
+
+function validateWhen(value: unknown, label: string, filePath: string): void {
+  if (value === undefined) {
+    return;
+  }
+  if (typeof value === "string") {
+    if (!inputName(value)) {
+      throw new AgentPackError(`${label} must be an input name or object: ${filePath}`);
+    }
+    return;
+  }
+  if (!isObject(value)) {
+    throw new AgentPackError(`${label} must be an input name or object: ${filePath}`);
+  }
+  for (const [name, condition] of Object.entries(value)) {
+    if (!inputName(name)) {
+      throw new AgentPackError(`${label}.${name} must be an input name: ${filePath}`);
+    }
+    validateWhenCondition(condition, `${label}.${name}`, filePath);
+  }
+}
+
+function validateWhenCondition(value: unknown, label: string, filePath: string): void {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return;
+  }
+  if (!isObject(value)) {
+    throw new AgentPackError(`${label} has an unsupported condition: ${filePath}`);
+  }
+  assertKnownKeys(value, new Set(["in"]), label);
+  if (
+    !Array.isArray(value.in) ||
+    value.in.length === 0 ||
+    value.in.some(
+      (entry) =>
+        typeof entry !== "string" && typeof entry !== "number" && typeof entry !== "boolean",
+    )
+  ) {
+    throw new AgentPackError(`${label}.in must be a non-empty scalar array: ${filePath}`);
   }
 }
 
@@ -245,6 +355,10 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && Boolean(value.trim());
+}
+
+function inputName(value: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_-]*$/.test(value);
 }
 
 async function readText(filePath: string, label: string): Promise<string> {

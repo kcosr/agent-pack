@@ -1,6 +1,17 @@
 export type TaskStatus = "pending" | "in_progress" | "blocked" | "completed";
 export type PackStatus = "no_tasks" | "pending" | "in_progress" | "blocked" | "completed";
 export type GitRefresh = "auto" | "always" | "never";
+export type PackInputType = "string" | "enum" | "boolean" | "number";
+export type PackInputValue = string | number | boolean;
+export type InputSource = "cli" | "default" | "set";
+export type TaskActivation = "active" | "locked";
+export type TaskWhen = string | Record<string, TaskWhenCondition>;
+export type TaskWhenCondition =
+  | string
+  | number
+  | boolean
+  | null
+  | { in: Array<string | number | boolean> };
 
 export type SourceInfo =
   | FileSourceInfo
@@ -49,6 +60,9 @@ export interface PackTask {
   status: TaskStatus;
   notes: string[];
   source?: SourceInfo;
+  activation?: TaskActivation;
+  when?: TaskWhen;
+  unlockedAt?: string;
   startedAt?: string;
   completedAt?: string;
   blockedAt?: string;
@@ -85,6 +99,18 @@ export interface PackContract {
   dont?: string[];
 }
 
+export interface PackInputDef {
+  type: PackInputType;
+  required: boolean;
+  description?: string;
+  default?: PackInputValue;
+  values?: string[];
+}
+
+export interface InputSourceInfo {
+  source: InputSource;
+}
+
 export interface PackState {
   schemaVersion: 1;
   id: string;
@@ -96,10 +122,21 @@ export interface PackState {
   prompt?: string;
   instructions?: string;
   taskCounts: TaskCounts;
+  inputSchema?: Record<string, PackInputDef>;
+  inputs?: Record<string, PackInputValue>;
+  inputSources?: Record<string, InputSourceInfo>;
   tasks: PackTask[];
   references: PackReference[];
   skills: PackSkill[];
   contract?: PackContract;
+}
+
+export interface ManifestInputDef {
+  type?: PackInputType;
+  required?: boolean;
+  description?: string;
+  default?: unknown;
+  values?: unknown[];
 }
 
 export interface ManifestTask {
@@ -108,6 +145,7 @@ export interface ManifestTask {
   category?: string;
   body?: string;
   doneWhen?: string[];
+  when?: TaskWhen;
   source?: SourceInfo;
 }
 
@@ -127,6 +165,7 @@ export interface PackManifest {
   schemaVersion?: number;
   name?: string;
   instructions?: string;
+  inputs?: Record<string, ManifestInputDef>;
   tasks?: Array<ManifestTask | string>;
   references?: Array<ManifestReference | string>;
   skills?: Array<ManifestSkill | string>;
@@ -145,6 +184,7 @@ export interface InitInput {
   id?: string;
   name?: string;
   includes: InitInclude[];
+  inputAssignments?: string[];
   prompt?: string;
   stateDir?: string;
   gitRefresh: GitRefresh;

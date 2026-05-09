@@ -71,6 +71,7 @@ agent-pack status --json
 Use these flags with `agent-pack init`:
 
 - `--manifest <ref>`: one catalog, local, or git-backed manifest YAML file
+- `--input <key=value>`: set one declared manifest input; repeat for multiple inputs
 - `--add-task <text>`: one inline task
 - `--task <ref>`: catalog task, local task YAML file, glob, or git-backed task file
 - `--reference <ref>`: catalog reference, local file, directory, glob, HTTP/HTTPS URL, git path, or whole git repo
@@ -85,9 +86,11 @@ agent-pack reference add ./docs/api.md
 agent-pack reference add product/api
 agent-pack skill add ./skills/review/SKILL.md
 agent-pack skill add engineering/fresh-eyes
+agent-pack input list
+agent-pack input set severity high
 ```
 
-`task add` accepts optional `--category`, `--body`, repeatable `--done-when`, and `--json`. `reference add` and `skill add` accept the same ref formats as `init --reference` and `init --skill`, infer names and descriptions from the existing resolvers, skip sources already present in the pack, and support `--git-refresh auto|always|never` plus `--json`.
+`task add` accepts optional `--category`, `--body`, repeatable `--done-when`, and `--json`. `reference add` and `skill add` accept the same ref formats as `init --reference` and `init --skill`, infer names and descriptions from the existing resolvers, skip sources already present in the pack, and support `--git-refresh auto|always|never` plus `--json`. `input set` validates against the stored manifest schema and unlocks conditional tasks whose `when` clauses are satisfied.
 
 Manifest `tasks`, `references`, and `skills` arrays can use the same refs as these CLI flags:
 
@@ -97,12 +100,35 @@ tasks:
   - ./tasks/*.yaml
   - id: inline-check
     title: Check local state
+  - id: strict-review
+    title: Review strictly
+    when:
+      severity: high
 references:
   - product/api
   - ./docs/**/*.md
 skills:
   - engineering/fresh-eyes
   - ./skills
+```
+
+Manifest `inputs` can declare required values and defaults:
+
+```yaml
+inputs:
+  scope:
+    required: true
+    description: What should the agent inspect?
+  severity:
+    type: enum
+    values: [low, medium, high]
+    default: medium
+```
+
+Initialize with inputs:
+
+```bash
+agent-pack init --manifest review/code-review --input scope="unstaged changes"
 ```
 
 Bare refs such as `review/security` are catalog refs under the config directory. Local paths must start with `./`, `../`, `~/`, or `/`.
