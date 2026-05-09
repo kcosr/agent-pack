@@ -7,7 +7,7 @@
 ### Added
 
 - Added `agent-pack reference add <ref>` and `agent-pack skill add <ref>` for
-  additive pack composition after `init`.
+  additive pack composition after `init` ([#5](https://github.com/kcosr/agent-pack/pull/5)).
 
 ### Changed
 
