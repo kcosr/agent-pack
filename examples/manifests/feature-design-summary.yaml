@@ -14,8 +14,8 @@ instructions: |
   path, use that path. Otherwise create
   `docs/design/design-summary-<kebab-feature-slug>.md` when `docs/design/` exists, or
   `design-summary-<kebab-feature-slug>.md` at the repo root when it does not.
-  Do not create task-runner assignments, task-runner attachments, worktrees,
-  implementation branches, commits, or PRs.
+  Do not create extra workflow artifacts, worktrees, implementation branches,
+  commits, or PRs.
 
   The summary must use these sections:
 
@@ -254,12 +254,12 @@ tasks:
         - the contract is concrete and not guesswork
         - the surface inventory covers every user-visible name from the contract
         - risks and test strategy cover the impacted shared paths
-        - no task-runner-specific handoff, attachment, run id, worktree, nested review, commit, PR, or implementation execution instructions were included
+        - no extra workflow artifact, worktree, nested review, commit, PR, or implementation execution instructions were included
 
       Record the final summary path and a concise quality note.
     doneWhen:
       - Notes include the final summary path.
-      - Notes confirm the summary was checked against the repository and contains no task-runner scaffolding.
+      - Notes confirm the summary was checked against the repository and contains no workflow scaffolding.
 
 contract:
   do:
@@ -269,6 +269,6 @@ contract:
     - Keep the summary focused on design, scope, implementation shape, risks, and tests.
   dont:
     - Implement the feature.
-    - Create task-runner assignments, attachments, worktrees, runs, commits, branches, or PRs.
+    - Create extra workflow artifacts, worktrees, commits, branches, or PRs.
     - Add compatibility fallbacks, alias fields, bridge routes, or dual-shape parsers unless the prompt explicitly requires them.
     - Leave placeholders or unsupported claims in the final summary.
