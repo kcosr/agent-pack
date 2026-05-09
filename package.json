@@ -4,11 +4,11 @@
   "description": "Prepare durable work packets for coding agents.",
   "type": "module",
   "bin": {
-    "agent-pack": "dist/cli/agent-pack.js"
+    "agent-pack": "dist/cli/main.js"
   },
   "files": ["dist", "README.md", "docs", "examples"],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/chmod-bin.mjs",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run test/unit test/integration",
     "test:smoke": "npm run build && vitest run test/smoke",

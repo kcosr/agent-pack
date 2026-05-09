@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,178 +24,145 @@ import {
   updateTask,
 } from "../core/operations.js";
 import type {
-  CatalogType,
   GitRefresh,
   InitInclude,
   PackState,
   SystemStatus,
   TaskStatus,
 } from "../core/types.js";
+import {
+  catalogNameArgument,
+  catalogRefOption,
+  configureCompletionCommands,
+} from "./completion.js";
 
-const program = new Command();
 let startupError: AgentPackError | undefined;
 
-program
-  .name("agent-pack")
-  .description("Prepare durable work packets for coding agents.")
-  .version(packageVersion())
-  .addHelpText("after", packageHelpText());
+export function configureProgram(): Command {
+  const root = new Command();
+  root
+    .name("agent-pack")
+    .description("Prepare durable work packets for coding agents.")
+    .version(packageVersion())
+    .addHelpText("after", packageHelpText());
 
-configureInitCommand(program);
+  configureInitCommand(root);
 
-program
-  .command("brief")
-  .description("Print the agent-facing brief.")
-  .option("--id <id>", "pack ID")
-  .action(async (options) => {
-    await run(async () => {
-      process.stdout.write(await brief(options.id));
-    });
-  });
-
-program
-  .command("sync")
-  .description("Fetch and unpack missing git cache material for a pack.")
-  .option("--id <id>", "pack ID")
-  .addOption(gitRefreshOption())
-  .option("--json", "emit machine-readable output")
-  .action(async (options) => {
-    await run(async () => {
-      const result = await syncPack(options.id, options.gitRefresh);
-      if (options.json) {
-        printJson(result);
-      } else {
-        process.stdout.write(`Synced pack ${result.id}\n`);
-      }
-    });
-  });
-
-program
-  .command("clean")
-  .description("Remove rebuildable git cache material for current pack state.")
-  .option("--id <id>", "limit cleanup to one pack ID")
-  .option("--json", "emit machine-readable output")
-  .action(async (options) => {
-    await run(async () => {
-      const result = await cleanCache(options.id);
-      if (options.json) {
-        printJson(result);
-      } else {
-        const repoLabel = result.repoHashes.length === 1 ? "git repo" : "git repos";
-        const packLabel = result.packIds.length === 1 ? "pack" : "packs";
-        process.stdout.write(
-          `Cleaned ${result.removed.length} cache paths for ${result.repoHashes.length} ${repoLabel} across ${result.packIds.length} ${packLabel}\n`,
-        );
-      }
-    });
-  });
-
-program
-  .command("list")
-  .description("List packs in the current state directory.")
-  .option("--json", "emit machine-readable output")
-  .action(async (options) => {
-    await run(async () => {
-      const packs = await listPacks();
-      if (options.json) {
-        printJson(packs.map(statusJson));
-        return;
-      }
-      for (const pack of packs) {
-        process.stdout.write(statusRow(pack));
-      }
-    });
-  });
-
-configureTaskCommands(program);
-configureCatalogCommands(program);
-configureCompletionCommands(program);
-
-program
-  .command("status")
-  .description("Show resolved agent-pack paths and defaults.")
-  .option("--json", "emit machine-readable output")
-  .action(async (options) => {
-    await run(async () => {
-      const result = status();
-      if (options.json) {
-        printJson(result);
-      } else {
-        process.stdout.write(renderSystemStatus(result));
-      }
-    });
-  });
-
-program
-  .command("report")
-  .description("Show full pack state.")
-  .option("--id <id>", "pack ID")
-  .option("--json", "emit machine-readable output")
-  .action(async (options) => {
-    await run(async () => {
-      const pack = await report(options.id);
-      if (options.json) {
-        printJson(pack);
-      } else {
-        process.stdout.write(renderReport(pack));
-      }
-    });
-  });
-
-program
-  .command("summary")
-  .description("Show a concise pack summary.")
-  .option("--id <id>", "pack ID")
-  .option("--json", "emit machine-readable output")
-  .action(async (options) => {
-    await run(async () => {
-      if (options.json) {
-        printJson(statusJson(await summaryPack(options.id)));
-      } else {
-        process.stdout.write(await summary(options.id));
-      }
-    });
-  });
-
-program.parseAsync(process.argv).catch((error) => {
-  if (error instanceof AgentPackError) {
-    console.error(`agent-pack: ${error.message}`);
-    process.exitCode = 1;
-    return;
-  }
-  throw error;
-});
-
-function configureCompletionCommands(root: Command): void {
-  const completion = root
-    .command("completion")
-    .description("Print shell completion setup instructions.")
-    .argument("[shell]", "shell to configure: bash, zsh, or fish")
-    .action(async (shell) => {
+  root
+    .command("brief")
+    .description("Print the agent-facing brief.")
+    .option("--id <id>", "pack ID")
+    .action(async (options) => {
       await run(async () => {
-        process.stdout.write(completionInstructions(normalizeShell(shell)));
-      });
-    });
-
-  completion
-    .command("script")
-    .description("Print a shell completion script.")
-    .argument("<shell>", "shell script to print: bash, zsh, or fish")
-    .action(async (shell) => {
-      await run(async () => {
-        process.stdout.write(completionScript(normalizeShell(shell)));
+        process.stdout.write(await brief(options.id));
       });
     });
 
   root
-    .command("__complete", { hidden: true })
-    .argument("<type>", "catalog entry type")
-    .argument("[prefix]", "current word prefix", "")
-    .action(async (type, prefix) => {
+    .command("sync")
+    .description("Fetch and unpack missing git cache material for a pack.")
+    .option("--id <id>", "pack ID")
+    .addOption(gitRefreshOption())
+    .option("--json", "emit machine-readable output")
+    .action(async (options) => {
       await run(async () => {
-        process.stdout.write(await completionCandidates(type, prefix));
+        const result = await syncPack(options.id, options.gitRefresh);
+        if (options.json) {
+          printJson(result);
+        } else {
+          process.stdout.write(`Synced pack ${result.id}\n`);
+        }
       });
     });
+
+  root
+    .command("clean")
+    .description("Remove rebuildable git cache material for current pack state.")
+    .option("--id <id>", "limit cleanup to one pack ID")
+    .option("--json", "emit machine-readable output")
+    .action(async (options) => {
+      await run(async () => {
+        const result = await cleanCache(options.id);
+        if (options.json) {
+          printJson(result);
+        } else {
+          const repoLabel = result.repoHashes.length === 1 ? "git repo" : "git repos";
+          const packLabel = result.packIds.length === 1 ? "pack" : "packs";
+          process.stdout.write(
+            `Cleaned ${result.removed.length} cache paths for ${result.repoHashes.length} ${repoLabel} across ${result.packIds.length} ${packLabel}\n`,
+          );
+        }
+      });
+    });
+
+  root
+    .command("list")
+    .description("List packs in the current state directory.")
+    .option("--json", "emit machine-readable output")
+    .action(async (options) => {
+      await run(async () => {
+        const packs = await listPacks();
+        if (options.json) {
+          printJson(packs.map(statusJson));
+          return;
+        }
+        for (const pack of packs) {
+          process.stdout.write(statusRow(pack));
+        }
+      });
+    });
+
+  configureTaskCommands(root);
+  configureCatalogCommands(root);
+  configureCompletionCommands(root, run);
+
+  root
+    .command("status")
+    .description("Show resolved agent-pack paths and defaults.")
+    .option("--json", "emit machine-readable output")
+    .action(async (options) => {
+      await run(async () => {
+        const result = status();
+        if (options.json) {
+          printJson(result);
+        } else {
+          process.stdout.write(renderSystemStatus(result));
+        }
+      });
+    });
+
+  root
+    .command("report")
+    .description("Show full pack state.")
+    .option("--id <id>", "pack ID")
+    .option("--json", "emit machine-readable output")
+    .action(async (options) => {
+      await run(async () => {
+        const pack = await report(options.id);
+        if (options.json) {
+          printJson(pack);
+        } else {
+          process.stdout.write(renderReport(pack));
+        }
+      });
+    });
+
+  root
+    .command("summary")
+    .description("Show a concise pack summary.")
+    .option("--id <id>", "pack ID")
+    .option("--json", "emit machine-readable output")
+    .action(async (options) => {
+      await run(async () => {
+        if (options.json) {
+          printJson(statusJson(await summaryPack(options.id)));
+        } else {
+          process.stdout.write(await summary(options.id));
+        }
+      });
+    });
+
+  return root;
 }
 
 function configureInitCommand(root: Command): void {
@@ -206,17 +172,21 @@ function configureInitCommand(root: Command): void {
     .description("Create a pack.")
     .option("--id <id>", "use a specific pack ID")
     .option("--name <name>", "set a display name")
-    .option(
-      "--manifest <ref>",
-      "load a catalog, local, or git pack manifest YAML file",
-      collectInclude(includes, (ref) => ({ type: "manifest", ref })),
-      [],
+    .addOption(
+      catalogRefOption(
+        "--manifest <ref>",
+        "load a catalog, local, or git pack manifest YAML file",
+        "manifest",
+        collectInclude(includes, (ref) => ({ type: "manifest", ref })),
+      ),
     )
-    .option(
-      "--manifests <ref>",
-      "load a catalog, local, or git pack manifest YAML file",
-      collectInclude(includes, (ref) => ({ type: "manifest", ref })),
-      [],
+    .addOption(
+      catalogRefOption(
+        "--manifests <ref>",
+        "load a catalog, local, or git pack manifest YAML file",
+        "manifest",
+        collectInclude(includes, (ref) => ({ type: "manifest", ref })),
+      ),
     )
     .option(
       "--instructions <path>",
@@ -230,41 +200,53 @@ function configureInitCommand(root: Command): void {
       collectInclude(includes, (text) => ({ type: "adHocTask", text })),
       [],
     )
-    .option(
-      "--task <ref>",
-      "add catalog, local, or git task YAML",
-      collectInclude(includes, (ref) => ({ type: "taskRef", ref })),
-      [],
+    .addOption(
+      catalogRefOption(
+        "--task <ref>",
+        "add catalog, local, or git task YAML",
+        "task",
+        collectInclude(includes, (ref) => ({ type: "taskRef", ref })),
+      ),
     )
-    .option(
-      "--tasks <ref>",
-      "add catalog, local, or git task YAML",
-      collectInclude(includes, (ref) => ({ type: "taskRef", ref })),
-      [],
+    .addOption(
+      catalogRefOption(
+        "--tasks <ref>",
+        "add catalog, local, or git task YAML",
+        "task",
+        collectInclude(includes, (ref) => ({ type: "taskRef", ref })),
+      ),
     )
-    .option(
-      "--reference <ref>",
-      "add catalog, local, URL, or git reference",
-      collectInclude(includes, (ref) => ({ type: "reference", ref: { ref } })),
-      [],
+    .addOption(
+      catalogRefOption(
+        "--reference <ref>",
+        "add catalog, local, URL, or git reference",
+        "reference",
+        collectInclude(includes, (ref) => ({ type: "reference", ref: { ref } })),
+      ),
     )
-    .option(
-      "--references <ref>",
-      "add catalog, local, URL, or git reference",
-      collectInclude(includes, (ref) => ({ type: "reference", ref: { ref } })),
-      [],
+    .addOption(
+      catalogRefOption(
+        "--references <ref>",
+        "add catalog, local, URL, or git reference",
+        "reference",
+        collectInclude(includes, (ref) => ({ type: "reference", ref: { ref } })),
+      ),
     )
-    .option(
-      "--skill <ref>",
-      "add catalog, local, or git skill",
-      collectInclude(includes, (ref) => ({ type: "skill", ref: { ref } })),
-      [],
+    .addOption(
+      catalogRefOption(
+        "--skill <ref>",
+        "add catalog, local, or git skill",
+        "skill",
+        collectInclude(includes, (ref) => ({ type: "skill", ref: { ref } })),
+      ),
     )
-    .option(
-      "--skills <ref>",
-      "add catalog, local, or git skill",
-      collectInclude(includes, (ref) => ({ type: "skill", ref: { ref } })),
-      [],
+    .addOption(
+      catalogRefOption(
+        "--skills <ref>",
+        "add catalog, local, or git skill",
+        "skill",
+        collectInclude(includes, (ref) => ({ type: "skill", ref: { ref } })),
+      ),
     )
     .addOption(gitRefreshOption())
     .option("--state-dir <path>", "override the state directory")
@@ -427,7 +409,7 @@ function configureCatalogCommands(root: Command): void {
     .command("show")
     .description("Print a catalog entry file.")
     .addArgument(catalogTypeArgument())
-    .argument("<name>", "catalog name")
+    .addArgument(catalogNameArgument())
     .action(async (type, name) => {
       await run(async () => {
         process.stdout.write((await catalogShow(type, name)).content);
@@ -438,7 +420,7 @@ function configureCatalogCommands(root: Command): void {
     .command("path")
     .description("Print a catalog entry path.")
     .addArgument(catalogTypeArgument())
-    .argument("<name>", "catalog name")
+    .addArgument(catalogNameArgument())
     .action(async (type, name) => {
       await run(async () => {
         process.stdout.write(`${await catalogPath(type, name)}\n`);
@@ -483,197 +465,6 @@ function defaultGitRefresh(): GitRefresh {
   }
   startupError = new AgentPackError(`invalid AGENT_PACK_GIT_REFRESH value: ${value}`);
   return "auto";
-}
-
-type CompletionShell = "bash" | "zsh" | "fish";
-
-function normalizeShell(value: unknown): CompletionShell {
-  if (value === "bash" || value === "zsh" || value === "fish") {
-    return value;
-  }
-  if (value === undefined) {
-    const detected = path.basename(process.env.SHELL ?? "");
-    if (detected === "bash" || detected === "zsh" || detected === "fish") {
-      return detected;
-    }
-    throw new AgentPackError("could not detect shell; pass bash, zsh, or fish");
-  }
-  throw new AgentPackError(`unsupported shell: ${String(value)}; expected bash, zsh, or fish`);
-}
-
-function completionInstructions(shell: CompletionShell): string {
-  const command =
-    shell === "fish"
-      ? "agent-pack completion script fish | source"
-      : `source <(agent-pack completion script ${shell})`;
-  const rcFile =
-    shell === "bash" ? "~/.bashrc" : shell === "zsh" ? "~/.zshrc" : "~/.config/fish/config.fish";
-  return [
-    `Detected shell: ${shell}`,
-    "",
-    "For this shell only:",
-    `  ${command}`,
-    "",
-    `To enable permanently, add this to ${rcFile}:`,
-    `  ${command}`,
-    "",
-  ].join("\n");
-}
-
-function completionScript(shell: CompletionShell): string {
-  switch (shell) {
-    case "bash":
-      return bashCompletionScript();
-    case "zsh":
-      return zshCompletionScript();
-    case "fish":
-      return fishCompletionScript();
-    default:
-      throw new AgentPackError(`unsupported shell: ${shell}`);
-  }
-}
-
-async function completionCandidates(type: string, prefix: string): Promise<string> {
-  if (!isCatalogType(type)) {
-    throw new AgentPackError(`unsupported completion type: ${type}`);
-  }
-  if (isExplicitCompletionPath(prefix)) {
-    return "";
-  }
-  const entries = await catalogList(type);
-  const matches = entries
-    .map((entry) => entry.name)
-    .filter((name) => name.startsWith(prefix))
-    .join("\n");
-  return matches ? `${matches}\n` : "";
-}
-
-function isCatalogType(value: string): value is CatalogType {
-  return catalogTypes.includes(value as CatalogType);
-}
-
-function isExplicitCompletionPath(value: string): boolean {
-  return (
-    value.startsWith("/") ||
-    value.startsWith("./") ||
-    value.startsWith("../") ||
-    value === "~" ||
-    value.startsWith("~/")
-  );
-}
-
-function bashCompletionScript(): string {
-  return `_agent_pack_completion() {
-  local cur prev sub kind
-  COMPREPLY=()
-  cur="\${COMP_WORDS[COMP_CWORD]}"
-  prev="\${COMP_WORDS[COMP_CWORD-1]}"
-
-  case "$prev" in
-    --manifest|--manifests) kind="manifest" ;;
-    --task|--tasks) kind="task" ;;
-    --reference|--references) kind="reference" ;;
-    --skill|--skills) kind="skill" ;;
-    --type)
-      COMPREPLY=( $(compgen -W "manifest task reference skill" -- "$cur") )
-      return 0
-      ;;
-  esac
-
-  if [[ -n "$kind" ]]; then
-    COMPREPLY=( $(compgen -W "$(agent-pack __complete "$kind" "$cur" 2>/dev/null)" -- "$cur") )
-    return 0
-  fi
-
-  sub="\${COMP_WORDS[1]}"
-  if [[ "$sub" == "catalog" && ( "\${COMP_WORDS[2]}" == "show" || "\${COMP_WORDS[2]}" == "path" ) ]]; then
-    if [[ "$COMP_CWORD" -eq 3 ]]; then
-      COMPREPLY=( $(compgen -W "manifest task reference skill" -- "$cur") )
-      return 0
-    fi
-    if [[ "$COMP_CWORD" -eq 4 ]]; then
-      COMPREPLY=( $(compgen -W "$(agent-pack __complete "\${COMP_WORDS[3]}" "$cur" 2>/dev/null)" -- "$cur") )
-      return 0
-    fi
-  fi
-}
-
-complete -o default -o bashdefault -F _agent_pack_completion agent-pack
-`;
-}
-
-function zshCompletionScript(): string {
-  return `#compdef agent-pack
-
-_agent_pack_catalog_names() {
-  local kind="$1"
-  local current="\${words[CURRENT]}"
-  if [[ "$current" == /* || "$current" == ./* || "$current" == ../* || "$current" == "~" || "$current" == "~/"* ]]; then
-    _files
-    return
-  fi
-  local -a names
-  names=("\${(@f)$(agent-pack __complete "$kind" "$current" 2>/dev/null)}")
-  compadd -a names
-}
-
-_agent_pack() {
-  local -a catalog_types
-  catalog_types=(manifest task reference skill)
-
-  case "\${words[CURRENT-1]}" in
-    --manifest|--manifests) _agent_pack_catalog_names manifest; return ;;
-    --task|--tasks) _agent_pack_catalog_names task; return ;;
-    --reference|--references) _agent_pack_catalog_names reference; return ;;
-    --skill|--skills) _agent_pack_catalog_names skill; return ;;
-    --type) _describe 'catalog type' catalog_types; return ;;
-  esac
-
-  if [[ "\${words[2]}" == "catalog" && ( "\${words[3]}" == "show" || "\${words[3]}" == "path" ) ]]; then
-    if (( CURRENT == 4 )); then
-      _describe 'catalog type' catalog_types
-      return
-    fi
-    if (( CURRENT == 5 )); then
-      _agent_pack_catalog_names "\${words[4]}"
-      return
-    fi
-  fi
-
-  _arguments '*: :_files'
-}
-
-compdef _agent_pack agent-pack
-`;
-}
-
-function fishCompletionScript(): string {
-  return `function __agent_pack_catalog_names
-  set -l kind $argv[1]
-  set -l current (commandline -ct)
-  switch $current
-    case '/*' './*' '../*' '~' '~/*'
-      return
-  end
-  agent-pack __complete $kind $current 2>/dev/null
-end
-
-complete -c agent-pack -n '__fish_seen_subcommand_from init; and __fish_prev_arg_in --manifest --manifests' -a '(__agent_pack_catalog_names manifest)'
-complete -c agent-pack -n '__fish_seen_subcommand_from init; and __fish_prev_arg_in --task --tasks' -a '(__agent_pack_catalog_names task)'
-complete -c agent-pack -n '__fish_seen_subcommand_from init; and __fish_prev_arg_in --reference --references' -a '(__agent_pack_catalog_names reference)'
-complete -c agent-pack -n '__fish_seen_subcommand_from init; and __fish_prev_arg_in --skill --skills' -a '(__agent_pack_catalog_names skill)'
-complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from list; and __fish_prev_arg_in --type' -a 'manifest task reference skill'
-complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from show; and not __fish_seen_subcommand_from manifest task reference skill' -a 'manifest task reference skill'
-complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from path; and not __fish_seen_subcommand_from manifest task reference skill' -a 'manifest task reference skill'
-complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from show; and __fish_seen_subcommand_from manifest' -a '(__agent_pack_catalog_names manifest)'
-complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from show; and __fish_seen_subcommand_from task' -a '(__agent_pack_catalog_names task)'
-complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from show; and __fish_seen_subcommand_from reference' -a '(__agent_pack_catalog_names reference)'
-complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from show; and __fish_seen_subcommand_from skill' -a '(__agent_pack_catalog_names skill)'
-complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from path; and __fish_seen_subcommand_from manifest' -a '(__agent_pack_catalog_names manifest)'
-complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from path; and __fish_seen_subcommand_from task' -a '(__agent_pack_catalog_names task)'
-complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from path; and __fish_seen_subcommand_from reference' -a '(__agent_pack_catalog_names reference)'
-complete -c agent-pack -n '__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from path; and __fish_seen_subcommand_from skill' -a '(__agent_pack_catalog_names skill)'
-`;
 }
 
 function renderSystemStatus(result: SystemStatus): string {

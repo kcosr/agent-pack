@@ -37,9 +37,12 @@ export async function resolveCatalogPath(
 export async function listCatalogEntries(
   paths: RuntimePaths,
   type?: CatalogType,
+  options: { createDirs?: boolean } = {},
 ): Promise<CatalogEntry[]> {
   const types: CatalogType[] = type ? [type] : catalogTypes;
-  await Promise.all(types.map((entryType) => ensureDir(catalogRoot(paths, entryType))));
+  if (options.createDirs ?? true) {
+    await Promise.all(types.map((entryType) => ensureDir(catalogRoot(paths, entryType))));
+  }
   const entries = (
     await Promise.all(types.map(async (entryType) => listCatalogType(paths, entryType)))
   ).flat();
@@ -62,17 +65,21 @@ export async function readCatalogEntry(
 }
 
 function assertCatalogName(name: string): void {
-  const segments = name.split("/");
-  if (
-    !name ||
-    name.startsWith("/") ||
-    name.includes("\\") ||
-    segments.some((segment) => !/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(segment))
-  ) {
+  if (!isCatalogName(name)) {
     throw new AgentPackError(
       `invalid catalog ref: ${name}; use names like code-review or review/security, or prefix local paths with ./, ../, ~/, or /`,
     );
   }
+}
+
+export function isCatalogName(name: string): boolean {
+  const segments = name.split("/");
+  return (
+    !!name &&
+    !name.startsWith("/") &&
+    !name.includes("\\") &&
+    segments.every((segment) => /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(segment))
+  );
 }
 
 function catalogNotFoundMessage(type: CatalogType, name: string, candidate: string): string {

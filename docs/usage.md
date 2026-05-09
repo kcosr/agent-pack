@@ -146,7 +146,17 @@ source <(agent-pack completion script zsh)
 agent-pack completion script fish | source
 ```
 
-Run `agent-pack completion` for detected-shell instructions. Completion suggests catalog names for `--manifest`, `--task`, `--reference`, and `--skill`; explicit path prefixes fall back to normal file completion.
+For permanent setup, write the generated script once and source that file from shell startup instead of running `agent-pack` every time a shell starts:
+
+```bash
+mkdir -p ~/.local/share/agent-pack
+agent-pack completion script bash > ~/.local/share/agent-pack/completion.bash
+printf '\nsource ~/.local/share/agent-pack/completion.bash\n' >> ~/.bashrc
+```
+
+For zsh, use `completion.zsh` and `~/.zshrc`. For fish, write to `~/.config/fish/completions/agent-pack.fish`. Regenerate the file after upgrading `agent-pack`.
+
+Run `agent-pack completion` for detected-shell instructions. Completion suggests command names, subcommands, option names, known enum values, shell names for `completion`, and catalog names for catalog-backed refs. When no app-known positional value exists, completion suggests options for the active command.
 
 Git refs use this shape. See the README for the full list of supported URL forms:
 

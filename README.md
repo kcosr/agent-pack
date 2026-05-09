@@ -589,7 +589,32 @@ source <(agent-pack completion script zsh)
 agent-pack completion script fish | source
 ```
 
-Completions suggest catalog names for `--manifest`, `--task`, `--reference`, and `--skill`, plus `catalog show|path` names. When the current word starts with `/`, `./`, `../`, `~`, or `~/`, catalog completion returns no candidates so normal shell file completion can be used.
+For permanent bash setup, generate a static completion file and source it from `~/.bashrc`:
+
+```bash
+mkdir -p ~/.local/share/agent-pack
+agent-pack completion script bash > ~/.local/share/agent-pack/completion.bash
+printf '\nsource ~/.local/share/agent-pack/completion.bash\n' >> ~/.bashrc
+```
+
+For permanent zsh setup:
+
+```bash
+mkdir -p ~/.local/share/agent-pack
+agent-pack completion script zsh > ~/.local/share/agent-pack/completion.zsh
+printf '\nsource ~/.local/share/agent-pack/completion.zsh\n' >> ~/.zshrc
+```
+
+For permanent fish setup:
+
+```fish
+mkdir -p ~/.config/fish/completions
+agent-pack completion script fish > ~/.config/fish/completions/agent-pack.fish
+```
+
+Regenerate the completion file after upgrading `agent-pack`.
+
+Completions suggest command names, subcommands, option names, known enum values such as `--git-refresh auto|always|never` and `catalog list --type manifest|task|reference|skill`, shell names for `completion`, catalog names for `--manifest`, `--task`, `--reference`, and `--skill`, plus `catalog show|path` names. When no app-known positional value exists, completion suggests options for the active command; explicit filesystem path prefixes such as `/`, `./`, `../`, `~`, and `~/` return no catalog candidates.
 
 ## Manifests
 

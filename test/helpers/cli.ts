@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const cliPath = path.join(repoRoot, "dist/cli/agent-pack.js");
+const cliPath = path.join(repoRoot, "dist/cli/main.js");
 
 export interface CliResult {
   stdout: string;

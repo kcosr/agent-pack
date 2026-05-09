@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -25,6 +26,28 @@ describe("agent-pack CLI git smoke", () => {
     expect(result.stdout.trim()).toBe(pkg.version);
   });
 
+  it("runs when invoked through a symlinked bin", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-symlink-bin-smoke-"));
+    const binPath = path.join(workspace, "agent-pack");
+    await symlink(path.resolve("dist/cli/main.js"), binPath);
+    const pkg = JSON.parse(await readFile(path.resolve("package.json"), "utf8"));
+
+    const stdout = execFileSync(binPath, ["--version"], {
+      cwd: workspace,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        AGENT_PACK_CACHE_DIR: path.join(workspace, ".agent-pack/cache"),
+        AGENT_PACK_CONFIG_DIR: undefined,
+        AGENT_PACK_GIT_REFRESH: undefined,
+        AGENT_PACK_ID: undefined,
+        AGENT_PACK_STATE_DIR: undefined,
+      },
+    });
+
+    expect(stdout.trim()).toBe(pkg.version);
+  });
+
   it("uses packaged examples as a catalog root", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-examples-catalog-smoke-"));
     const env = { AGENT_PACK_CONFIG_DIR: path.resolve("examples") };
@@ -34,7 +57,10 @@ describe("agent-pack CLI git smoke", () => {
     expect(list.stdout).toContain("manifest\tdemo\t");
     expect(list.stdout).toContain("manifest\tdocs-review\t");
 
-    const candidates = await runCli(["__complete", "manifest", "do"], { cwd: workspace, env });
+    const candidates = await runCli(["__complete", "do", "init", "--manifest"], {
+      cwd: workspace,
+      env,
+    });
     expect(candidates.stdout).toBe("docs-review\n");
   });
 
@@ -313,46 +339,202 @@ references:
     const configDir = path.join(workspace, "config");
     await mkdir(path.join(configDir, "manifests/review"), { recursive: true });
     await mkdir(path.join(configDir, "tasks/review"), { recursive: true });
+    await mkdir(path.join(configDir, "references/review"), { recursive: true });
+    await mkdir(path.join(configDir, "skills/review/fresh-eyes"), { recursive: true });
     await writeFile(path.join(configDir, "manifests/review/code-review.yaml"), "tasks: []\n");
+    await writeFile(path.join(configDir, "manifests/$(touch owned).yaml"), "tasks: []\n");
     await writeFile(path.join(configDir, "tasks/review/security.yaml"), "title: Security\n");
+    await writeFile(path.join(configDir, "references/review/api.yaml"), "ref: ./docs/api.md\n");
+    await writeFile(
+      path.join(configDir, "skills/review/fresh-eyes/SKILL.md"),
+      "---\ndescription: Review skill\n---\n",
+    );
     const env = { AGENT_PACK_CONFIG_DIR: configDir };
 
     const instructions = await runCli(["completion", "bash"], { cwd: workspace, env });
     expect(instructions.stdout).toContain("For this shell only:");
     expect(instructions.stdout).toContain("source <(agent-pack completion script bash)");
+    expect(instructions.stdout).toContain(
+      "agent-pack completion script bash > ~/.local/share/agent-pack/completion.bash",
+    );
+    expect(instructions.stdout).toContain("source ~/.local/share/agent-pack/completion.bash");
+    expect(instructions.stdout).toContain("Regenerate that file after upgrading agent-pack.");
+
+    const zshInstructions = await runCli(["completion", "zsh"], { cwd: workspace, env });
+    expect(zshInstructions.stdout).toContain(
+      "agent-pack completion script zsh > ~/.local/share/agent-pack/completion.zsh",
+    );
+    expect(zshInstructions.stdout).toContain("source ~/.local/share/agent-pack/completion.zsh");
+
+    const fishInstructions = await runCli(["completion", "fish"], { cwd: workspace, env });
+    expect(fishInstructions.stdout).toContain(
+      "agent-pack completion script fish > ~/.config/fish/completions/agent-pack.fish",
+    );
 
     const script = await runCli(["completion", "script", "bash"], { cwd: workspace, env });
-    expect(script.stdout).toContain("complete -o default -o bashdefault -F");
-    expect(script.stdout).toContain("agent-pack __complete");
-    expect(script.stdout).toContain("--type)");
+    expect(script.stdout).toContain("complete -F _agent_pack_completion agent-pack");
+    expect(script.stdout).toContain('agent-pack __complete -- "$cur"');
 
     const zshScript = await runCli(["completion", "script", "zsh"], { cwd: workspace, env });
     expect(zshScript.stdout).toContain("compdef _agent_pack agent-pack");
-    expect(zshScript.stdout).toContain("--type) _describe 'catalog type' catalog_types");
+    expect(zshScript.stdout).toContain('agent-pack __complete -- "$current"');
 
     const fishScript = await runCli(["completion", "script", "fish"], { cwd: workspace, env });
-    expect(fishScript.stdout).toContain("__fish_prev_arg_in --type");
-    expect(fishScript.stdout).toContain(
-      "__fish_seen_subcommand_from catalog; and __fish_seen_subcommand_from show; and __fish_seen_subcommand_from manifest",
-    );
+    expect(fishScript.stdout).toContain("function __agent_pack_complete");
+    expect(fishScript.stdout).toContain('agent-pack __complete -- "$current"');
+    expect(fishScript.stdout).toContain("complete -c agent-pack -f");
 
-    const manifestCandidates = await runCli(["__complete", "manifest", "review/"], {
+    const topLevelCandidates = await runCli(["__complete", ""], { cwd: workspace, env });
+    expect(topLevelCandidates.stdout).toContain("init\n");
+    expect(topLevelCandidates.stdout).toContain("task\n");
+
+    const taskSubcommandCandidates = await runCli(["__complete", "d", "task"], {
+      cwd: workspace,
+      env,
+    });
+    expect(taskSubcommandCandidates.stdout).toBe("done\n");
+
+    const initOptionCandidates = await runCli(["__complete", "--", "--mani", "init"], {
+      cwd: workspace,
+      env,
+    });
+    expect(initOptionCandidates.stdout).toBe("--manifest\n--manifests\n");
+
+    const briefOptionCandidates = await runCli(["__complete", "", "brief"], {
+      cwd: workspace,
+      env,
+    });
+    expect(briefOptionCandidates.stdout).toBe("--id\n");
+
+    const taskOptionCandidates = await runCli(["__complete", "--", "--", "task", "done"], {
+      cwd: workspace,
+      env,
+    });
+    expect(taskOptionCandidates.stdout).toContain("--id\n");
+    expect(taskOptionCandidates.stdout).toContain("--note\n");
+
+    const taskOptionCandidatesWithoutDash = await runCli(["__complete", "", "task", "done"], {
+      cwd: workspace,
+      env,
+    });
+    expect(taskOptionCandidatesWithoutDash.stdout).toContain("--id\n");
+    expect(taskOptionCandidatesWithoutDash.stdout).toContain("--note\n");
+
+    const gitRefreshCandidates = await runCli(["__complete", "au", "sync", "--git-refresh"], {
+      cwd: workspace,
+      env,
+    });
+    expect(gitRefreshCandidates.stdout).toBe("auto\n");
+
+    const gitRefreshEqualsCandidates = await runCli(
+      ["__complete", "--", "--git-refresh=au", "sync"],
+      {
+        cwd: workspace,
+        env,
+      },
+    );
+    expect(gitRefreshEqualsCandidates.stdout).toBe("--git-refresh=auto\n");
+
+    const catalogTypeCandidates = await runCli(["__complete", "m", "catalog", "list", "--type"], {
+      cwd: workspace,
+      env,
+    });
+    expect(catalogTypeCandidates.stdout).toBe("manifest\n");
+
+    const catalogSubcommandCandidates = await runCli(["__complete", "p", "catalog"], {
+      cwd: workspace,
+      env,
+    });
+    expect(catalogSubcommandCandidates.stdout).toBe("path\n");
+
+    const shellCandidates = await runCli(["__complete", "b", "completion", "script"], {
+      cwd: workspace,
+      env,
+    });
+    expect(shellCandidates.stdout).toBe("bash\n");
+
+    const manifestCandidates = await runCli(["__complete", "review/", "init", "--manifest"], {
       cwd: workspace,
       env,
     });
     expect(manifestCandidates.stdout).toBe("review/code-review\n");
 
-    const taskCandidates = await runCli(["__complete", "task", "review/s"], {
+    const allManifestCandidates = await runCli(["__complete", "", "init", "--manifest"], {
+      cwd: workspace,
+      env,
+    });
+    expect(allManifestCandidates.stdout).toContain("review/code-review\n");
+    expect(allManifestCandidates.stdout).not.toContain("$(touch owned)");
+
+    const taskCandidates = await runCli(["__complete", "review/s", "init", "--task"], {
       cwd: workspace,
       env,
     });
     expect(taskCandidates.stdout).toBe("review/security\n");
 
-    const pathCandidates = await runCli(["__complete", "task", "./tasks"], {
+    const referenceCandidates = await runCli(["__complete", "review/a", "init", "--reference"], {
+      cwd: workspace,
+      env,
+    });
+    expect(referenceCandidates.stdout).toBe("review/api\n");
+
+    const skillCandidates = await runCli(["__complete", "review/f", "init", "--skill"], {
+      cwd: workspace,
+      env,
+    });
+    expect(skillCandidates.stdout).toBe("review/fresh-eyes\n");
+
+    const repeatedOptionCandidates = await runCli(
+      ["__complete", "review/", "init", "--manifest", "review/code-review", "--manifest"],
+      {
+        cwd: workspace,
+        env,
+      },
+    );
+    expect(repeatedOptionCandidates.stdout).toBe("review/code-review\n");
+
+    const catalogNameCandidates = await runCli(
+      ["__complete", "review/", "catalog", "show", "manifest"],
+      {
+        cwd: workspace,
+        env,
+      },
+    );
+    expect(catalogNameCandidates.stdout).toBe("review/code-review\n");
+
+    const pathCandidates = await runCli(["__complete", "./tasks", "init", "--task"], {
       cwd: workspace,
       env,
     });
     expect(pathCandidates.stdout).toBe("");
+
+    const absolutePathCandidates = await runCli(["__complete", "/tmp/tasks", "init", "--task"], {
+      cwd: workspace,
+      env,
+    });
+    expect(absolutePathCandidates.stdout).toBe("");
+
+    const homePathCandidates = await runCli(["__complete", "~", "init", "--task"], {
+      cwd: workspace,
+      env,
+    });
+    expect(homePathCandidates.stdout).toBe("");
+
+    const homeSlashPathCandidates = await runCli(["__complete", "~/tasks", "init", "--task"], {
+      cwd: workspace,
+      env,
+    });
+    expect(homeSlashPathCandidates.stdout).toBe("");
+
+    const emptyWorkspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-empty-completion-"));
+    const missingConfigDir = path.join(emptyWorkspace, "missing-config");
+    const missingConfigEnv = { AGENT_PACK_CONFIG_DIR: missingConfigDir };
+    const missingCatalogCandidates = await runCli(["__complete", "", "init", "--manifest"], {
+      cwd: emptyWorkspace,
+      env: missingConfigEnv,
+    });
+    expect(missingCatalogCandidates.stdout).toBe("");
+    expect(existsSync(path.join(missingConfigDir, "manifests"))).toBe(false);
   });
 
   it("clones git sources, materializes snapshots, syncs missing cache, and renders brief", async () => {
