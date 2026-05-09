@@ -26,6 +26,28 @@ describe("agent-pack CLI git smoke", () => {
     expect(result.stdout.trim()).toBe(pkg.version);
   });
 
+  it("runs when invoked through a symlinked bin", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-symlink-bin-smoke-"));
+    const binPath = path.join(workspace, "agent-pack");
+    await symlink(path.resolve("dist/cli/main.js"), binPath);
+    const pkg = JSON.parse(await readFile(path.resolve("package.json"), "utf8"));
+
+    const stdout = execFileSync(binPath, ["--version"], {
+      cwd: workspace,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        AGENT_PACK_CACHE_DIR: path.join(workspace, ".agent-pack/cache"),
+        AGENT_PACK_CONFIG_DIR: undefined,
+        AGENT_PACK_GIT_REFRESH: undefined,
+        AGENT_PACK_ID: undefined,
+        AGENT_PACK_STATE_DIR: undefined,
+      },
+    });
+
+    expect(stdout.trim()).toBe(pkg.version);
+  });
+
   it("uses packaged examples as a catalog root", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-examples-catalog-smoke-"));
     const env = { AGENT_PACK_CONFIG_DIR: path.resolve("examples") };

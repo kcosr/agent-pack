@@ -1,7 +1,6 @@
-#!/usr/bin/env node
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { Argument, Command, Option } from "commander";
 import { renderReport, renderSummary, renderTask } from "../core/brief/render.js";
 import { catalogTypes } from "../core/catalog.js";
@@ -38,19 +37,6 @@ import {
 } from "./completion.js";
 
 let startupError: AgentPackError | undefined;
-
-if (isCliEntrypoint()) {
-  const program = configureProgram();
-
-  program.parseAsync(process.argv).catch((error) => {
-    if (error instanceof AgentPackError) {
-      console.error(`agent-pack: ${error.message}`);
-      process.exitCode = 1;
-      return;
-    }
-    throw error;
-  });
-}
 
 export function configureProgram(): Command {
   const root = new Command();
@@ -479,11 +465,6 @@ function defaultGitRefresh(): GitRefresh {
   }
   startupError = new AgentPackError(`invalid AGENT_PACK_GIT_REFRESH value: ${value}`);
   return "auto";
-}
-
-function isCliEntrypoint(): boolean {
-  const entrypoint = process.argv[1];
-  return entrypoint ? import.meta.url === pathToFileURL(entrypoint).href : false;
 }
 
 function renderSystemStatus(result: SystemStatus): string {

@@ -130,9 +130,9 @@ Compatibility and migration:
 
 | Name | Disposition | Layers | Symmetric peers | Removal twin |
 |---|---|---|---|---|
-| `agent-pack completion script bash` | Changed | Bash script generator in `src/cli/agent-pack.ts`; hidden helper; smoke tests; docs. | zsh and fish script generators. | None. |
-| `agent-pack completion script zsh` | Changed | Zsh script generator in `src/cli/agent-pack.ts`; hidden helper; smoke tests; docs. | bash and fish script generators. | None. |
-| `agent-pack completion script fish` | Changed | Fish script generator in `src/cli/agent-pack.ts`; hidden helper; smoke tests; docs. | bash and zsh script generators. | None. |
+| `agent-pack completion script bash` | Changed | Bash script generator in `src/cli/completion.ts`; hidden helper; smoke tests; docs. | zsh and fish script generators. | None. |
+| `agent-pack completion script zsh` | Changed | Zsh script generator in `src/cli/completion.ts`; hidden helper; smoke tests; docs. | bash and fish script generators. | None. |
+| `agent-pack completion script fish` | Changed | Fish script generator in `src/cli/completion.ts`; hidden helper; smoke tests; docs. | bash and zsh script generators. | None. |
 | `__complete` | Changed internally | Hidden Commander command; completion candidate dispatcher; smoke tests. | Generated shell scripts. | Old catalog-only helper shape. |
 | Top-level command candidates | Added | Commander `Command.commands`; helper context parser; generated shell scripts; tests. | Commander top-level command definitions. | None. |
 | `task` subcommand candidates | Added | Commander `Command.commands`; helper context parser; generated shell scripts; tests. | `configureTaskCommands`. | None. |
@@ -152,11 +152,13 @@ _No schema changes._
 
 | File | Responsibility | Existing tests |
 |---|---|---|
-| `src/cli/agent-pack.ts` | Registers all commands and options, defines shell completion setup, owns `__complete`, `completionCandidates`, `isExplicitCompletionPath`, and generated bash/zsh/fish scripts. Top-level command registration lives in `configureProgram`; completion command wiring lives in `configureCompletionCommands`; completion resolution and shell script generation live in the completion helper section below the command definitions. | `test/smoke/cli-git-smoke.test.ts` covers CLI completion setup and catalog candidates. |
+| `src/cli/main.ts` | Thin executable bin wrapper that imports `configureProgram()` and calls `parseAsync(process.argv)`. | Smoke tests cover direct CLI invocation and symlinked bin invocation. |
+| `src/cli/agent-pack.ts` | Side-effect-free CLI module that registers all commands and options through `configureProgram` and exposes Commander metadata through helper constructors. | Unit tests import `configureProgram()` without parsing process arguments; smoke tests cover command behavior through the bin wrapper. |
+| `src/cli/completion.ts` | Defines shell completion setup, owns `__complete`, `completionCandidates`, `isExplicitCompletionPath`, the Commander-derived resolver, custom completion metadata, hidden-command tracking, and generated bash/zsh/fish scripts. | Smoke and unit tests cover completion setup, command/subcommand candidates, option candidates, enum values, catalog values, explicit path-prefix suppression, and metadata drift guards. |
 | `node_modules/commander/typings/index.d.ts` | Confirms Commander exposes the structured metadata needed for derived completion: `Command.commands`, `Command.options`, `Command.registeredArguments`, `Option.argChoices`, and `Argument.argChoices`. | Dependency type surface used by TypeScript. |
 | `src/core/catalog.ts` | Exports `catalogTypes`, validates catalog-name shape, and lists catalog entries used by completion. Completion should use read-only listing so TAB does not create catalog directories. | Smoke tests cover catalog listing and existing catalog completion. |
 | `src/core/types.ts` | Defines `GitRefresh` as `auto | always | never`, matching `--git-refresh` completion values. | Typecheck covers the union; smoke tests exercise CLI values. |
-| `test/smoke/cli-git-smoke.test.ts` | End-to-end CLI tests through the built `dist/cli/agent-pack.js`; current completion coverage is at lines 311-356. | Existing completion smoke test asserts generated scripts, catalog candidates, and explicit path-prefix suppression. |
+| `test/smoke/cli-git-smoke.test.ts` | End-to-end CLI tests through the built `dist/cli/main.js`, plus a symlinked-bin invocation check for installed CLI behavior. | Completion smoke tests assert generated scripts, command/subcommand candidates, option candidates, enum values, catalog candidates, explicit path-prefix suppression, and read-only catalog listing. |
 | `test/helpers/cli.ts` | Runs the built CLI in isolated test environments with agent-pack env vars reset. | Used by all smoke tests. |
 | `README.md` | Full command reference and completion behavior docs. Completion section currently documents catalog-name completion only at lines 573-592. | Documentation is not currently test-enforced. |
 | `docs/usage.md` | Compact installed usage reference. Completion docs currently mention catalog names and explicit path-prefix behavior at lines 141-149. | Documentation is not currently test-enforced. |
