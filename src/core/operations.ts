@@ -2,6 +2,9 @@ import { randomBytes } from "node:crypto";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import fg from "fast-glob";
+import { loadAgents } from "./agents/load.js";
+import type { AgentInput } from "./agents/load.js";
+import { runAgentProcess } from "./agents/run.js";
 import { renderBrief, renderSummary } from "./brief/render.js";
 import { listCatalogEntries, readCatalogEntry, resolveCatalogPath } from "./catalog.js";
 import { AgentPackError } from "./errors.js";
@@ -45,6 +48,9 @@ import type {
   InitInput,
   ManifestReference,
   ManifestSkill,
+  PackAgent,
+  PackAgentRun,
+  PackAgentRunStatus,
   PackContract,
   PackInputValue,
   PackManifest,
@@ -62,6 +68,7 @@ export async function initPack(input: InitInput): Promise<PackState> {
   const store = new StateStore({ stateDir: input.stateDir });
   const paths = store.paths;
   const taskInputs: TaskInput[] = [];
+  const agentInputs: AgentInput[] = [];
   const referenceRefs: ManifestReference[] = [];
   const skillRefs: ManifestSkill[] = [];
   const inputSchemas: Array<PackManifest["inputs"]> = [];
@@ -83,6 +90,7 @@ export async function initPack(input: InitInput): Promise<PackState> {
         }
         inputSchemas.push(manifest.inputs);
         taskInputs.push(...manifestTaskInputs(manifest, manifestSource));
+        agentInputs.push(...manifestAgentInputs(manifest, manifestSource));
         referenceRefs.push(...manifestReferenceRefs(manifest));
         skillRefs.push(...manifestSkillRefs(manifest));
         contract = mergeContract(contract, manifest.contract);
@@ -101,16 +109,20 @@ export async function initPack(input: InitInput): Promise<PackState> {
       case "skill":
         skillRefs.push(include.ref);
         break;
+      case "agentRef":
+        agentInputs.push(include);
+        break;
       default:
         assertNever(include);
     }
   }
 
-  const packId = await resolveInitPackId(store, input.id, name);
+  const packId = await resolveInitPackId(store, input.createId, name);
   const resolvedInputs = resolveInitInputs(inputSchemas, input.inputAssignments);
   const tasks = await loadTasks(taskInputs, paths, input.gitRefresh);
   const references = await resolveReferences(referenceRefs, paths, input.gitRefresh);
   const skills = await resolveSkills(skillRefs, paths, input.gitRefresh);
+  const agents = await loadAgents(agentInputs, paths, input.gitRefresh);
   const now = new Date().toISOString();
   initializeTaskActivation(tasks, resolvedInputs.inputSchema, resolvedInputs.inputs, now);
   const pack: PackState = {
@@ -132,6 +144,7 @@ export async function initPack(input: InitInput): Promise<PackState> {
     tasks,
     references,
     skills,
+    agents: agents.length ? agents : undefined,
     contract,
   };
   await store.createPack(pack);
@@ -156,8 +169,8 @@ async function resolveInitPackId(
   explicitId: string | undefined,
   name: string | undefined,
 ): Promise<string> {
-  if (explicitId || process.env.AGENT_PACK_ID) {
-    return assertValidPackId(explicitId ?? process.env.AGENT_PACK_ID);
+  if (explicitId || process.env.AGENT_PACK_CREATE_ID) {
+    return assertValidPackId(explicitId ?? process.env.AGENT_PACK_CREATE_ID);
   }
   return generatePackId(store, slug(name ?? "pack"));
 }
@@ -186,6 +199,14 @@ function manifestTaskInputs(manifest: PackManifest, source: SourceInfo): TaskInp
     typeof task === "string"
       ? { type: "taskRef" as const, ref: task }
       : { type: "manifestTask" as const, task, source },
+  );
+}
+
+function manifestAgentInputs(manifest: PackManifest, source: SourceInfo): AgentInput[] {
+  return (manifest.agents ?? []).map((agent) =>
+    typeof agent === "string"
+      ? { type: "agentRef" as const, ref: agent }
+      : { type: "manifestAgent" as const, agent, source },
   );
 }
 
@@ -403,6 +424,12 @@ export async function inputValueCompletionCandidates(name: string, id?: string):
   return inputValueCandidates(await store.loadPack(id), name);
 }
 
+export async function agentNameCandidates(id?: string): Promise<string[]> {
+  const store = new StateStore();
+  const pack = await store.loadPack(id);
+  return (pack.agents ?? []).map((agent) => agent.name);
+}
+
 export interface AddTaskInput {
   packId?: string;
   title: string;
@@ -608,6 +635,7 @@ export function status(): SystemStatus {
   return {
     ...store.paths,
     defaultPackId: process.env.AGENT_PACK_ID,
+    defaultCreateId: process.env.AGENT_PACK_CREATE_ID,
   };
 }
 
@@ -619,6 +647,64 @@ export async function listPacks(): Promise<PackState[]> {
 export async function report(id?: string): Promise<PackState> {
   const store = new StateStore();
   return store.loadPack(id);
+}
+
+export interface RunPackInput {
+  packId?: string;
+  init?: InitInput;
+  runAgent?: string;
+  stateDir?: string;
+}
+
+export interface RunPackResult {
+  pack: PackState;
+  run: PackAgentRun;
+  exitCode: number;
+}
+
+export async function runPack(input: RunPackInput): Promise<RunPackResult> {
+  const pack = input.init
+    ? await initPack(input.init)
+    : await new StateStore({ stateDir: input.stateDir }).loadPack(input.packId);
+  const store = new StateStore({ stateDir: input.init?.stateDir ?? input.stateDir });
+  await validateCachePaths(pack, store.paths);
+  const agent = selectAgent(pack, input.runAgent);
+  const runId = nextAgentRunId(pack.agentRuns ?? []);
+  const startedAt = new Date().toISOString();
+  const result = await runAgentProcess({
+    agent,
+    packId: pack.id,
+    stateDir: store.paths.stateDir,
+  });
+  const endedAt = new Date().toISOString();
+  const run: PackAgentRun = {
+    id: runId,
+    agent: agent.name,
+    status: agentRunStatus(result),
+    startedAt,
+    endedAt,
+    exitCode: result.exitCode,
+    signal: result.signal,
+    timedOut: result.timedOut,
+    stdout: result.stdout,
+    stdoutTruncated: result.stdoutTruncated,
+  };
+  const updated = await store.updatePack(
+    pack.id,
+    (pack) => {
+      pack.agentRuns = [...(pack.agentRuns ?? []), run];
+    },
+    "agent.run",
+    {
+      runId,
+      agent: agent.name,
+      status: run.status,
+      exitCode: run.exitCode,
+      signal: run.signal,
+      timedOut: run.timedOut,
+    },
+  );
+  return { pack: updated, run, exitCode: run.status === "completed" ? 0 : 1 };
 }
 
 export async function validateCachePaths(pack: PackState, paths: RuntimePaths): Promise<void> {
@@ -761,6 +847,39 @@ function getTask(pack: PackState, taskId: string): PackTask {
   return task;
 }
 
+function selectAgent(pack: PackState, name: string | undefined): PackAgent {
+  const agents = pack.agents ?? [];
+  if (name) {
+    const agent = agents.find((entry) => entry.name === name);
+    if (!agent) {
+      throw new AgentPackError(`agent not found in pack ${pack.id}: ${name}`);
+    }
+    return agent;
+  }
+  if (agents.length === 0) {
+    throw new AgentPackError(`no agents available for pack ${pack.id}`);
+  }
+  if (agents.length > 1) {
+    throw new AgentPackError(
+      `--run-agent is required; available agents: ${agents.map((agent) => agent.name).join(", ")}`,
+    );
+  }
+  return agents[0];
+}
+
+function agentRunStatus(result: Awaited<ReturnType<typeof runAgentProcess>>): PackAgentRunStatus {
+  if (result.timedOut) {
+    return "timed_out";
+  }
+  if (result.signal) {
+    return "signaled";
+  }
+  if (result.exitCode === 0) {
+    return "completed";
+  }
+  return "failed";
+}
+
 function assertTaskActive(task: PackTask): void {
   if (task.activation === "locked") {
     throw new AgentPackError(`task is locked: ${task.id}`);
@@ -815,6 +934,15 @@ function nextSkillId(skills: PackSkill[]): number {
 
 function formatSkillId(value: number): string {
   return `s${String(value).padStart(3, "0")}`;
+}
+
+function nextAgentRunId(runs: PackAgentRun[]): string {
+  return `a${String(
+    nextEntityNumber(
+      runs.map((run) => run.id),
+      "a",
+    ),
+  ).padStart(3, "0")}`;
 }
 
 function nextEntityNumber(ids: string[], prefix: string): number {
@@ -893,6 +1021,7 @@ function gitSources(pack: PackState) {
   const sources = [
     ...pack.references.map((reference) => reference.source),
     ...pack.skills.map((skill) => skill.source),
+    ...(pack.agents ?? []).flatMap((agent) => (agent.source ? [agent.source] : [])),
     ...pack.tasks.flatMap((task) => (task.source ? [task.source] : [])),
   ];
   return sources.filter((source) => source.kind === "git");

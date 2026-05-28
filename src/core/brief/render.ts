@@ -1,5 +1,5 @@
 import { activeTasks } from "../inputs.js";
-import type { PackInputDef, PackInputValue, PackState, PackTask } from "../types.js";
+import type { PackAgentRun, PackInputDef, PackInputValue, PackState, PackTask } from "../types.js";
 
 export interface BriefRenderOptions {
   includeTaskContent?: boolean;
@@ -206,6 +206,16 @@ export function renderSummary(pack: PackState): string {
 
 export function renderReport(pack: PackState): string {
   const lines = [renderSummary(pack).trimEnd()];
+  if (pack.agentRuns?.length) {
+    lines.push("", "Agent Runs:");
+    pack.agentRuns.forEach((run, index) => {
+      if (index > 0) {
+        lines.push("");
+      }
+      lines.push(formatAgentRunReportEntry(run));
+    });
+  }
+
   lines.push("", "Tasks:");
   if (pack.tasks.length === 0) {
     lines.push("- No tasks in this pack.");
@@ -262,6 +272,35 @@ export function renderReport(pack: PackState): string {
   }
 
   return `${lines.join("\n")}\n`;
+}
+
+function formatAgentRunReportEntry(run: PackAgentRun): string {
+  const lines = [`- ${run.id} [${run.status}] ${run.agent}`, `  Started: ${run.startedAt}`];
+  if (run.endedAt) {
+    lines.push(`  Ended: ${run.endedAt}`);
+  }
+  if (typeof run.exitCode === "number") {
+    lines.push(`  Exit code: ${run.exitCode}`);
+  }
+  if (run.signal) {
+    lines.push(`  Signal: ${run.signal}`);
+  }
+  if (run.timedOut) {
+    lines.push("  Timed out: yes");
+  }
+  lines.push("");
+  if (!run.stdout) {
+    lines.push("  Output: none");
+  } else {
+    lines.push("  Output:");
+    for (const line of run.stdout.replace(/\n$/, "").split("\n")) {
+      lines.push(`    ${line}`);
+    }
+  }
+  if (run.stdoutTruncated) {
+    lines.push("  Output truncated: yes");
+  }
+  return lines.join("\n");
 }
 
 export function renderTask(task: PackTask): string {

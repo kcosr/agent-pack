@@ -16,6 +16,7 @@ import {
   listInputs,
   listPacks,
   listTasks,
+  runPack,
   setInput,
   status,
   summaryPack,
@@ -36,6 +37,7 @@ describe("pack workflow", () => {
     vi.stubEnv("AGENT_PACK_BRIEF_TASK_CONTENT", undefined);
     vi.stubEnv("AGENT_PACK_CONFIG_DIR", undefined);
     vi.stubEnv("AGENT_PACK_ID", undefined);
+    vi.stubEnv("AGENT_PACK_CREATE_ID", undefined);
     vi.stubEnv("AGENT_PACK_CACHE_DIR", path.join(cwd, ".agent-pack/cache"));
     vi.stubEnv("AGENT_PACK_STATE_DIR", undefined);
   });
@@ -76,7 +78,7 @@ contract:
     );
 
     const pack = await initPack({
-      id: "design-review",
+      createId: "design-review",
       includes: [{ type: "manifest", ref: "./pack.yaml" }],
       prompt: "Focus on concrete findings.",
       gitRefresh: "auto",
@@ -129,8 +131,8 @@ tasks:
     expect(first.name).toBe("code-review");
   });
 
-  it("uses AGENT_PACK_ID for init when --id is omitted", async () => {
-    vi.stubEnv("AGENT_PACK_ID", "env-review");
+  it("uses AGENT_PACK_CREATE_ID for init when --create-id is omitted", async () => {
+    vi.stubEnv("AGENT_PACK_CREATE_ID", "env-review");
 
     const pack = await initPack({
       includes: [{ type: "adHocTask", text: "Inspect env-selected pack." }],
@@ -138,6 +140,289 @@ tasks:
     });
 
     expect(pack.id).toBe("env-review");
+  });
+
+  it("ignores AGENT_PACK_ID when creating packs", async () => {
+    vi.stubEnv("AGENT_PACK_ID", "env-review");
+
+    const pack = await initPack({
+      includes: [{ type: "adHocTask", text: "Inspect env-selected pack." }],
+      gitRefresh: "auto",
+    });
+
+    expect(pack.id).toMatch(/^pack-[a-f0-9]{6}$/);
+  });
+
+  it("stores manifest-provided agents", async () => {
+    await writeFile(
+      "pack.yaml",
+      `schemaVersion: 1
+agents:
+  - name: claude
+    command: claude
+    args: ["--print", "{prompt}"]
+`,
+    );
+
+    const pack = await initPack({
+      createId: "agent-pack",
+      includes: [{ type: "manifest", ref: "./pack.yaml" }],
+      gitRefresh: "auto",
+    });
+
+    expect(pack.agents).toEqual([
+      {
+        name: "claude",
+        command: "claude",
+        args: ["--print", "{prompt}"],
+        timeoutSec: undefined,
+        source: { kind: "file", path: "./pack.yaml" },
+      },
+    ]);
+  });
+
+  it("loads catalog and local agent refs", async () => {
+    const configDir = path.join(cwd, "config");
+    vi.stubEnv("AGENT_PACK_CONFIG_DIR", configDir);
+    await mkdir(path.join(configDir, "agents"), { recursive: true });
+    await writeFile(path.join(configDir, "agents", "catalog-agent.yaml"), "command: node\n");
+    await writeFile("local-agent.yaml", "name: local-agent\ncommand: node\n");
+
+    const pack = await initPack({
+      createId: "agent-refs",
+      includes: [
+        { type: "agentRef", ref: "catalog-agent" },
+        { type: "agentRef", ref: "./local-agent.yaml" },
+      ],
+      gitRefresh: "auto",
+    });
+
+    expect(pack.agents?.map((agent) => [agent.name, agent.command])).toEqual([
+      ["catalog-agent", "node"],
+      ["local-agent", "node"],
+    ]);
+  });
+
+  it("rejects duplicate agent names", async () => {
+    await writeFile("first.yaml", "name: claude\ncommand: claude\n");
+    await writeFile("second.yaml", "name: claude\ncommand: claude\n");
+
+    await expect(
+      initPack({
+        createId: "duplicate-agents",
+        includes: [
+          { type: "agentRef", ref: "./first.yaml" },
+          { type: "agentRef", ref: "./second.yaml" },
+        ],
+        gitRefresh: "auto",
+      }),
+    ).rejects.toThrow('duplicate agent name "claude"');
+  });
+
+  it("runs the only configured agent and records stdout", async () => {
+    await writeFile(
+      "agent.yaml",
+      `name: echo-agent
+command: ${JSON.stringify(process.execPath)}
+args:
+  - -e
+  - "process.stdout.write(process.argv[1])"
+  - "{prompt}"
+`,
+    );
+    const pack = await initPack({
+      createId: "run-one-agent",
+      includes: [
+        {
+          type: "agentRef",
+          ref: "./agent.yaml",
+        },
+      ],
+      gitRefresh: "auto",
+    });
+
+    expect(pack.id).toBe("run-one-agent");
+    const result = await runPack({ packId: "run-one-agent" });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.run).toMatchObject({
+      id: "a001",
+      agent: "echo-agent",
+      status: "completed",
+      exitCode: 0,
+      timedOut: false,
+      stdoutTruncated: false,
+    });
+    expect(result.run.stdout).toContain("Run agent-pack brief --id run-one-agent");
+    expect(result.pack.agentRuns).toHaveLength(1);
+    const events = await readEvents("run-one-agent");
+    expect(events.at(-1)).toMatchObject({
+      type: "agent.run",
+      data: { runId: "a001", agent: "echo-agent", status: "completed", exitCode: 0 },
+    });
+  });
+
+  it("requires --run-agent when a pack has multiple agents", async () => {
+    await writeFile("first.yaml", "name: first\ncommand: node\n");
+    await writeFile("second.yaml", "name: second\ncommand: node\n");
+    await initPack({
+      createId: "multi-agent",
+      includes: [
+        { type: "agentRef", ref: "./first.yaml" },
+        { type: "agentRef", ref: "./second.yaml" },
+      ],
+      gitRefresh: "auto",
+    });
+
+    await expect(runPack({ packId: "multi-agent" })).rejects.toThrow(
+      "--run-agent is required; available agents: first, second",
+    );
+  });
+
+  it("records failed agent exits", async () => {
+    await writeFile(
+      "agent.yaml",
+      `name: fail-agent
+command: ${JSON.stringify(process.execPath)}
+args:
+  - -e
+  - "process.stdout.write('failed output'); process.exit(7)"
+`,
+    );
+    await initPack({
+      createId: "fail-agent-pack",
+      includes: [{ type: "agentRef", ref: "./agent.yaml" }],
+      gitRefresh: "auto",
+    });
+
+    const result = await runPack({ packId: "fail-agent-pack" });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.run).toMatchObject({
+      status: "failed",
+      exitCode: 7,
+      stdout: "failed output",
+      stdoutTruncated: false,
+    });
+    expect(result.pack.agentRuns?.[0]).toMatchObject({ status: "failed", exitCode: 7 });
+  });
+
+  it("records failed agent spawns", async () => {
+    await writeFile(
+      "agent.yaml",
+      `name: missing-agent
+command: definitely-not-an-agent-pack-test-command
+`,
+    );
+    await initPack({
+      createId: "spawn-failure-pack",
+      includes: [{ type: "agentRef", ref: "./agent.yaml" }],
+      gitRefresh: "auto",
+    });
+
+    const result = await runPack({ packId: "spawn-failure-pack" });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.run).toMatchObject({
+      status: "failed",
+      exitCode: null,
+      signal: null,
+      stdout: "",
+      stdoutTruncated: false,
+    });
+    expect(result.pack.agentRuns?.[0]).toMatchObject({ status: "failed" });
+  });
+
+  it("records agent signal termination", async () => {
+    await writeFile(
+      "agent.yaml",
+      nodeAgentYaml("signal-agent", "process.kill(process.pid, 'SIGTERM')"),
+    );
+    await initPack({
+      createId: "signal-agent-pack",
+      includes: [{ type: "agentRef", ref: "./agent.yaml" }],
+      gitRefresh: "auto",
+    });
+
+    const result = await runPack({ packId: "signal-agent-pack" });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.run).toMatchObject({
+      status: "signaled",
+      exitCode: null,
+      signal: "SIGTERM",
+      timedOut: false,
+    });
+  });
+
+  it("records timed out agents and kills agents that ignore SIGINT", async () => {
+    await writeFile(
+      "agent.yaml",
+      nodeAgentYaml(
+        "timeout-agent",
+        "process.on('SIGINT', () => {}); setInterval(() => {}, 1000)",
+        "timeoutSec: 1",
+      ),
+    );
+    await initPack({
+      createId: "timeout-agent-pack",
+      includes: [{ type: "agentRef", ref: "./agent.yaml" }],
+      gitRefresh: "auto",
+    });
+
+    const result = await runPack({ packId: "timeout-agent-pack" });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.run).toMatchObject({
+      status: "timed_out",
+      exitCode: null,
+      signal: "SIGKILL",
+      timedOut: true,
+    });
+  }, 10_000);
+
+  it("does not apply a default timeout when timeoutSec is omitted", async () => {
+    await writeFile(
+      "agent.yaml",
+      nodeAgentYaml("slow-agent", "setTimeout(() => process.stdout.write('done'), 150)"),
+    );
+    await initPack({
+      createId: "no-timeout-agent-pack",
+      includes: [{ type: "agentRef", ref: "./agent.yaml" }],
+      gitRefresh: "auto",
+    });
+
+    const result = await runPack({ packId: "no-timeout-agent-pack" });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.run).toMatchObject({
+      status: "completed",
+      exitCode: 0,
+      timedOut: false,
+      stdout: "done",
+    });
+  });
+
+  it("caps captured stdout and marks truncated output", async () => {
+    await writeFile(
+      "agent.yaml",
+      nodeAgentYaml("verbose-agent", "process.stdout.write('x'.repeat(70 * 1024))"),
+    );
+    await initPack({
+      createId: "verbose-agent-pack",
+      includes: [{ type: "agentRef", ref: "./agent.yaml" }],
+      gitRefresh: "auto",
+    });
+
+    const result = await runPack({ packId: "verbose-agent-pack" });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.run).toMatchObject({
+      status: "completed",
+      exitCode: 0,
+      stdoutTruncated: true,
+    });
+    expect(Buffer.byteLength(result.run.stdout, "utf8")).toBe(64 * 1024);
   });
 
   it("captures inputs, hides locked tasks, and unlocks them when inputs change", async () => {
@@ -177,7 +462,7 @@ tasks:
     );
 
     const pack = await initPack({
-      id: "input-review",
+      createId: "input-review",
       includes: [{ type: "manifest", ref: "./pack.yaml" }],
       inputAssignments: ["scope=auth changes"],
       gitRefresh: "auto",
@@ -252,7 +537,7 @@ tasks:
 
     await expect(
       initPack({
-        id: "missing-required-input",
+        createId: "missing-required-input",
         includes: [{ type: "manifest", ref: "./pack.yaml" }],
         gitRefresh: "auto",
       }),
@@ -260,7 +545,7 @@ tasks:
 
     await expect(
       initPack({
-        id: "bad-enum-input",
+        createId: "bad-enum-input",
         includes: [{ type: "manifest", ref: "./pack.yaml" }],
         inputAssignments: ["scope=auth", "severity=medium"],
         gitRefresh: "auto",
@@ -269,7 +554,7 @@ tasks:
 
     await expect(
       initPack({
-        id: "unknown-input",
+        createId: "unknown-input",
         includes: [{ type: "manifest", ref: "./pack.yaml" }],
         inputAssignments: ["scope=auth", "unknown=value"],
         gitRefresh: "auto",
@@ -295,7 +580,7 @@ tasks:
     );
 
     const numberPack = await initPack({
-      id: "number-inputs",
+      createId: "number-inputs",
       includes: [{ type: "manifest", ref: "./number-pack.yaml" }],
       inputAssignments: ["count=2", "include_tests=1"],
       gitRefresh: "auto",
@@ -304,7 +589,7 @@ tasks:
     expect(numberPack.inputs).toMatchObject({ count: 2, include_tests: true });
     await expect(
       initPack({
-        id: "empty-number-init",
+        createId: "empty-number-init",
         includes: [{ type: "manifest", ref: "./number-pack.yaml" }],
         inputAssignments: ["count="],
         gitRefresh: "auto",
@@ -340,7 +625,7 @@ inputs:
     );
     await expect(
       initPack({
-        id: "conflicting-inputs",
+        createId: "conflicting-inputs",
         includes: [
           { type: "manifest", ref: "./input-a.yaml" },
           { type: "manifest", ref: "./input-b.yaml" },
@@ -365,7 +650,7 @@ tasks:
     );
     await expect(
       initPack({
-        id: "bad-when",
+        createId: "bad-when",
         includes: [{ type: "manifest", ref: "./bad-when.yaml" }],
         gitRefresh: "auto",
       }),
@@ -385,7 +670,7 @@ tasks:
 `,
     );
     await initPack({
-      id: "locked-task-update",
+      createId: "locked-task-update",
       includes: [{ type: "manifest", ref: "./locked.yaml" }],
       gitRefresh: "auto",
     });
@@ -397,7 +682,7 @@ tasks:
 
   it("adds an ad hoc task to an existing pack", async () => {
     await initPack({
-      id: "add-task-pack",
+      createId: "add-task-pack",
       includes: [{ type: "adHocTask", text: "Inspect existing work" }],
       gitRefresh: "auto",
     });
@@ -454,7 +739,7 @@ tasks:
 
   it("rejects empty task add fields before mutating state", async () => {
     await initPack({
-      id: "reject-empty-add",
+      createId: "reject-empty-add",
       includes: [{ type: "adHocTask", text: "Original task" }],
       gitRefresh: "auto",
     });
@@ -488,7 +773,7 @@ tasks:
       "name: product api\ndescription: API docs.\nref: ./docs/api.md\n",
     );
     await initPack({
-      id: "reference-add-pack",
+      createId: "reference-add-pack",
       includes: [{ type: "reference", ref: { ref: "./docs/intro.md" } }],
       gitRefresh: "auto",
     });
@@ -582,7 +867,7 @@ tasks:
       "---\nname: review\ndescription: Second skill.\n---\n",
     );
     await initPack({
-      id: "skill-add-pack",
+      createId: "skill-add-pack",
       includes: [{ type: "skill", ref: { ref: "./skills/first/SKILL.md" } }],
       gitRefresh: "auto",
     });
@@ -618,7 +903,7 @@ tasks:
     await mkdir("skills/explicit", { recursive: true });
     await writeFile("skills/explicit/SKILL.md", "---\nname: review (2)\n---\n");
     await initPack({
-      id: "explicit-skill-name",
+      createId: "explicit-skill-name",
       includes: [],
       gitRefresh: "auto",
     });
@@ -642,7 +927,7 @@ tasks:
     await writeFile("skills/second/SKILL.md", "---\nname: review (2)\n---\n");
     await writeFile("skills/third/SKILL.md", "---\nname: review\n---\n");
     await initPack({
-      id: "skill-name-collision",
+      createId: "skill-name-collision",
       includes: [
         { type: "skill", ref: { ref: "./skills/first/SKILL.md" } },
         { type: "skill", ref: { ref: "./skills/second/SKILL.md" } },
@@ -667,7 +952,7 @@ tasks:
 
   it("updates status and counts when adding to a completed pack", async () => {
     await initPack({
-      id: "completed-add",
+      createId: "completed-add",
       includes: [{ type: "adHocTask", text: "Original task" }],
       gitRefresh: "auto",
     });
@@ -681,7 +966,7 @@ tasks:
 
   it("adds concurrent tasks with unique task ids", async () => {
     await initPack({
-      id: "concurrent-adds",
+      createId: "concurrent-adds",
       includes: [{ type: "adHocTask", text: "Original task" }],
       gitRefresh: "auto",
     });
@@ -738,7 +1023,7 @@ skills:
     );
 
     const pack = await initPack({
-      id: "ordered-pack",
+      createId: "ordered-pack",
       includes: [
         { type: "adHocTask", text: "Before manifest task" },
         { type: "reference", ref: { name: "before", ref: "./docs/before.md" } },
@@ -774,7 +1059,7 @@ skills:
     await writeFile("skills/ignored/notes.md", "# Notes\n");
 
     const pack = await initPack({
-      id: "skill-dir",
+      createId: "skill-dir",
       includes: [{ type: "skill", ref: { ref: "./skills" } }],
       gitRefresh: "auto",
     });
@@ -880,7 +1165,7 @@ skills:
 
     await expect(
       initPack({
-        id: "ambiguous-local",
+        createId: "ambiguous-local",
         includes: [{ type: "manifest", ref: "pack.yaml" }],
         gitRefresh: "auto",
       }),
@@ -898,7 +1183,7 @@ tasks:
 
     await expect(
       initPack({
-        id: "unsupported-field-pack",
+        createId: "unsupported-field-pack",
         includes: [{ type: "manifest", ref: "./pack.yaml" }],
         gitRefresh: "auto",
       }),
@@ -919,7 +1204,7 @@ references:
 
     await expect(
       initPack({
-        id: "unsupported-nested-pack",
+        createId: "unsupported-nested-pack",
         includes: [{ type: "manifest", ref: "./pack.yaml" }],
         gitRefresh: "auto",
       }),
@@ -937,7 +1222,7 @@ references:
 
     await expect(
       initPack({
-        id: "bad-include-metadata",
+        createId: "bad-include-metadata",
         includes: [{ type: "manifest", ref: "./pack.yaml" }],
         gitRefresh: "auto",
       }),
@@ -958,7 +1243,7 @@ skills:
 
     await expect(
       initPack({
-        id: "empty-include-metadata",
+        createId: "empty-include-metadata",
         includes: [{ type: "manifest", ref: "./pack.yaml" }],
         gitRefresh: "auto",
       }),
@@ -976,7 +1261,7 @@ skills:
 
     await expect(
       initPack({
-        id: "empty-skill-metadata",
+        createId: "empty-skill-metadata",
         includes: [{ type: "manifest", ref: "./pack.yaml" }],
         gitRefresh: "auto",
       }),
@@ -993,7 +1278,7 @@ contract:
 
     await expect(
       initPack({
-        id: "bad-contract",
+        createId: "bad-contract",
         includes: [{ type: "manifest", ref: "./pack.yaml" }],
         gitRefresh: "auto",
       }),
@@ -1013,7 +1298,7 @@ tasks:
 
     await expect(
       initPack({
-        id: "bad-manifest-task",
+        createId: "bad-manifest-task",
         includes: [{ type: "manifest", ref: "./pack.yaml" }],
         gitRefresh: "auto",
       }),
@@ -1031,7 +1316,7 @@ tasks:
 
     await expect(
       initPack({
-        id: "alias-manifest-task",
+        createId: "alias-manifest-task",
         includes: [{ type: "manifest", ref: "./pack.yaml" }],
         gitRefresh: "auto",
       }),
@@ -1047,7 +1332,7 @@ unknown: true`,
 
     await expect(
       initPack({
-        id: "unsupported-task-file",
+        createId: "unsupported-task-file",
         includes: [{ type: "taskRef", ref: "./task.yaml" }],
         gitRefresh: "auto",
       }),
@@ -1058,7 +1343,7 @@ unknown: true`,
     await writeFile("instructions.yaml", "note: Review carefully");
 
     const pack = await initPack({
-      id: "raw-instructions",
+      createId: "raw-instructions",
       includes: [{ type: "instructions", path: "./instructions.yaml" }],
       gitRefresh: "auto",
     });
@@ -1072,7 +1357,7 @@ unknown: true`,
 
     await expect(
       initPack({
-        id: "invalid-skill",
+        createId: "invalid-skill",
         includes: [{ type: "skill", ref: { ref: "./skills/bad/SKILL.md" } }],
         gitRefresh: "auto",
       }),
@@ -1082,7 +1367,7 @@ unknown: true`,
   it("rejects git manifest refs without a file path", async () => {
     await expect(
       initPack({
-        id: "git-manifest-no-path",
+        createId: "git-manifest-no-path",
         includes: [{ type: "manifest", ref: "git+file:///no/such/repo.git#main" }],
         gitRefresh: "auto",
       }),
@@ -1092,7 +1377,7 @@ unknown: true`,
   it("rejects invalid pack IDs before resolving state paths", async () => {
     await expect(
       initPack({
-        id: "../outside",
+        createId: "../outside",
         includes: [{ type: "adHocTask", text: "Inspect" }],
         gitRefresh: "auto",
       }),
@@ -1102,7 +1387,7 @@ unknown: true`,
   it("rejects empty ad hoc tasks before writing state", async () => {
     await expect(
       initPack({
-        id: "empty-task",
+        createId: "empty-task",
         includes: [{ type: "adHocTask", text: "   " }],
         gitRefresh: "auto",
       }),
@@ -1338,7 +1623,7 @@ unknown: true`,
 
   it("preserves concurrent task notes through locked updates", async () => {
     await initPack({
-      id: "locked-notes",
+      createId: "locked-notes",
       includes: [{ type: "adHocTask", text: "Inspect" }],
       gitRefresh: "auto",
     });
@@ -1355,7 +1640,7 @@ unknown: true`,
 
   it("recovers stale pack locks left by dead processes", async () => {
     await initPack({
-      id: "stale-lock",
+      createId: "stale-lock",
       includes: [{ type: "adHocTask", text: "Inspect" }],
       gitRefresh: "auto",
     });
@@ -1373,7 +1658,7 @@ unknown: true`,
 
   it("recovers stale pack locks with corrupt holder metadata", async () => {
     await initPack({
-      id: "corrupt-lock",
+      createId: "corrupt-lock",
       includes: [{ type: "adHocTask", text: "Inspect" }],
       gitRefresh: "auto",
     });
@@ -1396,7 +1681,7 @@ unknown: true`,
     await symlink(path.join(cwd, "outside"), "docs/link");
 
     const pack = await initPack({
-      id: "no-symlink-globs",
+      createId: "no-symlink-globs",
       includes: [{ type: "reference", ref: { ref: "./docs/**/*.md" } }],
       gitRefresh: "auto",
     });
@@ -1489,7 +1774,7 @@ unknown: true`,
 
   it("stores bare HTTP and HTTPS references as URL sources", async () => {
     const pack = await initPack({
-      id: "url-reference",
+      createId: "url-reference",
       includes: [
         { type: "reference", ref: { ref: "https://example.com/docs/design.md" } },
         {
@@ -1520,7 +1805,7 @@ unknown: true`,
   it("rejects URL references that include credentials", async () => {
     await expect(
       initPack({
-        id: "credential-url",
+        createId: "credential-url",
         includes: [{ type: "reference", ref: { ref: "https://user:secret@example.com/doc.md" } }],
         gitRefresh: "auto",
       }),
@@ -1530,7 +1815,7 @@ unknown: true`,
   it("rejects reference globs that match no files", async () => {
     await expect(
       initPack({
-        id: "empty-reference-glob",
+        createId: "empty-reference-glob",
         includes: [{ type: "reference", ref: { ref: "./docs/**/*.md" } }],
         gitRefresh: "auto",
       }),
@@ -1548,7 +1833,7 @@ doneWhen:
 `,
     );
     await initPack({
-      id: "compact-brief",
+      createId: "compact-brief",
       includes: [{ type: "taskRef", ref: "./task.yaml" }],
       gitRefresh: "auto",
     });
@@ -1566,7 +1851,7 @@ doneWhen:
 
   it("omits pack id arguments from brief commands when AGENT_PACK_ID selects the pack", async () => {
     await initPack({
-      id: "env-brief",
+      createId: "env-brief",
       includes: [{ type: "adHocTask", text: "Inspect" }],
       gitRefresh: "auto",
     });
@@ -1581,7 +1866,7 @@ doneWhen:
 
   it("rejects invalid task content brief settings", async () => {
     await initPack({
-      id: "invalid-brief-setting",
+      createId: "invalid-brief-setting",
       includes: [{ type: "adHocTask", text: "Inspect" }],
       gitRefresh: "auto",
     });
@@ -1595,7 +1880,7 @@ doneWhen:
   it("reports clear errors for missing local task inputs", async () => {
     await expect(
       initPack({
-        id: "missing-task",
+        createId: "missing-task",
         includes: [{ type: "taskRef", ref: "./missing-task.yaml" }],
         gitRefresh: "auto",
       }),
@@ -1605,7 +1890,7 @@ doneWhen:
   it("reports clear errors for missing local skill inputs", async () => {
     await expect(
       initPack({
-        id: "missing-skill",
+        createId: "missing-skill",
         includes: [{ type: "skill", ref: { ref: "./skills/fresh-eyes/SKILL.md" } }],
         gitRefresh: "auto",
       }),
@@ -1617,7 +1902,7 @@ doneWhen:
 
     await expect(
       initPack({
-        id: "bad-task",
+        createId: "bad-task",
         includes: [{ type: "taskRef", ref: "./bad-task.yaml" }],
         gitRefresh: "auto",
       }),
@@ -1641,6 +1926,18 @@ async function readEvents(id: string): Promise<Array<{ type: string; data?: unkn
     .split("\n")
     .filter(Boolean)
     .map((line) => JSON.parse(line) as { type: string; data?: unknown });
+}
+
+function nodeAgentYaml(name: string, script: string, extra = ""): string {
+  return [
+    `name: ${name}`,
+    `command: ${JSON.stringify(process.execPath)}`,
+    `args: [${JSON.stringify("-e")}, ${JSON.stringify(script)}]`,
+    extra,
+    "",
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
 }
 
 async function writePackState(

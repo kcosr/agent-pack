@@ -19,6 +19,7 @@ import { derivePackStatus, taskCounts } from "./status.js";
 
 const packStatuses = new Set(["no_tasks", "pending", "in_progress", "blocked", "completed"]);
 const taskStatuses = new Set<TaskStatus>(["pending", "in_progress", "blocked", "completed"]);
+const agentRunStatuses = new Set(["completed", "failed", "timed_out", "signaled"]);
 const taskFields = new Set([
   "id",
   "sourceId",
@@ -46,6 +47,19 @@ const referenceFields = new Set([
   "files",
 ]);
 const skillFields = new Set(["id", "name", "description", "source", "path"]);
+const agentFields = new Set(["name", "command", "args", "timeoutSec", "source"]);
+const agentRunFields = new Set([
+  "id",
+  "agent",
+  "status",
+  "startedAt",
+  "endedAt",
+  "exitCode",
+  "signal",
+  "timedOut",
+  "stdout",
+  "stdoutTruncated",
+]);
 const fileSourceFields = new Set(["kind", "path"]);
 const urlSourceFields = new Set(["kind", "url"]);
 const taskCountFieldNames = ["total", "pending", "inProgress", "completed", "blocked"] as const;
@@ -282,6 +296,8 @@ function validatePack(value: unknown, filePath: string): PackState {
   validatePackInputs(value as unknown as PackState, filePath);
   validatePackReferences(references, filePath);
   validatePackSkills(skills, filePath);
+  validatePackAgents(value.agents, filePath);
+  validatePackAgentRuns(value.agentRuns, filePath);
   const expectedCounts = taskCounts(value.tasks as PackState["tasks"]);
   if (!taskCountFieldNames.every((field) => counts[field] === expectedCounts[field])) {
     throw new AgentPackError(`invalid pack state field 'taskCounts': ${filePath}`);
@@ -310,6 +326,8 @@ function validateKnownPackFields(value: Record<string, unknown>, filePath: strin
     "tasks",
     "references",
     "skills",
+    "agents",
+    "agentRuns",
     "contract",
   ]);
   for (const field of Object.keys(value)) {
@@ -445,6 +463,93 @@ function validatePackSkills(value: unknown[], filePath: string): void {
     validateOptionalString(skill.description, `skills[${index}].description`, filePath);
     validateRequiredString(skill.path, `skills[${index}].path`, filePath);
     validateSource(skill.source, `skills[${index}].source`, filePath);
+  }
+}
+
+function validatePackAgents(value: unknown, filePath: string): void {
+  if (value === undefined) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    throw new AgentPackError(`invalid pack state field 'agents': ${filePath}`);
+  }
+  const names = new Set<string>();
+  for (const [index, agent] of value.entries()) {
+    if (!isObject(agent)) {
+      throw new AgentPackError(`invalid pack agent at index ${index}: ${filePath}`);
+    }
+    validateKnownFields(agent, agentFields, `agents[${index}]`, filePath);
+    validateRequiredString(agent.name, `agents[${index}].name`, filePath);
+    validateRequiredString(agent.command, `agents[${index}].command`, filePath);
+    if (names.has(agent.name)) {
+      throw new AgentPackError(`duplicate pack agent name '${agent.name}': ${filePath}`);
+    }
+    names.add(agent.name);
+    if (!Array.isArray(agent.args) || agent.args.some((entry) => typeof entry !== "string")) {
+      throw new AgentPackError(`invalid pack agent field 'agents[${index}].args': ${filePath}`);
+    }
+    if (
+      agent.timeoutSec !== undefined &&
+      (!Number.isInteger(agent.timeoutSec) || Number(agent.timeoutSec) <= 0)
+    ) {
+      throw new AgentPackError(
+        `invalid pack agent field 'agents[${index}].timeoutSec': ${filePath}`,
+      );
+    }
+    if (agent.source !== undefined) {
+      validateSource(agent.source, `agents[${index}].source`, filePath);
+    }
+  }
+}
+
+function validatePackAgentRuns(value: unknown, filePath: string): void {
+  if (value === undefined) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    throw new AgentPackError(`invalid pack state field 'agentRuns': ${filePath}`);
+  }
+  for (const [index, run] of value.entries()) {
+    if (!isObject(run)) {
+      throw new AgentPackError(`invalid pack agent run at index ${index}: ${filePath}`);
+    }
+    validateKnownFields(run, agentRunFields, `agentRuns[${index}]`, filePath);
+    validateRequiredString(run.id, `agentRuns[${index}].id`, filePath);
+    validateRequiredString(run.agent, `agentRuns[${index}].agent`, filePath);
+    if (typeof run.status !== "string" || !agentRunStatuses.has(run.status)) {
+      throw new AgentPackError(`invalid pack agent run status at index ${index}: ${filePath}`);
+    }
+    validateRequiredString(run.startedAt, `agentRuns[${index}].startedAt`, filePath);
+    validateOptionalString(run.endedAt, `agentRuns[${index}].endedAt`, filePath);
+    if (
+      run.exitCode !== undefined &&
+      run.exitCode !== null &&
+      (!Number.isInteger(run.exitCode) || Number(run.exitCode) < 0)
+    ) {
+      throw new AgentPackError(
+        `invalid pack agent run field 'agentRuns[${index}].exitCode': ${filePath}`,
+      );
+    }
+    if (run.signal !== undefined && run.signal !== null && typeof run.signal !== "string") {
+      throw new AgentPackError(
+        `invalid pack agent run field 'agentRuns[${index}].signal': ${filePath}`,
+      );
+    }
+    if (run.timedOut !== undefined && typeof run.timedOut !== "boolean") {
+      throw new AgentPackError(
+        `invalid pack agent run field 'agentRuns[${index}].timedOut': ${filePath}`,
+      );
+    }
+    if (typeof run.stdout !== "string") {
+      throw new AgentPackError(
+        `invalid pack agent run field 'agentRuns[${index}].stdout': ${filePath}`,
+      );
+    }
+    if (typeof run.stdoutTruncated !== "boolean") {
+      throw new AgentPackError(
+        `invalid pack agent run field 'agentRuns[${index}].stdoutTruncated': ${filePath}`,
+      );
+    }
   }
 }
 

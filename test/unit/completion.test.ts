@@ -11,17 +11,21 @@ import {
   inputNameArgument,
   inputValueArgument,
 } from "../../src/cli/completion.js";
+import { initPack } from "../../src/core/operations.js";
 
 describe("shell completion", () => {
   let configDir: string;
+  let stateDir: string;
 
   beforeEach(async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-completion-unit-"));
     configDir = path.join(workspace, "config");
+    stateDir = path.join(workspace, "state");
     await mkdir(path.join(configDir, "manifests/review"), { recursive: true });
     await mkdir(path.join(configDir, "tasks/review"), { recursive: true });
     await mkdir(path.join(configDir, "references/review"), { recursive: true });
     await mkdir(path.join(configDir, "skills/review/fresh-eyes"), { recursive: true });
+    await mkdir(path.join(configDir, "agents/review"), { recursive: true });
     await writeFile(path.join(configDir, "manifests/review/code-review.yaml"), "tasks: []\n");
     await writeFile(path.join(configDir, "tasks/review/security.yaml"), "title: Security\n");
     await writeFile(path.join(configDir, "references/review/api.yaml"), "ref: ./docs/api.md\n");
@@ -29,7 +33,9 @@ describe("shell completion", () => {
       path.join(configDir, "skills/review/fresh-eyes/SKILL.md"),
       "---\nname: fresh-eyes\ndescription: Review skill\n---\n",
     );
+    await writeFile(path.join(configDir, "agents/review/claude.yaml"), "command: claude\n");
     vi.stubEnv("AGENT_PACK_CONFIG_DIR", configDir);
+    vi.stubEnv("AGENT_PACK_STATE_DIR", stateDir);
   });
 
   afterEach(() => {
@@ -42,7 +48,9 @@ describe("shell completion", () => {
     const catalogOptions = allOptions(root).filter(
       (option) => option.description.includes("catalog") && !option.argChoices,
     );
-    expect(catalogOptions.map((option) => option.long).sort()).toEqual([
+    expect([...new Set(catalogOptions.map((option) => option.long))].sort()).toEqual([
+      "--agent",
+      "--agents",
       "--manifest",
       "--manifests",
       "--reference",
@@ -79,10 +87,56 @@ describe("shell completion", () => {
     ["--references", "review/api\n"],
     ["--skill", "review/fresh-eyes\n"],
     ["--skills", "review/fresh-eyes\n"],
+    ["--agent", "review/claude\n"],
+    ["--agents", "review/claude\n"],
   ])("resolves catalog candidates for init %s", async (flag, expected) => {
     await expect(completionCandidates(configureProgram(), "review/", ["init", flag])).resolves.toBe(
       expected,
     );
+  });
+
+  it.each([
+    ["--agent", "review/claude\n"],
+    ["--agents", "review/claude\n"],
+  ])("resolves catalog candidates for run %s", async (flag, expected) => {
+    await expect(completionCandidates(configureProgram(), "review/", ["run", flag])).resolves.toBe(
+      expected,
+    );
+  });
+
+  it("resolves stored agent names for run --run-agent", async () => {
+    const manifest = path.join(configDir, "run-agents.yaml");
+    await writeFile(
+      manifest,
+      [
+        "schemaVersion: 1",
+        "agents:",
+        "  - name: first",
+        "    command: first-agent",
+        "  - name: second",
+        "    command: second-agent",
+        "",
+      ].join("\n"),
+    );
+    await initPack({
+      createId: "completion-pack",
+      includes: [{ type: "manifest", ref: manifest }],
+      stateDir,
+      gitRefresh: "auto",
+    });
+    vi.stubEnv("AGENT_PACK_ID", "completion-pack");
+
+    await expect(
+      completionCandidates(configureProgram(), "s", ["run", "--run-agent"]),
+    ).resolves.toBe("second\n");
+    await expect(
+      completionCandidates(configureProgram(), "f", [
+        "run",
+        "--id",
+        "completion-pack",
+        "--run-agent",
+      ]),
+    ).resolves.toBe("first\n");
   });
 
   it("resolves catalog names from the preceding catalog type operand", async () => {

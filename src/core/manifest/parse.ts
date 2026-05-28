@@ -3,7 +3,13 @@ import path from "node:path";
 import YAML from "yaml";
 import { AgentPackError } from "../errors.js";
 import { inputDefinitionFieldNames, inputTypeNames, isInputName } from "../inputs.js";
-import type { ManifestReference, ManifestTask, PackContract, PackManifest } from "../types.js";
+import type {
+  ManifestAgent,
+  ManifestReference,
+  ManifestTask,
+  PackContract,
+  PackManifest,
+} from "../types.js";
 
 const manifestKeys = new Set([
   "schemaVersion",
@@ -13,9 +19,11 @@ const manifestKeys = new Set([
   "tasks",
   "references",
   "skills",
+  "agents",
   "contract",
 ]);
 const taskKeys = new Set(["id", "title", "category", "body", "doneWhen", "when"]);
+const agentKeys = new Set(["name", "command", "args", "timeoutSec"]);
 const inputKeys = new Set(inputDefinitionFieldNames);
 const includeKeys = new Set(["name", "description", "ref"]);
 const contractKeys = new Set(["do", "dont"]);
@@ -67,6 +75,26 @@ export async function readReferenceFile(filePath: string): Promise<ManifestRefer
   return normalizeIncludeObject(parsed, "reference", filePath);
 }
 
+export async function readAgentFile(
+  filePath: string,
+  fallbackName?: string,
+): Promise<ManifestAgent[]> {
+  const content = await readText(filePath, "agent file");
+  const parsed = parseYaml(content, filePath);
+  if (Array.isArray(parsed)) {
+    return parsed.map((agent, index) => normalizeAgent(agent, `agents[${index}]`));
+  }
+  if (parsed && typeof parsed === "object") {
+    const raw = parsed as Record<string, unknown>;
+    if (Array.isArray(raw.agents)) {
+      assertKnownKeys(raw, new Set(["agents"]), "agentFile");
+      return raw.agents.map((agent, index) => normalizeAgent(agent, `agents[${index}]`));
+    }
+    return [normalizeAgent(parsed, "agent", fallbackName)];
+  }
+  throw new AgentPackError(`agent file must contain an agent or agents: ${filePath}`);
+}
+
 export function normalizeTask(task: unknown, label = "task"): ManifestTask {
   if (!task || typeof task !== "object") {
     throw new AgentPackError("task must be an object");
@@ -94,6 +122,44 @@ export function normalizeTask(task: unknown, label = "task"): ManifestTask {
     body: stringValue(raw.body),
     doneWhen,
     when: normalizeWhen(raw.when, label),
+  };
+}
+
+export function normalizeAgent(
+  agent: unknown,
+  label = "agent",
+  fallbackName?: string,
+): ManifestAgent {
+  if (!agent || typeof agent !== "object" || Array.isArray(agent)) {
+    throw new AgentPackError(`${label} must be an object`);
+  }
+  const raw = agent as Record<string, unknown>;
+  assertKnownKeys(raw, agentKeys, label);
+  const name = stringValue(raw.name) ?? fallbackName;
+  if (!name) {
+    throw new AgentPackError(`${label} requires name`);
+  }
+  const command = stringValue(raw.command);
+  if (!command) {
+    throw new AgentPackError(`${label} requires command`);
+  }
+  if (
+    raw.args !== undefined &&
+    (!Array.isArray(raw.args) || raw.args.some((entry) => typeof entry !== "string"))
+  ) {
+    throw new AgentPackError(`${label}.args must be an array of strings`);
+  }
+  if (
+    raw.timeoutSec !== undefined &&
+    (!Number.isInteger(raw.timeoutSec) || Number(raw.timeoutSec) <= 0)
+  ) {
+    throw new AgentPackError(`${label}.timeoutSec must be a positive integer`);
+  }
+  return {
+    name,
+    command,
+    args: Array.isArray(raw.args) ? raw.args.map((entry) => String(entry)) : undefined,
+    timeoutSec: raw.timeoutSec === undefined ? undefined : Number(raw.timeoutSec),
   };
 }
 
@@ -129,6 +195,7 @@ function validateManifest(manifest: Record<string, unknown>, filePath: string): 
   validateTasks(manifest.tasks, filePath);
   validateIncludes(manifest.references, "references", filePath);
   validateIncludes(manifest.skills, "skills", filePath);
+  validateAgents(manifest.agents, filePath);
   validateContract(manifest.contract, filePath);
 }
 
@@ -200,6 +267,24 @@ function validateTasks(value: unknown, filePath: string): void {
     if (task.id === undefined && task.title === undefined) {
       throw new AgentPackError(`manifest tasks[${index}] requires id or title: ${filePath}`);
     }
+  }
+}
+
+function validateAgents(value: unknown, filePath: string): void {
+  if (value === undefined) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    throw new AgentPackError(`manifest agents must be an array: ${filePath}`);
+  }
+  for (const [index, agent] of value.entries()) {
+    if (isNonEmptyString(agent)) {
+      continue;
+    }
+    if (!isObject(agent)) {
+      throw new AgentPackError(`manifest agents[${index}] must be a string or object: ${filePath}`);
+    }
+    normalizeAgent(agent, `agents[${index}]`);
   }
 }
 

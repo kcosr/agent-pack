@@ -11,6 +11,7 @@ const catalogLayouts: Record<CatalogType, { dir: string; suffix: string; fileNam
   task: { dir: "tasks", suffix: ".yaml" },
   reference: { dir: "references", suffix: ".yaml" },
   skill: { dir: "skills", suffix: "", fileName: "SKILL.md" },
+  agent: { dir: "agents", suffix: ".yaml" },
 };
 
 export const catalogTypes = Object.keys(catalogLayouts) as CatalogType[];

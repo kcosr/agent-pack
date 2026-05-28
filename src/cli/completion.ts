@@ -11,9 +11,13 @@ type CompletionShell = (typeof completionShells)[number];
 type CompletionValueSource =
   | { kind: "catalog"; type: CatalogType }
   | { kind: "catalogFromOperand"; index: number }
+  | { kind: "agentName" }
   | { kind: "inputName" }
   | { kind: "inputValue"; inputNameIndex: number };
 type RunAction = (fn: () => Promise<void>) => Promise<void>;
+type AgentCompletionProvider = {
+  names: (id?: string) => Promise<string[]>;
+};
 type InputCompletionProvider = {
   names: () => Promise<string[]>;
   values: (name: string) => Promise<string[]>;
@@ -21,7 +25,12 @@ type InputCompletionProvider = {
 
 const completionValueSources = new WeakMap<Option | Argument, CompletionValueSource>();
 const hiddenCommands = new WeakSet<Command>();
+let agentCompletionProvider: AgentCompletionProvider | undefined;
 let inputCompletionProvider: InputCompletionProvider | undefined;
+
+export function configureAgentCompletion(provider: AgentCompletionProvider): void {
+  agentCompletionProvider = provider;
+}
 
 export function configureInputCompletion(provider: InputCompletionProvider): void {
   inputCompletionProvider = provider;
@@ -104,6 +113,12 @@ export function catalogRefOption(
   return option;
 }
 
+export function agentNameOption(flags: string, description: string): Option {
+  const option = new Option(flags, description);
+  completionValueSources.set(option, { kind: "agentName" });
+  return option;
+}
+
 export function hasCatalogCompletionSource(target: Option | Argument): boolean {
   return completionValueSources.has(target);
 }
@@ -129,13 +144,14 @@ export async function resolveCompletionCandidates(
     const values = await valueCandidates(
       equalsValue.option,
       context.operands,
+      context.optionValues,
       equalsValue.valuePrefix,
     );
     return values.map((value) => `${equalsValue.flag}=${value}`);
   }
 
   if (context.pendingOption) {
-    return valueCandidates(context.pendingOption, context.operands, prefix);
+    return valueCandidates(context.pendingOption, context.operands, context.optionValues, prefix);
   }
 
   if (prefix.startsWith("-")) {
@@ -149,7 +165,9 @@ export async function resolveCompletionCandidates(
 
   const argument = context.command.registeredArguments[context.operands.length];
   if (argument) {
-    candidates.push(...(await valueCandidates(argument, context.operands, prefix)));
+    candidates.push(
+      ...(await valueCandidates(argument, context.operands, context.optionValues, prefix)),
+    );
   }
 
   const appCandidates = unique(candidates);
@@ -231,14 +249,21 @@ function completionScript(shell: CompletionShell): string {
 function completionContext(
   root: Command,
   words: string[],
-): { command: Command; operands: string[]; pendingOption?: Option } {
+): {
+  command: Command;
+  operands: string[];
+  optionValues: Map<string, string[]>;
+  pendingOption?: Option;
+} {
   let command = root;
   const operands: string[] = [];
+  const optionValues = new Map<string, string[]>();
   let pendingOption: Option | undefined;
 
   for (let index = 0; index < words.length; index += 1) {
     const word = words[index];
     if (pendingOption) {
+      recordOptionValue(optionValues, pendingOption, word);
       pendingOption = undefined;
       continue;
     }
@@ -258,6 +283,9 @@ function completionContext(
 
     const option = optionForToken(command, word);
     if (option) {
+      if ((option.required || option.optional) && word.includes("=")) {
+        recordOptionValue(optionValues, option, word.slice(word.indexOf("=") + 1));
+      }
       if ((option.required || option.optional) && !word.includes("=")) {
         pendingOption = option;
       }
@@ -267,7 +295,7 @@ function completionContext(
     operands.push(word);
   }
 
-  return { command, operands, pendingOption };
+  return { command, operands, optionValues, pendingOption };
 }
 
 function optionValuePrefix(
@@ -297,6 +325,7 @@ function optionForToken(command: Command, token: string): Option | undefined {
 async function valueCandidates(
   target: Option | Argument,
   operands: string[],
+  optionValues: Map<string, string[]>,
   prefix: string,
 ): Promise<string[]> {
   const choices = target.argChoices;
@@ -311,6 +340,11 @@ async function valueCandidates(
 
   if (source.kind === "inputName") {
     return safeInputCandidates(() => inputCompletionProvider?.names() ?? Promise.resolve([]));
+  }
+
+  if (source.kind === "agentName") {
+    const packId = latestOptionValue(optionValues, "--id");
+    return safeInputCandidates(() => agentCompletionProvider?.names(packId) ?? Promise.resolve([]));
   }
 
   if (source.kind === "inputValue") {
@@ -332,6 +366,17 @@ async function valueCandidates(
   return (await catalogList(catalogType, { createDirs: false }))
     .map((entry) => entry.name)
     .filter(isCatalogName);
+}
+
+function recordOptionValue(values: Map<string, string[]>, option: Option, value: string): void {
+  if (!option.long) {
+    return;
+  }
+  values.set(option.long, [...(values.get(option.long) ?? []), value]);
+}
+
+function latestOptionValue(values: Map<string, string[]>, flag: string): string | undefined {
+  return values.get(flag)?.at(-1);
 }
 
 async function safeInputCandidates(load: () => Promise<string[]>): Promise<string[]> {

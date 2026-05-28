@@ -5,6 +5,7 @@ export type PackInputType = "string" | "enum" | "boolean" | "number";
 export type PackInputValue = string | number | boolean;
 export type InputSource = "cli" | "default" | "set";
 export type TaskActivation = "active" | "locked";
+export type PackAgentRunStatus = "completed" | "failed" | "timed_out" | "signaled";
 export type TaskWhen = string | Record<string, TaskWhenCondition>;
 export type TaskWhenCondition =
   | string
@@ -86,6 +87,27 @@ export interface PackSkill {
   path: string;
 }
 
+export interface PackAgent {
+  name: string;
+  command: string;
+  args: string[];
+  timeoutSec?: number;
+  source?: SourceInfo;
+}
+
+export interface PackAgentRun {
+  id: string;
+  agent: string;
+  status: PackAgentRunStatus;
+  startedAt: string;
+  endedAt?: string;
+  exitCode?: number | null;
+  signal?: NodeJS.Signals | null;
+  timedOut?: boolean;
+  stdout: string;
+  stdoutTruncated: boolean;
+}
+
 export interface TaskCounts {
   total: number;
   pending: number;
@@ -128,6 +150,8 @@ export interface PackState {
   tasks: PackTask[];
   references: PackReference[];
   skills: PackSkill[];
+  agents?: PackAgent[];
+  agentRuns?: PackAgentRun[];
   contract?: PackContract;
 }
 
@@ -161,6 +185,13 @@ export interface ManifestSkill {
   ref: string;
 }
 
+export interface ManifestAgent {
+  name: string;
+  command: string;
+  args?: string[];
+  timeoutSec?: number;
+}
+
 export interface PackManifest {
   schemaVersion?: number;
   name?: string;
@@ -169,6 +200,7 @@ export interface PackManifest {
   tasks?: Array<ManifestTask | string>;
   references?: Array<ManifestReference | string>;
   skills?: Array<ManifestSkill | string>;
+  agents?: Array<ManifestAgent | string>;
   contract?: PackContract;
 }
 
@@ -178,10 +210,11 @@ export type InitInclude =
   | { type: "taskRef"; ref: string }
   | { type: "adHocTask"; text: string }
   | { type: "reference"; ref: ManifestReference }
-  | { type: "skill"; ref: ManifestSkill };
+  | { type: "skill"; ref: ManifestSkill }
+  | { type: "agentRef"; ref: string };
 
 export interface InitInput {
-  id?: string;
+  createId?: string;
   name?: string;
   includes: InitInclude[];
   inputAssignments?: string[];
@@ -206,6 +239,7 @@ export interface RuntimePaths {
 
 export type SystemStatus = RuntimePaths & {
   defaultPackId?: string;
+  defaultCreateId?: string;
 };
 
 export interface CleanResult {
@@ -214,7 +248,7 @@ export interface CleanResult {
   removed: string[];
 }
 
-export type CatalogType = "manifest" | "task" | "reference" | "skill";
+export type CatalogType = "manifest" | "task" | "reference" | "skill" | "agent";
 
 export interface CatalogEntry {
   type: CatalogType;

@@ -1,8 +1,8 @@
 # agent-pack
 
-`agent-pack` pre-packs context for coding agents: references to read, supplemental skills to apply, instructions to follow, and executable task lists that keep the work on track.
+`agent-pack` pre-packs context for coding agents: references to read, supplemental skills to apply, instructions to follow, agent launch profiles to use, and executable task lists that keep the work on track.
 
-`agent-pack` does not run the agent. It prepares the work, renders the agent-facing brief, and records task progress while you run your agent CLI separately.
+`agent-pack` can be used passively or actively. In passive workflows, it prepares the work, renders the agent-facing brief, and records task progress while you run your agent CLI separately. In active workflows, `agent-pack run` starts one configured agent subprocess, captures its stdout, records the run, and prints the final pack report.
 
 ## Quick Start
 
@@ -30,7 +30,7 @@ export AGENT_PACK_ID=demo-a1b2c3
 agent-pack brief
 ```
 
-`init` uses `--id` when provided, then `AGENT_PACK_ID` when set, and otherwise generates an id from the pack name plus a short random suffix.
+`init` uses `--create-id` when provided, then `AGENT_PACK_CREATE_ID` when set, and otherwise generates an id from the pack name plus a short random suffix. `--id` and `AGENT_PACK_ID` always target existing packs.
 
 Abbreviated output:
 
@@ -72,7 +72,7 @@ For day-to-day use, put your own reusable pack files in the catalog config direc
 
 ```bash
 CONFIG_DIR="$(agent-pack status --json | node -e 'console.log(JSON.parse(require("fs").readFileSync(0, "utf8")).configDir)')"
-mkdir -p "$CONFIG_DIR"/{manifests,tasks,references,skills}
+mkdir -p "$CONFIG_DIR"/{manifests,tasks,references,skills,agents}
 ```
 
 ```text
@@ -81,6 +81,7 @@ $CONFIG_DIR/
   tasks/review/security.yaml
   references/product/api.yaml
   skills/engineering/fresh-eyes/SKILL.md
+  agents/claude.yaml
 ```
 
 Then run:
@@ -127,7 +128,7 @@ agent-pack --help
 Requirements:
 
 - Node.js 20 or newer. Node.js includes `npm`; use your package manager's equivalent if you prefer `pnpm` or `yarn`.
-- Git and `tar` on `PATH` for git-backed references and skills
+- Git and `tar` on `PATH` for git-backed references, skills, and agents
 - Git authentication for private repositories. `agent-pack` shells out to `git`, so SSH agent, credential helper, netrc, platform keychain, GitHub CLI, or configured askpass can work.
 
 `agent-pack` works with any agent CLI or editor agent that can read a text prompt and run shell commands in your workspace. The examples use POSIX shell syntax; on Windows PowerShell, use backticks for line continuations or write commands on one line, and prefer double-quoted globs such as `"./docs/**/*.md"`.
@@ -136,7 +137,7 @@ Requirements:
 
 ### Pack
 
-A pack is the durable unit of work. A pack stores a prompt, instructions, tasks, references, skills, an optional contract, task status, and notes. Alongside the pack file, `agent-pack` writes an append-only event log for state changes.
+A pack is the durable unit of work. A pack stores a prompt, instructions, tasks, references, skills, agents, optional contract rules, task status, notes, and agent run records. Alongside the pack file, `agent-pack` writes an append-only event log for state changes.
 
 By default, pack state is stored under the current working directory. Run `agent-pack` from your repository or workspace root when you want the default state directory committed with that project:
 
@@ -180,14 +181,14 @@ By default, task entries include the task body and `doneWhen` checklist. For ver
 
 ### Manifest
 
-A manifest is a reusable YAML file that can contribute instructions, tasks, references, skills, and contract rules to a pack. Manifest parsing is strict: unknown fields fail fast instead of being ignored.
+A manifest is a reusable YAML file that can contribute instructions, tasks, references, skills, agents, and contract rules to a pack. Manifest parsing is strict: unknown fields fail fast instead of being ignored.
 
 ### Prompt
 
 The optional positional prompt is a one-off instruction for this pack instance:
 
 ```bash
-agent-pack init --id worker-123 "Focus first on the cache behavior."
+agent-pack init --create-id worker-123 "Focus first on the cache behavior."
 ```
 
 It is rendered at the top of the brief. Prompts are not tasks, references, or reusable manifest content.
@@ -258,6 +259,18 @@ description: Re-read changed code and look for obvious defects.
 Review the changed files again before finalizing.
 ```
 
+### Agents
+
+Agents are named subprocess launch profiles used by `agent-pack run`. They are optional: packs can still be used passively with `agent-pack brief`, task commands, and report commands.
+
+Agent names must be unique within a pack because `--run-agent <name>` selects one stored launch profile. Agent args are user-controlled; `agent-pack` only expands `{prompt}`, spawns the command, captures stdout, records the run, and prints the final pack report.
+
+```yaml
+name: claude
+command: claude
+args: ["--print", "{prompt}"]
+```
+
 ### Contract
 
 A contract is manifest-only guidance rendered in the brief for the agent to follow. It has `do` and `dont` string lists. If multiple manifests contribute contracts, entries are concatenated in source order.
@@ -276,7 +289,7 @@ Common options:
 
 | Option | Purpose |
 |---|---|
-| `--id <id>` | Use a specific pack ID. If omitted, `AGENT_PACK_ID` is used when set; otherwise `agent-pack` generates `<name>-<suffix>` |
+| `--create-id <id>` | Use a specific ID for the new pack. If omitted, `AGENT_PACK_CREATE_ID` is used when set; otherwise `agent-pack` generates `<name>-<suffix>` |
 | `--name <name>` | Set a display name |
 | `--input <key=value>` | Set one declared manifest input; repeat for multiple inputs |
 | `--manifest <ref>` | Load one catalog manifest, local manifest YAML file, or git ref |
@@ -289,6 +302,8 @@ Common options:
 | `--references <ref>` | Alias for `--reference`; useful when passing several references |
 | `--skill <ref>` | Add one catalog skill, local `SKILL.md` file, directory scan, glob, or git ref |
 | `--skills <ref>` | Alias for `--skill`; useful when passing several skills |
+| `--agent <ref>` | Add one catalog, local, or git agent definition |
+| `--agents <ref>` | Alias for `--agent`; useful when passing several agent definitions |
 | `--git-refresh auto\|always\|never` | Control git fetching for this command |
 | `--state-dir <path>` | Override the state directory for `init`; use `AGENT_PACK_STATE_DIR` for other commands |
 | `--json` | Emit machine-readable output |
@@ -299,7 +314,7 @@ Illustrative only: replace the `example/...` URLs and local paths with sources t
 
 ```bash
 agent-pack init \
-  --id reviewer-001 \
+  --create-id reviewer-001 \
   --add-task "Check local unstaged changes" \
   --input scope="unstaged auth changes" \
   --manifest git+https://github.com/example/agent-packs.git//review/base.yaml#main \
@@ -311,10 +326,11 @@ agent-pack init \
   --references './docs/**/*.md' \
   --skill git+https://github.com/example/agent-skills.git//review/fresh-eyes/SKILL.md#v1.0.0 \
   --skills ./skills \
+  --agent ./agents/claude.yaml \
   "Use the included docs and skills to complete the review."
 ```
 
-That command composes content across types: the manifest can contribute instructions, tasks, references, skills, and contract rules; task flags add more tasks; reference flags add git, URL, and local reading material; skill flags add supplemental `SKILL.md` files.
+That command composes content across types: the manifest can contribute instructions, tasks, references, skills, agents, and contract rules; task flags add more tasks; reference flags add git, URL, and local reading material; skill flags add supplemental `SKILL.md` files; agent flags add launch profiles for `agent-pack run`.
 
 Bare refs are catalog refs loaded from the agent-pack config directory. Local filesystem paths must start with `./`, `../`, `~/`, or `/`.
 
@@ -357,17 +373,62 @@ skills:
   - engineering/fresh-eyes
   - ref: git+https://github.com/example/agent-skills.git//review/fresh-eyes/SKILL.md#v1.0.0
   - ./skills
+
+agents:
+  - ./agents/claude.yaml
+  - name: local-claude
+    command: claude
+    args: ["--print", "{prompt}"]
 ```
 
 Then initialize with the manifest and a one-off prompt:
 
 ```bash
 agent-pack init \
-  --id reviewer-001 \
+  --create-id reviewer-001 \
   --manifest ./reviewer-pack.yaml \
   --input scope="unstaged auth changes" \
   "Use the included docs and skills to complete the review."
 ```
+
+### `run`
+
+Run one configured agent against a pack.
+
+```bash
+agent-pack run --id reviewer-001 --run-agent local-claude
+```
+
+If the pack has exactly one stored agent, `--run-agent` can be omitted:
+
+```bash
+agent-pack run --id reviewer-001
+```
+
+`run` can also create a pack and run it in one command:
+
+```bash
+agent-pack run \
+  --create-id reviewer-001 \
+  --manifest ./reviewer-pack.yaml \
+  --agent ./agents/claude.yaml \
+  --run-agent claude \
+  "Use the included docs and skills to complete the review."
+```
+
+`--agent` and `--agents` compose agent definitions into a new pack. `--run-agent` selects the stored agent to execute. Agent names must be unique within a pack; duplicate names fail instead of being renamed.
+
+Agent definitions are simple subprocess launch profiles:
+
+```yaml
+name: claude
+command: claude
+args: ["--print", "{prompt}"]
+```
+
+`{prompt}` is the only supported template variable. It expands to a generated instruction that tells the subprocess to run `agent-pack brief --id <pack-id>` and follow the brief. Backend-specific flags such as model or effort belong in `args`.
+
+`run` captures the subprocess stdout, stores it in the pack's `agentRuns`, and prints the final `agent-pack report` output. Backend stderr is not streamed, stored, or rendered. With `--json`, `run` prints `{ pack, run }`.
 
 ### `brief`
 
@@ -516,7 +577,7 @@ agent-pack report --id reviewer-001
 agent-pack report --id reviewer-001 --json
 ```
 
-Use `agent-pack status` to inspect resolved directories and defaults such as the config/catalog dir, state dir, cache dir, and current `AGENT_PACK_ID`.
+Use `agent-pack status` to inspect resolved directories and defaults such as the config/catalog dir, state dir, cache dir, current `AGENT_PACK_ID`, and current `AGENT_PACK_CREATE_ID`.
 
 Use `agent-pack list` to discover packs, then run `summary --id <pack>` for pack progress.
 
@@ -528,11 +589,12 @@ JSON output shapes:
 | Command | JSON shape |
 |---|---|
 | `init --json` | `{ id, briefCommand, pack }` |
+| `run --json` | `{ pack, run }` |
 | `sync --id <id> --json` | Pack state object |
 | `clean --json` | `{ packIds, repoHashes, removed }` |
 | `list --json` | Array of status objects |
 | `status --json` | Resolved paths and current defaults |
-| `summary --json` | `{ id, name, status, tasks, references, skills }` |
+| `summary --json` | `{ id, name, status, tasks, references, skills, agents }` |
 | `reference add <ref> --json` | `{ references, skipped, summary }` |
 | `skill add <ref> --json` | `{ skills, skipped, summary }` |
 | `task add <title> --json` | `{ task, summary }` |
@@ -688,19 +750,21 @@ Manifest parsing is strict. Unknown fields are rejected.
 
 | Location | Allowed fields |
 |---|---|
-| Manifest | `schemaVersion`, `name`, `instructions`, `inputs`, `tasks`, `references`, `skills`, `contract` |
+| Manifest | `schemaVersion`, `name`, `instructions`, `inputs`, `tasks`, `references`, `skills`, `agents`, `contract` |
 | Input definition | `type`, `required`, `description`, `default`, `values` |
 | Inline task object | `id`, `title`, `category`, `body`, `doneWhen`, `when` |
+| Inline agent object | `name`, `command`, `args`, `timeoutSec` |
 | Reference or skill object | `name`, `description`, `ref` |
 | Contract | `do`, `dont` |
 
 Rules:
 
 - `schemaVersion`, when present, must be `1`.
-- `tasks`, `references`, and `skills` are arrays. Each entry may be either a string ref or an object.
+- `tasks`, `references`, `skills`, and `agents` are arrays. Each entry may be either a string ref or an object.
 - A string entry in `tasks` is equivalent to `--task <ref>`.
 - A string entry in `references` is equivalent to `--reference <ref>`.
 - A string entry in `skills` is equivalent to `--skill <ref>`.
+- A string entry in `agents` is equivalent to `--agent <ref>`.
 - Bare string refs are catalog refs. Local paths must start with `./`, `../`, `~/`, or `/`.
 - Each inline task object must have `id` or `title`.
 - Input names must start with a letter or underscore and may contain letters, numbers, underscores, and dashes.
@@ -708,6 +772,8 @@ Rules:
 - Enum inputs require a non-empty `values` list.
 - `doneWhen`, `contract.do`, and `contract.dont` are arrays of non-empty strings.
 - Reference and skill object `ref` values are non-empty strings.
+- Agent object entries are inline definitions and must include `name` and `command`.
+- Agent names must be unique after resolving string refs and inline definitions.
 - `contract` must include at least one `do` or `dont` entry.
 - Manifest task `id` is preserved as `sourceId`; task commands use the runtime ID (`t001`, `t002`, ...) shown by `agent-pack task list`.
 - `category` is stored as task metadata but is not currently rendered in the brief.
@@ -822,12 +888,51 @@ references:
 skills:
   - ref: ./skills/fresh-eyes/SKILL.md
   - ./skills/review
+agents:
+  - ./agents/claude.yaml
+  - name: local-claude
+    command: claude
+    args: ["--print", "{prompt}"]
 ```
+
+### Agent Files
+
+`--agent` and `--agents` load standalone YAML agent files. Agent objects use these fields: `name`, `command`, `args`, and `timeoutSec`.
+
+An agent file may contain one agent object:
+
+```yaml
+name: claude
+command: claude
+args: ["--print", "{prompt}"]
+```
+
+It may contain an array of agent objects:
+
+```yaml
+- name: claude
+  command: claude
+  args: ["--print", "{prompt}"]
+- name: codex
+  command: codex
+  args: ["exec", "{prompt}"]
+```
+
+Or it may contain an `agents` wrapper:
+
+```yaml
+agents:
+  - name: claude
+    command: claude
+    args: ["--print", "{prompt}"]
+```
+
+Manifest `agents` entries follow the task pattern: string entries are refs and object entries are inline definitions. Object entries do not use `ref`.
 
 CLI flags and manifests can be combined. Merge order is deterministic and source-order based:
 
 1. `agent-pack init` reads include flags from left to right.
-2. Each include contributes content to one or more typed brief sections: instructions, tasks, references, skills, or contract.
+2. Each include contributes content to one or more typed sections: instructions, tasks, references, skills, agents, or contract.
 3. The final brief still renders one section per type. Inside each section, entries keep the relative order of the sources that contributed them.
 4. The positional prompt is stored as the pack-level prompt and rendered at the top of the brief. It is not part of section ordering.
 
@@ -835,7 +940,7 @@ Suppose this command places the ad hoc task before manifest tasks, while referen
 
 ```bash
 agent-pack init \
-  --id ordered-review \
+  --create-id ordered-review \
   --add-task "Check local unstaged changes first" \
   --manifest git+https://github.com/example/agent-packs.git//review/base.yaml#main \
   --task ./tasks/follow-up.yaml \
@@ -875,6 +980,7 @@ Authentication is delegated to normal `git` behavior: SSH agent, credential help
 | Variable | Purpose | Default |
 |---|---|---|
 | `AGENT_PACK_ID` | Default pack target | unset |
+| `AGENT_PACK_CREATE_ID` | Default ID for newly created packs | unset |
 | `AGENT_PACK_CONFIG_DIR` | Catalog config directory | `$XDG_CONFIG_HOME/agent-pack`, or `~/.config/agent-pack` when `XDG_CONFIG_HOME` is unset, or `<cwd>/.agent-pack/config` when neither `XDG_CONFIG_HOME` nor `HOME` is set |
 | `AGENT_PACK_STATE_DIR` | Pack state directory | `<cwd>/.agent-pack/state` |
 | `AGENT_PACK_CACHE_DIR` | Cache root | `$XDG_CACHE_HOME/agent-pack`, or `~/.cache/agent-pack` when `XDG_CACHE_HOME` is unset, or `<cwd>/.agent-pack/cache` when neither `XDG_CACHE_HOME` nor `HOME` is set |
@@ -882,7 +988,7 @@ Authentication is delegated to normal `git` behavior: SSH agent, credential help
 | `AGENT_PACK_CMD` | Command name rendered in brief task commands; set when invoking through a wrapper | `agent-pack` |
 | `AGENT_PACK_BRIEF_TASK_CONTENT` | Include task body and `doneWhen` checklist in rendered briefs; set to `false` to render only task status, ID, and title | `true` |
 
-Relative path values resolve from the current working directory. Bare refs for manifests, tasks, references, and skills resolve from the catalog config directory.
+Relative path values resolve from the current working directory. Bare refs for manifests, tasks, references, skills, and agents resolve from the catalog config directory.
 
 Set a default pack ID when working on one pack for a while. This is the recommended handoff shape before launching an agent CLI from the same shell:
 
@@ -893,6 +999,8 @@ agent-pack brief
 agent-pack summary
 agent-pack task done t001 --note "Completed."
 ```
+
+Set `AGENT_PACK_CREATE_ID` only when you want the next creation command to use a deterministic ID. `AGENT_PACK_ID` is ignored by creation flows.
 
 If the agent starts in a different shell, include the pack id in the handoff:
 
@@ -1009,7 +1117,7 @@ Pack state lock filenames are prefixed with a 16-character hash of the state dir
 
 ### Reinitializing a Pack
 
-`agent-pack init --id <id>` fails if the pack id already exists. To recreate a scratch pack, remove `.agent-pack/state/packs/<id>.json` and `.agent-pack/state/events/<id>.jsonl`, then run `agent-pack init --id <id> ...` again. Pack listings ignore stale index entries whose pack files were removed.
+`agent-pack init --create-id <id>` fails if the pack id already exists. To recreate a scratch pack, remove `.agent-pack/state/packs/<id>.json` and `.agent-pack/state/events/<id>.jsonl`, then run `agent-pack init --create-id <id> ...` again. Pack listings ignore stale index entries whose pack files were removed.
 
 ## Reusable Examples
 
@@ -1053,7 +1161,7 @@ default. Pass `--input create_branch=false` to keep planning in the existing
 tree, and optionally pass `--input slug=<slug>` when the agent should use a
 specific slug for branch and design artifact names.
 
-Use the generated id printed by `init`, or pass `--id <id>` when you want a deterministic pack id. Setting `AGENT_PACK_ID` before `init` also provides the pack id for that new pack.
+Use the generated id printed by `init`, or pass `--create-id <id>` when you want a deterministic pack id. Setting `AGENT_PACK_CREATE_ID` before `init` also provides the pack id for that new pack.
 
 To use examples as catalog refs, point the catalog config directory at the examples root:
 
