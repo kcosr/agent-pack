@@ -328,7 +328,8 @@ args:
     expect(result.stdout).toContain("- a001 [completed] fake");
     expect(result.stdout).toContain("Mode: captured");
     expect(result.stdout).toContain("fake agent stdout");
-    expect(result.stdout).toContain("Run agent-pack brief --id run-pack");
+    expect(result.stdout).toContain("Run agent-pack brief and follow the instructions");
+    expect(result.stdout).not.toContain("brief --id run-pack");
     expect(result.stdout).toContain("- t001 [completed] Inspect through fake agent");
 
     const json = await runCli(["run", "--id", "run-pack", "--json"], {

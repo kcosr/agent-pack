@@ -254,7 +254,8 @@ args:
       timedOut: false,
       stdoutTruncated: false,
     });
-    expect(result.run.stdout).toContain("Run agent-pack brief --id run-one-agent");
+    expect(result.run.stdout).toContain("Run agent-pack brief and follow the instructions");
+    expect(result.run.stdout).not.toContain("brief --id");
     expect(result.pack.agentRuns).toHaveLength(1);
     const events = await readEvents("run-one-agent");
     expect(events.at(-1)).toMatchObject({

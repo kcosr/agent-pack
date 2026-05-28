@@ -426,7 +426,7 @@ command: claude
 args: ["--print", "{prompt}"]
 ```
 
-`{prompt}` is the only supported template variable. It expands to a generated instruction that tells the subprocess to run `agent-pack brief --id <pack-id>` and follow the brief. Backend-specific flags such as model or effort belong in `args`.
+`{prompt}` is the only supported template variable. It expands to a generated instruction that tells the subprocess to run `agent-pack brief` and follow the brief. The subprocess receives `AGENT_PACK_ID`, so the brief and follow-up task commands can target the pack without explicit `--id` arguments. Backend-specific flags such as model or effort belong in `args`.
 
 By default, `run` captures the subprocess stdout, stores it in the pack's `agentRuns`, and prints the final `agent-pack report` output. Backend stderr is not streamed, stored, or rendered. With `--json`, `run` prints `{ pack, run }`.
 

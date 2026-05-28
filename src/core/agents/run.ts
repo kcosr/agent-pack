@@ -98,9 +98,9 @@ function spawnInteractiveAgent(input: {
   });
 }
 
-function agentPrompt(packId: string): string {
+function agentPrompt(_packId: string): string {
   const commandName = process.env.AGENT_PACK_CMD ?? "agent-pack";
-  return `Run ${commandName} brief --id ${packId} and follow the instructions. Update task status as you work. When finished, stop.`;
+  return `Run ${commandName} brief and follow the instructions. Update task status as you work. When finished, stop.`;
 }
 
 function expandAgentArg(value: string, prompt: string): string {
