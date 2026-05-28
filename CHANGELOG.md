@@ -4,8 +4,16 @@
 
 ### Breaking Changes
 
+- Changed pack creation identity to use `--create-id` and
+  `AGENT_PACK_CREATE_ID`; `--id` and `AGENT_PACK_ID` now only target existing
+  packs.
+
 ### Added
 
+- Added agent launch profiles, manifest/catalog agent composition, and
+  `agent-pack run` for executing one configured agent subprocess. Captured runs
+  record stdout in pack reports; interactive runs inherit terminal stdio and
+  record exit metadata only ([#7](https://github.com/kcosr/agent-pack/pull/7)).
 - Added `agent-pack reference add <ref>` and `agent-pack skill add <ref>` for
   additive pack composition after `init` ([#5](https://github.com/kcosr/agent-pack/pull/5)).
 - Added manifest `inputs`, repeatable `init --input key=value`, an `input`

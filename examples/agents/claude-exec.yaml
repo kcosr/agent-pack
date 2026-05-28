@@ -1,0 +1,9 @@
+name: claude-exec
+command: claude
+args:
+  - "--model"
+  - "claude-opus-4-7"
+  - "--effort"
+  - "xhigh"
+  - "-p"
+  - "{prompt}"

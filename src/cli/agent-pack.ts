@@ -10,6 +10,7 @@ import {
   addReference,
   addSkill,
   addTask,
+  agentNameCandidates,
   brief,
   catalogList,
   catalogPath,
@@ -23,6 +24,7 @@ import {
   listPacks,
   listTasks,
   report,
+  runPack,
   setInput,
   showTask,
   status,
@@ -40,9 +42,11 @@ import type {
   TaskStatus,
 } from "../core/types.js";
 import {
+  agentNameOption,
   catalogNameArgument,
   catalogRefArgument,
   catalogRefOption,
+  configureAgentCompletion,
   configureCompletionCommands,
   configureInputCompletion,
   inputNameArgument,
@@ -63,7 +67,11 @@ export function configureProgram(): Command {
     names: inputNameCandidates,
     values: inputValueCompletionCandidates,
   });
+  configureAgentCompletion({
+    names: agentNameCandidates,
+  });
   configureInitCommand(root);
+  configureRunCommand(root);
 
   root
     .command("brief")
@@ -188,88 +196,14 @@ export function configureProgram(): Command {
 function configureInitCommand(root: Command): void {
   const includes: InitInclude[] = [];
   const inputAssignments: string[] = [];
-  root
+  const command = root
     .command("init")
     .description("Create a pack.")
-    .option("--id <id>", "use a specific pack ID")
-    .option("--name <name>", "set a display name")
-    .option("--input <key=value>", "set a manifest input", collectString, inputAssignments)
-    .addOption(
-      catalogRefOption(
-        "--manifest <ref>",
-        "load a catalog, local, or git pack manifest YAML file",
-        "manifest",
-        collectInclude(includes, (ref) => ({ type: "manifest", ref })),
-      ),
-    )
-    .addOption(
-      catalogRefOption(
-        "--manifests <ref>",
-        "load a catalog, local, or git pack manifest YAML file",
-        "manifest",
-        collectInclude(includes, (ref) => ({ type: "manifest", ref })),
-      ),
-    )
-    .option(
-      "--instructions <path>",
-      "load raw instructions from a text or Markdown file",
-      collectInclude(includes, (path) => ({ type: "instructions", path })),
-      [],
-    )
-    .option(
-      "--add-task <text>",
-      "add one ad hoc task",
-      collectInclude(includes, (text) => ({ type: "adHocTask", text })),
-      [],
-    )
-    .addOption(
-      catalogRefOption(
-        "--task <ref>",
-        "add catalog, local, or git task YAML",
-        "task",
-        collectInclude(includes, (ref) => ({ type: "taskRef", ref })),
-      ),
-    )
-    .addOption(
-      catalogRefOption(
-        "--tasks <ref>",
-        "add catalog, local, or git task YAML",
-        "task",
-        collectInclude(includes, (ref) => ({ type: "taskRef", ref })),
-      ),
-    )
-    .addOption(
-      catalogRefOption(
-        "--reference <ref>",
-        "add catalog, local, URL, or git reference",
-        "reference",
-        collectInclude(includes, (ref) => ({ type: "reference", ref: { ref } })),
-      ),
-    )
-    .addOption(
-      catalogRefOption(
-        "--references <ref>",
-        "add catalog, local, URL, or git reference",
-        "reference",
-        collectInclude(includes, (ref) => ({ type: "reference", ref: { ref } })),
-      ),
-    )
-    .addOption(
-      catalogRefOption(
-        "--skill <ref>",
-        "add catalog, local, or git skill",
-        "skill",
-        collectInclude(includes, (ref) => ({ type: "skill", ref: { ref } })),
-      ),
-    )
-    .addOption(
-      catalogRefOption(
-        "--skills <ref>",
-        "add catalog, local, or git skill",
-        "skill",
-        collectInclude(includes, (ref) => ({ type: "skill", ref: { ref } })),
-      ),
-    )
+    .option("--create-id <id>", "use a specific ID for the new pack")
+    .option("--name <name>", "set a display name");
+
+  addCompositionOptions(command, includes, inputAssignments);
+  command
     .addOption(gitRefreshOption())
     .option("--state-dir <path>", "override the state directory")
     .option("--json", "emit machine-readable output")
@@ -277,7 +211,7 @@ function configureInitCommand(root: Command): void {
     .action(async (prompt, options) => {
       await run(async () => {
         const pack = await initPack({
-          id: options.id,
+          createId: options.createId,
           name: options.name,
           includes,
           inputAssignments: options.input,
@@ -294,6 +228,187 @@ function configureInitCommand(root: Command): void {
         }
       });
     });
+}
+
+function configureRunCommand(root: Command): void {
+  const includes: InitInclude[] = [];
+  const inputAssignments: string[] = [];
+  const command = root
+    .command("run")
+    .description("Run one configured agent against a pack.")
+    .option("--id <id>", "existing pack ID")
+    .option("--create-id <id>", "use a specific ID for the new pack")
+    .option("--name <name>", "set a display name for a new pack");
+
+  addCompositionOptions(command, includes, inputAssignments, " for a new pack");
+  command
+    .addOption(agentNameOption("--run-agent <name>", "stored agent name to execute"))
+    .addOption(gitRefreshOption())
+    .option("--state-dir <path>", "override the state directory")
+    .option("--interactive", "run the agent with inherited terminal stdio")
+    .option("--json", "emit machine-readable output")
+    .argument("[prompt]", "one-off prompt rendered at the top of a new pack brief")
+    .action(async (prompt, options) => {
+      await run(async () => {
+        const createInputs = hasCreateInputs(includes, inputAssignments, prompt, options);
+        if (options.id && createInputs) {
+          throw new AgentPackError("--id cannot be combined with create-and-run options");
+        }
+        if (options.interactive && options.json) {
+          throw new AgentPackError("--interactive cannot be combined with --json");
+        }
+        const result = await runPack({
+          packId: createInputs ? undefined : options.id,
+          runAgent: options.runAgent,
+          interactive: options.interactive,
+          stateDir: options.stateDir,
+          init: createInputs
+            ? {
+                createId: options.createId,
+                name: options.name,
+                includes,
+                inputAssignments: options.input,
+                prompt,
+                stateDir: options.stateDir,
+                gitRefresh: options.gitRefresh,
+                json: options.json,
+              }
+            : undefined,
+        });
+        if (options.json) {
+          printJson({ pack: result.pack, run: result.run });
+        } else if (options.interactive) {
+          // The child owned the terminal; keep post-run output silent.
+        } else {
+          process.stdout.write(renderReport(result.pack));
+        }
+        if (result.exitCode !== 0) {
+          process.exitCode = result.exitCode;
+        }
+      });
+    });
+}
+
+function addCompositionOptions(
+  command: Command,
+  includes: InitInclude[],
+  inputAssignments: string[],
+  descriptionSuffix = "",
+): void {
+  command
+    .option(
+      "--input <key=value>",
+      `set a manifest input${descriptionSuffix}`,
+      collectString,
+      inputAssignments,
+    )
+    .addOption(
+      catalogRefOption(
+        "--manifest <ref>",
+        `load a catalog, local, or git pack manifest YAML file${descriptionSuffix}`,
+        "manifest",
+        collectInclude(includes, (ref) => ({ type: "manifest", ref })),
+      ),
+    )
+    .addOption(
+      catalogRefOption(
+        "--manifests <ref>",
+        `load a catalog, local, or git pack manifest YAML file${descriptionSuffix}`,
+        "manifest",
+        collectInclude(includes, (ref) => ({ type: "manifest", ref })),
+      ),
+    )
+    .option(
+      "--instructions <path>",
+      `load raw instructions from a text or Markdown file${descriptionSuffix}`,
+      collectInclude(includes, (path) => ({ type: "instructions", path })),
+      [],
+    )
+    .option(
+      "--add-task <text>",
+      `add one ad hoc task${descriptionSuffix}`,
+      collectInclude(includes, (text) => ({ type: "adHocTask", text })),
+      [],
+    )
+    .addOption(
+      catalogRefOption(
+        "--task <ref>",
+        `add catalog, local, or git task YAML${descriptionSuffix}`,
+        "task",
+        collectInclude(includes, (ref) => ({ type: "taskRef", ref })),
+      ),
+    )
+    .addOption(
+      catalogRefOption(
+        "--tasks <ref>",
+        `add catalog, local, or git task YAML${descriptionSuffix}`,
+        "task",
+        collectInclude(includes, (ref) => ({ type: "taskRef", ref })),
+      ),
+    )
+    .addOption(
+      catalogRefOption(
+        "--reference <ref>",
+        `add catalog, local, URL, or git reference${descriptionSuffix}`,
+        "reference",
+        collectInclude(includes, (ref) => ({ type: "reference", ref: { ref } })),
+      ),
+    )
+    .addOption(
+      catalogRefOption(
+        "--references <ref>",
+        `add catalog, local, URL, or git reference${descriptionSuffix}`,
+        "reference",
+        collectInclude(includes, (ref) => ({ type: "reference", ref: { ref } })),
+      ),
+    )
+    .addOption(
+      catalogRefOption(
+        "--skill <ref>",
+        `add catalog, local, or git skill${descriptionSuffix}`,
+        "skill",
+        collectInclude(includes, (ref) => ({ type: "skill", ref: { ref } })),
+      ),
+    )
+    .addOption(
+      catalogRefOption(
+        "--skills <ref>",
+        `add catalog, local, or git skill${descriptionSuffix}`,
+        "skill",
+        collectInclude(includes, (ref) => ({ type: "skill", ref: { ref } })),
+      ),
+    )
+    .addOption(
+      catalogRefOption(
+        "--agent <ref>",
+        `add a catalog, local, or git agent definition${descriptionSuffix}`,
+        "agent",
+        collectInclude(includes, (ref) => ({ type: "agentRef", ref })),
+      ),
+    )
+    .addOption(
+      catalogRefOption(
+        "--agents <ref>",
+        `add a catalog, local, or git agent definition${descriptionSuffix}`,
+        "agent",
+        collectInclude(includes, (ref) => ({ type: "agentRef", ref })),
+      ),
+    );
+}
+
+function hasCreateInputs(
+  includes: InitInclude[],
+  inputAssignments: string[],
+  prompt: string | undefined,
+  options: { name?: string; createId?: string },
+): boolean {
+  return (
+    includes.length > 0 ||
+    inputAssignments.length > 0 ||
+    Boolean(prompt) ||
+    Boolean(options.name) ||
+    Boolean(options.createId)
+  );
 }
 
 function configureTaskCommands(root: Command): void {
@@ -663,6 +778,7 @@ function renderSystemStatus(result: SystemStatus): string {
     `Event dir: ${result.eventDir}`,
     `Index: ${result.indexPath}`,
     `Default pack id: ${result.defaultPackId ?? "(unset)"}`,
+    `Default create id: ${result.defaultCreateId ?? "(unset)"}`,
     "",
   ].join("\n");
 }
@@ -675,6 +791,7 @@ function statusJson(pack: PackState) {
     tasks: pack.taskCounts,
     references: pack.references.length,
     skills: pack.skills.length,
+    agents: pack.agents?.length ?? 0,
   };
 }
 

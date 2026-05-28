@@ -66,7 +66,7 @@ describe("agent-pack CLI git smoke", () => {
     await runCli(
       [
         "init",
-        "--id",
+        "--create-id",
         "feature-design",
         "--manifest",
         "feature-design-summary",
@@ -86,7 +86,7 @@ describe("agent-pack CLI git smoke", () => {
     await runCli(
       [
         "init",
-        "--id",
+        "--create-id",
         "feature-design-default",
         "--manifest",
         "feature-design-summary",
@@ -136,7 +136,7 @@ references:
     await runCli(
       [
         "init",
-        "--id",
+        "--create-id",
         "ordered-cli",
         "--add-task",
         "Before manifest task",
@@ -167,7 +167,7 @@ references:
   it("updates tasks through the task command group", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-task-smoke-"));
 
-    await runCli(["init", "--id", "task-pack", "--add-task", "Inspect task commands"], {
+    await runCli(["init", "--create-id", "task-pack", "--add-task", "Inspect task commands"], {
       cwd: workspace,
     });
 
@@ -276,6 +276,137 @@ references:
     expect(oldSyncAll.stderr).toContain("unknown option '--all'");
   });
 
+  it("runs a configured agent and prints the final report", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-run-smoke-"));
+    const cliPath = path.resolve("dist/cli/main.js");
+    await writeFile(
+      path.join(workspace, "fake-agent.mjs"),
+      `import { execFileSync } from "node:child_process";
+
+const cli = process.env.FAKE_AGENT_PACK_BIN;
+if (!cli) throw new Error("missing FAKE_AGENT_PACK_BIN");
+execFileSync(process.execPath, [
+  cli,
+  "task",
+  "done",
+  "t001",
+  "--id",
+  process.env.AGENT_PACK_ID,
+  "--note",
+  "agent completed task",
+], { env: process.env, stdio: "ignore" });
+process.stdout.write("fake agent stdout\\n");
+process.stdout.write(process.argv[2]);
+`,
+    );
+    await writeFile(
+      path.join(workspace, "agent.yaml"),
+      `name: fake
+command: ${JSON.stringify(process.execPath)}
+args:
+  - ./fake-agent.mjs
+  - "{prompt}"
+`,
+    );
+
+    const result = await runCli(
+      [
+        "run",
+        "--create-id",
+        "run-pack",
+        "--agent",
+        "./agent.yaml",
+        "--add-task",
+        "Inspect through fake agent",
+      ],
+      { cwd: workspace, env: { FAKE_AGENT_PACK_BIN: cliPath } },
+    );
+
+    expect(result.stdout).toContain("Pack: run-pack");
+    expect(result.stdout).toContain("Status: completed");
+    expect(result.stdout).toContain("Agent Runs:");
+    expect(result.stdout).toContain("- a001 [completed] fake");
+    expect(result.stdout).toContain("Mode: captured");
+    expect(result.stdout).toContain("fake agent stdout");
+    expect(result.stdout).toContain("Run agent-pack brief and follow the instructions");
+    expect(result.stdout).not.toContain("brief --id run-pack");
+    expect(result.stdout).toContain("- t001 [completed] Inspect through fake agent");
+
+    const json = await runCli(["run", "--id", "run-pack", "--json"], {
+      cwd: workspace,
+      env: { FAKE_AGENT_PACK_BIN: cliPath },
+    });
+    const parsed = JSON.parse(json.stdout);
+    expect(parsed.run).toMatchObject({
+      id: "a002",
+      agent: "fake",
+      mode: "captured",
+      status: "completed",
+    });
+    expect(parsed.run.stdout).toContain("fake agent stdout");
+    expect(parsed.pack.agentRuns).toHaveLength(2);
+  });
+
+  it("runs an interactive agent with inherited stdio and no post-run report", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-interactive-smoke-"));
+    await writeFile(
+      path.join(workspace, "interactive-agent.yaml"),
+      `name: interactive
+command: bash
+args:
+  - -lc
+  - |
+    printf 'interactive stdout\\n'
+    printf 'interactive stderr\\n' >&2
+    IFS= read -r line
+    printf 'got:%s\\n' "$line"
+`,
+    );
+
+    const result = await runCli(
+      [
+        "run",
+        "--create-id",
+        "interactive-pack",
+        "--agent",
+        "./interactive-agent.yaml",
+        "--add-task",
+        "Inspect interactive mode",
+        "--interactive",
+      ],
+      { cwd: workspace, input: "hello from user\n" },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.replace(/\r\n/g, "\n")).toBe("interactive stdout\ngot:hello from user\n");
+    expect(result.stderr.replace(/\r\n/g, "\n")).toBe("interactive stderr\n");
+    expect(result.stdout).not.toContain("Pack:");
+    expect(result.stdout).not.toContain("Agent Runs:");
+
+    const report = await runCli(["report", "--id", "interactive-pack", "--json"], {
+      cwd: workspace,
+    });
+    const parsed = JSON.parse(report.stdout);
+    expect(parsed.agentRuns).toHaveLength(1);
+    expect(parsed.agentRuns[0]).toMatchObject({
+      id: "a001",
+      agent: "interactive",
+      mode: "interactive",
+      status: "completed",
+      exitCode: 0,
+      timedOut: false,
+      stdout: "",
+      stdoutTruncated: false,
+    });
+
+    const jsonMode = await runCli(["run", "--id", "interactive-pack", "--interactive", "--json"], {
+      cwd: workspace,
+      reject: false,
+    });
+    expect(jsonMode.exitCode).toBe(1);
+    expect(jsonMode.stderr).toContain("--interactive cannot be combined with --json");
+  });
+
   it("captures inputs, unlocks conditional tasks, and completes input names", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-input-smoke-"));
     await writeFile(
@@ -309,7 +440,15 @@ tasks:
     );
 
     await runCli(
-      ["init", "--id", "input-pack", "--manifest", "./pack.yaml", "--input", "scope=auth changes"],
+      [
+        "init",
+        "--create-id",
+        "input-pack",
+        "--manifest",
+        "./pack.yaml",
+        "--input",
+        "scope=auth changes",
+      ],
       { cwd: workspace },
     );
 
@@ -397,7 +536,7 @@ tasks:
       "---\nname: review\ndescription: Review skill.\n---\n",
     );
 
-    await runCli(["init", "--id", "compose-pack", "Compose later."], { cwd: workspace });
+    await runCli(["init", "--create-id", "compose-pack", "Compose later."], { cwd: workspace });
 
     const reference = await runCli(["reference", "add", "./docs/api.md", "--id", "compose-pack"], {
       cwd: workspace,
@@ -432,7 +571,7 @@ tasks:
   it("adds ad hoc tasks through the task add command", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-task-add-smoke-"));
 
-    await runCli(["init", "--id", "task-add-pack", "--add-task", "Original task"], {
+    await runCli(["init", "--create-id", "task-add-pack", "--add-task", "Original task"], {
       cwd: workspace,
     });
 
@@ -839,7 +978,7 @@ skills:
     const init = await runCli(
       [
         "init",
-        "--id",
+        "--create-id",
         "git-pack",
         "--manifest",
         `git+${remoteUrl}//pack.yaml#main`,
@@ -986,7 +1125,7 @@ skills:
       const init = await runCli(
         [
           "init",
-          "--id",
+          "--create-id",
           "live-git-pack",
           "--reference",
           `git+${repo}`,
@@ -1022,7 +1161,7 @@ skills:
     const init = await runCli(
       [
         "init",
-        "--id",
+        "--create-id",
         "symlink-pack",
         "--reference",
         `git+file://${remote}#main`,

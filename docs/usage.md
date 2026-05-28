@@ -28,7 +28,7 @@ export AGENT_PACK_ID=<generated-id>
 agent-pack brief
 ```
 
-`init` uses `--id` when provided, then `AGENT_PACK_ID` when set, and otherwise generates an id from the pack name plus a short random suffix.
+`init` uses `--create-id` when provided, then `AGENT_PACK_CREATE_ID` when set, and otherwise generates an id from the pack name plus a short random suffix. `--id` and `AGENT_PACK_ID` target existing packs.
 
 List packs in the current state directory:
 
@@ -59,6 +59,37 @@ agent-pack report
 
 `task start`, `task note`, `task done`, and `task block` print compact task-count confirmations. `task show`, `summary`, and `report` print text for humans and agents by default. Use `task add <title> --json`, `task show <task-id> --json`, `summary --json`, or `report --json` for scripts that need saved state objects.
 
+To let `agent-pack` launch a configured agent subprocess, add an agent definition and use `run`:
+
+```yaml
+agents:
+  - name: claude
+    command: claude
+    args: ["--print", "{prompt}"]
+```
+
+```bash
+agent-pack run --manifest ./pack.yaml --run-agent claude "Review scope: unstaged changes."
+agent-pack run --id <existing-pack-id> --run-agent claude
+```
+
+If a pack has exactly one stored agent, `--run-agent` can be omitted. Captured `run` executions capture agent stdout, record it in `agentRuns`, and print the final report. Backend stderr is not streamed or stored.
+
+For an interactive backend session, use an agent definition whose args start the backend interactively and pass `--interactive`:
+
+```yaml
+agents:
+  - name: claude-interactive
+    command: claude
+    args: ["--model", "claude-opus-4-7", "--effort", "xhigh", "{prompt}"]
+```
+
+```bash
+agent-pack run --id <existing-pack-id> --run-agent claude-interactive --interactive
+```
+
+Interactive runs inherit terminal stdin/stdout/stderr, do not capture output, ignore `timeoutSec`, do not support `--json`, and print nothing after the backend exits. They still record exit metadata in `agentRuns`.
+
 Inspect resolved paths and defaults:
 
 ```bash
@@ -76,6 +107,7 @@ Use these flags with `agent-pack init`:
 - `--task <ref>`: catalog task, local task YAML file, glob, or git-backed task file
 - `--reference <ref>`: catalog reference, local file, directory, glob, HTTP/HTTPS URL, git path, or whole git repo
 - `--skill <ref>`: catalog skill, local `SKILL.md` file, directory scan, glob, or git-backed skill source
+- `--agent <ref>`: catalog, local, or git-backed agent definition
 - `--instructions <path>`: raw text instructions file
 
 After a pack exists, use additive commands to compose it further:
@@ -92,7 +124,7 @@ agent-pack input set severity high
 
 `task add` accepts optional `--category`, `--body`, repeatable `--done-when`, and `--json`. `reference add` and `skill add` accept the same ref formats as `init --reference` and `init --skill`, infer names and descriptions from the existing resolvers, skip sources already present in the pack, and support `--git-refresh auto|always|never` plus `--json`. `input set` validates against the stored manifest schema and unlocks conditional tasks whose `when` clauses are satisfied.
 
-Manifest `tasks`, `references`, and `skills` arrays can use the same refs as these CLI flags:
+Manifest `tasks`, `references`, `skills`, and `agents` arrays can use the same refs as these CLI flags:
 
 ```yaml
 tasks:
@@ -110,6 +142,11 @@ references:
 skills:
   - engineering/fresh-eyes
   - ./skills
+agents:
+  - ./agents/claude.yaml
+  - name: local-claude
+    command: claude
+    args: ["--print", "{prompt}"]
 ```
 
 Manifest `inputs` can declare required values and defaults:
