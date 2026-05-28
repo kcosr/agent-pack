@@ -20,6 +20,7 @@ import { derivePackStatus, taskCounts } from "./status.js";
 const packStatuses = new Set(["no_tasks", "pending", "in_progress", "blocked", "completed"]);
 const taskStatuses = new Set<TaskStatus>(["pending", "in_progress", "blocked", "completed"]);
 const agentRunStatuses = new Set(["completed", "failed", "timed_out", "signaled"]);
+const agentRunModes = new Set(["captured", "interactive"]);
 const taskFields = new Set([
   "id",
   "sourceId",
@@ -51,6 +52,7 @@ const agentFields = new Set(["name", "command", "args", "timeoutSec", "source"])
 const agentRunFields = new Set([
   "id",
   "agent",
+  "mode",
   "status",
   "startedAt",
   "endedAt",
@@ -516,6 +518,9 @@ function validatePackAgentRuns(value: unknown, filePath: string): void {
     validateKnownFields(run, agentRunFields, `agentRuns[${index}]`, filePath);
     validateRequiredString(run.id, `agentRuns[${index}].id`, filePath);
     validateRequiredString(run.agent, `agentRuns[${index}].agent`, filePath);
+    if (typeof run.mode !== "string" || !agentRunModes.has(run.mode)) {
+      throw new AgentPackError(`invalid pack agent run mode at index ${index}: ${filePath}`);
+    }
     if (typeof run.status !== "string" || !agentRunStatuses.has(run.status)) {
       throw new AgentPackError(`invalid pack agent run status at index ${index}: ${filePath}`);
     }

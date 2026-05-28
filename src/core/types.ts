@@ -6,6 +6,7 @@ export type PackInputValue = string | number | boolean;
 export type InputSource = "cli" | "default" | "set";
 export type TaskActivation = "active" | "locked";
 export type PackAgentRunStatus = "completed" | "failed" | "timed_out" | "signaled";
+export type PackAgentRunMode = "captured" | "interactive";
 export type TaskWhen = string | Record<string, TaskWhenCondition>;
 export type TaskWhenCondition =
   | string
@@ -98,6 +99,7 @@ export interface PackAgent {
 export interface PackAgentRun {
   id: string;
   agent: string;
+  mode: PackAgentRunMode;
   status: PackAgentRunStatus;
   startedAt: string;
   endedAt?: string;

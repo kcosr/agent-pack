@@ -326,6 +326,7 @@ args:
     expect(result.stdout).toContain("Status: completed");
     expect(result.stdout).toContain("Agent Runs:");
     expect(result.stdout).toContain("- a001 [completed] fake");
+    expect(result.stdout).toContain("Mode: captured");
     expect(result.stdout).toContain("fake agent stdout");
     expect(result.stdout).toContain("Run agent-pack brief --id run-pack");
     expect(result.stdout).toContain("- t001 [completed] Inspect through fake agent");
@@ -335,9 +336,74 @@ args:
       env: { FAKE_AGENT_PACK_BIN: cliPath },
     });
     const parsed = JSON.parse(json.stdout);
-    expect(parsed.run).toMatchObject({ id: "a002", agent: "fake", status: "completed" });
+    expect(parsed.run).toMatchObject({
+      id: "a002",
+      agent: "fake",
+      mode: "captured",
+      status: "completed",
+    });
     expect(parsed.run.stdout).toContain("fake agent stdout");
     expect(parsed.pack.agentRuns).toHaveLength(2);
+  });
+
+  it("runs an interactive agent with inherited stdio and no post-run report", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-interactive-smoke-"));
+    await writeFile(
+      path.join(workspace, "interactive-agent.yaml"),
+      `name: interactive
+command: bash
+args:
+  - -lc
+  - |
+    printf 'interactive stdout\\n'
+    printf 'interactive stderr\\n' >&2
+    IFS= read -r line
+    printf 'got:%s\\n' "$line"
+`,
+    );
+
+    const result = await runCli(
+      [
+        "run",
+        "--create-id",
+        "interactive-pack",
+        "--agent",
+        "./interactive-agent.yaml",
+        "--add-task",
+        "Inspect interactive mode",
+        "--interactive",
+      ],
+      { cwd: workspace, input: "hello from user\n" },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.replace(/\r\n/g, "\n")).toBe("interactive stdout\ngot:hello from user\n");
+    expect(result.stderr.replace(/\r\n/g, "\n")).toBe("interactive stderr\n");
+    expect(result.stdout).not.toContain("Pack:");
+    expect(result.stdout).not.toContain("Agent Runs:");
+
+    const report = await runCli(["report", "--id", "interactive-pack", "--json"], {
+      cwd: workspace,
+    });
+    const parsed = JSON.parse(report.stdout);
+    expect(parsed.agentRuns).toHaveLength(1);
+    expect(parsed.agentRuns[0]).toMatchObject({
+      id: "a001",
+      agent: "interactive",
+      mode: "interactive",
+      status: "completed",
+      exitCode: 0,
+      timedOut: false,
+      stdout: "",
+      stdoutTruncated: false,
+    });
+
+    const jsonMode = await runCli(["run", "--id", "interactive-pack", "--interactive", "--json"], {
+      cwd: workspace,
+      reject: false,
+    });
+    expect(jsonMode.exitCode).toBe(1);
+    expect(jsonMode.stderr).toContain("--interactive cannot be combined with --json");
   });
 
   it("captures inputs, unlocks conditional tasks, and completes input names", async () => {

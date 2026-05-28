@@ -11,8 +11,9 @@
 ### Added
 
 - Added agent launch profiles, manifest/catalog agent composition, and
-  `agent-pack run` for executing one configured agent subprocess and recording
-  captured stdout in pack reports.
+  `agent-pack run` for executing one configured agent subprocess. Captured runs
+  record stdout in pack reports; interactive runs inherit terminal stdio and
+  record exit metadata only.
 - Added `agent-pack reference add <ref>` and `agent-pack skill add <ref>` for
   additive pack composition after `init` ([#5](https://github.com/kcosr/agent-pack/pull/5)).
 - Added manifest `inputs`, repeatable `init --input key=value`, an `input`

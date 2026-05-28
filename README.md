@@ -2,7 +2,7 @@
 
 `agent-pack` pre-packs context for coding agents: references to read, supplemental skills to apply, instructions to follow, agent launch profiles to use, and executable task lists that keep the work on track.
 
-`agent-pack` can be used passively or actively. In passive workflows, it prepares the work, renders the agent-facing brief, and records task progress while you run your agent CLI separately. In active workflows, `agent-pack run` starts one configured agent subprocess, captures its stdout, records the run, and prints the final pack report.
+`agent-pack` can be used passively or actively. In passive workflows, it prepares the work, renders the agent-facing brief, and records task progress while you run your agent CLI separately. In active workflows, `agent-pack run` starts one configured agent subprocess. Captured runs store stdout and print the final pack report; interactive runs inherit your terminal and record exit metadata only.
 
 ## Quick Start
 
@@ -263,7 +263,7 @@ Review the changed files again before finalizing.
 
 Agents are named subprocess launch profiles used by `agent-pack run`. They are optional: packs can still be used passively with `agent-pack brief`, task commands, and report commands.
 
-Agent names must be unique within a pack because `--run-agent <name>` selects one stored launch profile. Agent args are user-controlled; `agent-pack` only expands `{prompt}`, spawns the command, captures stdout, records the run, and prints the final pack report.
+Agent names must be unique within a pack because `--run-agent <name>` selects one stored launch profile. Agent args are user-controlled; `agent-pack` only expands `{prompt}`, spawns the command, and records the run.
 
 ```yaml
 name: claude
@@ -428,7 +428,21 @@ args: ["--print", "{prompt}"]
 
 `{prompt}` is the only supported template variable. It expands to a generated instruction that tells the subprocess to run `agent-pack brief --id <pack-id>` and follow the brief. Backend-specific flags such as model or effort belong in `args`.
 
-`run` captures the subprocess stdout, stores it in the pack's `agentRuns`, and prints the final `agent-pack report` output. Backend stderr is not streamed, stored, or rendered. With `--json`, `run` prints `{ pack, run }`.
+By default, `run` captures the subprocess stdout, stores it in the pack's `agentRuns`, and prints the final `agent-pack report` output. Backend stderr is not streamed, stored, or rendered. With `--json`, `run` prints `{ pack, run }`.
+
+For an interactive backend session, pass `--interactive` and use an agent definition whose args start the backend in interactive mode:
+
+```bash
+agent-pack run --id reviewer-001 --run-agent claude-interactive --interactive
+```
+
+```yaml
+name: claude-interactive
+command: claude
+args: ["--model", "claude-opus-4-7", "--effort", "xhigh", "{prompt}"]
+```
+
+Interactive runs inherit stdin, stdout, and stderr from the current terminal. They do not capture output, do not apply `timeoutSec`, do not support `--json`, and do not print a pack report after the backend exits. They still append an `agentRuns` entry with mode, status, exit code, signal, and timestamps.
 
 ### `brief`
 
@@ -897,7 +911,7 @@ agents:
 
 ### Agent Files
 
-`--agent` and `--agents` load standalone YAML agent files. Agent objects use these fields: `name`, `command`, `args`, and `timeoutSec`.
+`--agent` and `--agents` load standalone YAML agent files. Agent objects use these fields: `name`, `command`, `args`, and `timeoutSec`. `timeoutSec` applies only to captured runs; it is ignored for `run --interactive`.
 
 An agent file may contain one agent object:
 

@@ -245,6 +245,7 @@ function configureRunCommand(root: Command): void {
     .addOption(agentNameOption("--run-agent <name>", "stored agent name to execute"))
     .addOption(gitRefreshOption())
     .option("--state-dir <path>", "override the state directory")
+    .option("--interactive", "run the agent with inherited terminal stdio")
     .option("--json", "emit machine-readable output")
     .argument("[prompt]", "one-off prompt rendered at the top of a new pack brief")
     .action(async (prompt, options) => {
@@ -253,9 +254,13 @@ function configureRunCommand(root: Command): void {
         if (options.id && createInputs) {
           throw new AgentPackError("--id cannot be combined with create-and-run options");
         }
+        if (options.interactive && options.json) {
+          throw new AgentPackError("--interactive cannot be combined with --json");
+        }
         const result = await runPack({
           packId: createInputs ? undefined : options.id,
           runAgent: options.runAgent,
+          interactive: options.interactive,
           stateDir: options.stateDir,
           init: createInputs
             ? {
@@ -272,6 +277,8 @@ function configureRunCommand(root: Command): void {
         });
         if (options.json) {
           printJson({ pack: result.pack, run: result.run });
+        } else if (options.interactive) {
+          // The child owned the terminal; keep post-run output silent.
         } else {
           process.stdout.write(renderReport(result.pack));
         }

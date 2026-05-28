@@ -248,6 +248,7 @@ args:
     expect(result.run).toMatchObject({
       id: "a001",
       agent: "echo-agent",
+      mode: "captured",
       status: "completed",
       exitCode: 0,
       timedOut: false,
@@ -258,7 +259,64 @@ args:
     const events = await readEvents("run-one-agent");
     expect(events.at(-1)).toMatchObject({
       type: "agent.run",
-      data: { runId: "a001", agent: "echo-agent", status: "completed", exitCode: 0 },
+      data: {
+        runId: "a001",
+        agent: "echo-agent",
+        mode: "captured",
+        status: "completed",
+        exitCode: 0,
+      },
+    });
+  });
+
+  it("runs interactive agents without timeout or output capture", async () => {
+    await writeFile(
+      "agent.yaml",
+      nodeAgentYaml("interactive-agent", "setTimeout(() => process.exit(0), 150)", "timeoutSec: 1"),
+    );
+    await initPack({
+      createId: "interactive-agent-pack",
+      includes: [{ type: "agentRef", ref: "./agent.yaml" }],
+      gitRefresh: "auto",
+    });
+
+    const result = await runPack({ packId: "interactive-agent-pack", interactive: true });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.run).toMatchObject({
+      id: "a001",
+      agent: "interactive-agent",
+      mode: "interactive",
+      status: "completed",
+      exitCode: 0,
+      signal: null,
+      timedOut: false,
+      stdout: "",
+      stdoutTruncated: false,
+    });
+    expect(result.pack.agentRuns?.[0]).toMatchObject({
+      mode: "interactive",
+      stdout: "",
+      stdoutTruncated: false,
+    });
+  });
+
+  it("returns interactive agent exit codes", async () => {
+    await writeFile("agent.yaml", nodeAgentYaml("interactive-fail-agent", "process.exit(7)"));
+    await initPack({
+      createId: "interactive-fail-pack",
+      includes: [{ type: "agentRef", ref: "./agent.yaml" }],
+      gitRefresh: "auto",
+    });
+
+    const result = await runPack({ packId: "interactive-fail-pack", interactive: true });
+
+    expect(result.exitCode).toBe(7);
+    expect(result.run).toMatchObject({
+      mode: "interactive",
+      status: "failed",
+      exitCode: 7,
+      stdout: "",
     });
   });
 

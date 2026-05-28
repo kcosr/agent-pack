@@ -276,6 +276,7 @@ export function renderReport(pack: PackState): string {
 
 function formatAgentRunReportEntry(run: PackAgentRun): string {
   const lines = [`- ${run.id} [${run.status}] ${run.agent}`, `  Started: ${run.startedAt}`];
+  lines.push(`  Mode: ${run.mode}`);
   if (run.endedAt) {
     lines.push(`  Ended: ${run.endedAt}`);
   }

@@ -73,7 +73,22 @@ agent-pack run --manifest ./pack.yaml --run-agent claude "Review scope: unstaged
 agent-pack run --id <existing-pack-id> --run-agent claude
 ```
 
-If a pack has exactly one stored agent, `--run-agent` can be omitted. `run` captures agent stdout, records it in `agentRuns`, and prints the final report. Backend stderr is not streamed or stored.
+If a pack has exactly one stored agent, `--run-agent` can be omitted. Captured `run` executions capture agent stdout, record it in `agentRuns`, and print the final report. Backend stderr is not streamed or stored.
+
+For an interactive backend session, use an agent definition whose args start the backend interactively and pass `--interactive`:
+
+```yaml
+agents:
+  - name: claude-interactive
+    command: claude
+    args: ["--model", "claude-opus-4-7", "--effort", "xhigh", "{prompt}"]
+```
+
+```bash
+agent-pack run --id <existing-pack-id> --run-agent claude-interactive --interactive
+```
+
+Interactive runs inherit terminal stdin/stdout/stderr, do not capture output, ignore `timeoutSec`, do not support `--json`, and print nothing after the backend exits. They still record exit metadata in `agentRuns`.
 
 Inspect resolved paths and defaults:
 

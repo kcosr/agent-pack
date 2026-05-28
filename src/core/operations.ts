@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { rm } from "node:fs/promises";
+import { constants as osConstants } from "node:os";
 import path from "node:path";
 import fg from "fast-glob";
 import { loadAgents } from "./agents/load.js";
@@ -653,6 +654,7 @@ export interface RunPackInput {
   packId?: string;
   init?: InitInput;
   runAgent?: string;
+  interactive?: boolean;
   stateDir?: string;
 }
 
@@ -669,17 +671,20 @@ export async function runPack(input: RunPackInput): Promise<RunPackResult> {
   const store = new StateStore({ stateDir: input.init?.stateDir ?? input.stateDir });
   await validateCachePaths(pack, store.paths);
   const agent = selectAgent(pack, input.runAgent);
+  const mode = input.interactive ? "interactive" : "captured";
   const runId = nextAgentRunId(pack.agentRuns ?? []);
   const startedAt = new Date().toISOString();
   const result = await runAgentProcess({
     agent,
     packId: pack.id,
     stateDir: store.paths.stateDir,
+    mode,
   });
   const endedAt = new Date().toISOString();
   const run: PackAgentRun = {
     id: runId,
     agent: agent.name,
+    mode,
     status: agentRunStatus(result),
     startedAt,
     endedAt,
@@ -698,13 +703,34 @@ export async function runPack(input: RunPackInput): Promise<RunPackResult> {
     {
       runId,
       agent: agent.name,
+      mode: run.mode,
       status: run.status,
       exitCode: run.exitCode,
       signal: run.signal,
       timedOut: run.timedOut,
     },
   );
-  return { pack: updated, run, exitCode: run.status === "completed" ? 0 : 1 };
+  return { pack: updated, run, exitCode: runPackExitCode(run, result, mode) };
+}
+
+function runPackExitCode(
+  run: PackAgentRun,
+  result: Awaited<ReturnType<typeof runAgentProcess>>,
+  mode: PackAgentRun["mode"],
+): number {
+  if (run.status === "completed") {
+    return 0;
+  }
+  if (mode === "interactive") {
+    if (typeof result.exitCode === "number") {
+      return result.exitCode;
+    }
+    const signalNumber = result.signal ? osConstants.signals[result.signal] : undefined;
+    if (typeof signalNumber === "number") {
+      return 128 + signalNumber;
+    }
+  }
+  return 1;
 }
 
 export async function validateCachePaths(pack: PackState, paths: RuntimePaths): Promise<void> {

@@ -172,6 +172,7 @@ describe("brief rendering", () => {
           {
             id: "a001",
             agent: "local-agent",
+            mode: "interactive",
             status: "signaled",
             startedAt: "2026-05-07T00:00:00.000Z",
             endedAt: "2026-05-07T00:00:01.000Z",
@@ -186,6 +187,7 @@ describe("brief rendering", () => {
     );
 
     expect(renderedReport).toContain("Agent Runs:");
+    expect(renderedReport).toContain("Mode: interactive");
     expect(renderedReport).toContain("Signal: SIGTERM");
     expect(renderedReport).not.toContain("Exit code: null");
   });

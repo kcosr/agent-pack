@@ -11,6 +11,8 @@ export interface AgentProcessResult {
   spawnError?: string;
 }
 
+export type AgentRunMode = "captured" | "interactive";
+
 const STDOUT_LIMIT_BYTES = 64 * 1024;
 const KILL_GRACE_MS = 5_000;
 
@@ -18,15 +20,81 @@ export async function runAgentProcess(input: {
   agent: PackAgent;
   packId: string;
   stateDir?: string;
+  mode?: AgentRunMode;
 }): Promise<AgentProcessResult> {
   const prompt = agentPrompt(input.packId);
   const args = input.agent.args.map((arg) => expandAgentArg(arg, prompt));
+  if (input.mode === "interactive") {
+    return spawnInteractiveAgent({
+      command: input.agent.command,
+      args,
+      packId: input.packId,
+      stateDir: input.stateDir,
+    });
+  }
   return spawnAgent({
     command: input.agent.command,
     args,
     timeoutSec: input.agent.timeoutSec,
     packId: input.packId,
     stateDir: input.stateDir,
+  });
+}
+
+function spawnInteractiveAgent(input: {
+  command: string;
+  args: string[];
+  packId: string;
+  stateDir?: string;
+}): Promise<AgentProcessResult> {
+  return new Promise((resolve) => {
+    let child: ChildProcess;
+    try {
+      child = spawn(input.command, input.args, {
+        env: childEnv(input.packId, input.stateDir),
+        stdio: "inherit",
+      });
+    } catch (error) {
+      resolve({
+        exitCode: null,
+        signal: null,
+        timedOut: false,
+        stdout: "",
+        stdoutTruncated: false,
+        spawnError: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
+
+    let settled = false;
+    const finish = (result: AgentProcessResult) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(result);
+    };
+
+    child.on("error", (error) => {
+      finish({
+        exitCode: null,
+        signal: null,
+        timedOut: false,
+        stdout: "",
+        stdoutTruncated: false,
+        spawnError: error.message,
+      });
+    });
+
+    child.on("close", (exitCode, signal) => {
+      finish({
+        exitCode,
+        signal,
+        timedOut: false,
+        stdout: "",
+        stdoutTruncated: false,
+      });
+    });
   });
 }
 
