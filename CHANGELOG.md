@@ -7,7 +7,8 @@
 ### Added
 
 - Added `maxAttempts` for captured agent runs so failed or incomplete unblocked
-  packs can retry with a remaining-task reminder.
+  packs can retry with a remaining-task reminder
+  ([#9](https://github.com/kcosr/agent-pack/pull/9)).
 
 ### Changed
 
