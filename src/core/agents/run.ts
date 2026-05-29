@@ -21,8 +21,9 @@ export async function runAgentProcess(input: {
   packId: string;
   stateDir?: string;
   mode?: AgentRunMode;
+  prompt?: string;
 }): Promise<AgentProcessResult> {
-  const prompt = agentPrompt(input.packId);
+  const prompt = input.prompt ?? agentPrompt();
   const args = input.agent.args.map((arg) => expandAgentArg(arg, prompt));
   if (input.mode === "interactive") {
     return spawnInteractiveAgent({
@@ -98,18 +99,17 @@ function spawnInteractiveAgent(input: {
   });
 }
 
-function agentPrompt(_packId: string): string {
+export function agentPrompt(): string {
   const commandName = process.env.AGENT_PACK_CMD ?? "agent-pack";
   return `Run ${commandName} brief and follow the instructions. Update task status as you work. When finished, stop.`;
 }
 
 function expandAgentArg(value: string, prompt: string): string {
-  const expanded = value.replaceAll("{prompt}", prompt);
-  const unknown = /\{[A-Za-z][A-Za-z0-9_]*\}/.exec(expanded);
+  const unknown = /\{[A-Za-z][A-Za-z0-9_]*\}/.exec(value.replaceAll("{prompt}", ""));
   if (unknown) {
     throw new AgentPackError(`unsupported agent arg placeholder: ${unknown[0]}`);
   }
-  return expanded;
+  return value.replaceAll("{prompt}", prompt);
 }
 
 function spawnAgent(input: {

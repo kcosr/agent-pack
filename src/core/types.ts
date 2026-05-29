@@ -93,12 +93,14 @@ export interface PackAgent {
   command: string;
   args: string[];
   timeoutSec?: number;
+  maxAttempts?: number;
   source?: SourceInfo;
 }
 
 export interface PackAgentRun {
   id: string;
   agent: string;
+  attempt?: number;
   mode: PackAgentRunMode;
   status: PackAgentRunStatus;
   startedAt: string;
@@ -192,6 +194,7 @@ export interface ManifestAgent {
   command: string;
   args?: string[];
   timeoutSec?: number;
+  maxAttempts?: number;
 }
 
 export interface PackManifest {

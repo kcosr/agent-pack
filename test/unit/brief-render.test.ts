@@ -172,6 +172,7 @@ describe("brief rendering", () => {
           {
             id: "a001",
             agent: "local-agent",
+            attempt: 1,
             mode: "interactive",
             status: "signaled",
             startedAt: "2026-05-07T00:00:00.000Z",

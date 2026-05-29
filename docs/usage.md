@@ -89,7 +89,19 @@ agents:
 agent-pack run --id <existing-pack-id> --run-agent claude-interactive --interactive
 ```
 
-Interactive runs inherit terminal stdin/stdout/stderr, do not capture output, ignore `timeoutSec`, do not support `--json`, and print nothing after the backend exits. They still record exit metadata in `agentRuns`.
+Captured agents can set `maxAttempts` to retry failed or incomplete unblocked runs:
+
+```yaml
+agents:
+  - name: claude-exec
+    command: claude
+    args: ["--model", "claude-opus-4-7", "-p", "{prompt}"]
+    maxAttempts: 2
+```
+
+Each attempt is recorded in `agentRuns`. Retries stop when all active tasks are complete or any active task is blocked. Agents with `maxAttempts` greater than `1` must include `{prompt}` in `args`.
+
+Interactive runs inherit terminal stdin/stdout/stderr, do not capture output, ignore `timeoutSec`, do not retry with `maxAttempts`, do not support `--json`, and print nothing after the backend exits. They still record exit metadata in `agentRuns`.
 
 Inspect resolved paths and defaults:
 
@@ -148,6 +160,7 @@ agents:
   - name: local-claude
     command: claude
     args: ["--print", "{prompt}"]
+    maxAttempts: 2
 ```
 
 Manifest `inputs` can declare required values and defaults:

@@ -4,7 +4,15 @@
 
 ### Breaking Changes
 
+- Changed `agent-pack run --json` to return `{ pack, runs, outcome }` instead
+  of `{ pack, run }` so multi-attempt runs can report every subprocess attempt
+  ([#9](https://github.com/kcosr/agent-pack/pull/9)).
+
 ### Added
+
+- Added `maxAttempts` for captured agent runs so failed or incomplete unblocked
+  packs can retry with a remaining-task reminder
+  ([#9](https://github.com/kcosr/agent-pack/pull/9)).
 
 ### Changed
 

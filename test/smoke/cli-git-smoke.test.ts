@@ -485,14 +485,76 @@ args:
       env: { FAKE_AGENT_PACK_BIN: cliPath },
     });
     const parsed = JSON.parse(json.stdout);
-    expect(parsed.run).toMatchObject({
+    expect(parsed.runs).toHaveLength(1);
+    expect(parsed.runs[0]).toMatchObject({
       id: "a002",
       agent: "fake",
+      attempt: 1,
       mode: "captured",
       status: "completed",
     });
-    expect(parsed.run.stdout).toContain("fake agent stdout");
+    expect(parsed.runs[0].stdout).toContain("fake agent stdout");
+    expect(parsed.outcome).toEqual({ status: "completed", attempts: 1 });
     expect(parsed.pack.agentRuns).toHaveLength(2);
+  });
+
+  it("retries a configured agent when tasks remain", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-run-retry-smoke-"));
+    const cliPath = path.resolve("dist/cli/main.js");
+    await writeFile(
+      path.join(workspace, "retry-agent.mjs"),
+      `import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+
+const marker = ".attempt-count";
+const attempt = existsSync(marker) ? Number(readFileSync(marker, "utf8")) + 1 : 1;
+writeFileSync(marker, String(attempt));
+if (attempt < 2) {
+  process.stdout.write(process.argv[2]);
+  process.exit(0);
+}
+execFileSync(process.execPath, [
+  process.env.FAKE_AGENT_PACK_BIN,
+  "task",
+  "done",
+  "t001",
+  "--note",
+  "completed on retry",
+], { env: process.env, stdio: "ignore" });
+process.stdout.write(process.argv[2]);
+`,
+    );
+    await writeFile(
+      path.join(workspace, "agent.yaml"),
+      `name: retry
+command: ${JSON.stringify(process.execPath)}
+args:
+  - ./retry-agent.mjs
+  - "{prompt}"
+maxAttempts: 2
+`,
+    );
+
+    const result = await runCli(
+      [
+        "run",
+        "--create-id",
+        "retry-pack",
+        "--agent",
+        "./agent.yaml",
+        "--add-task",
+        "Finish after retry",
+      ],
+      { cwd: workspace, env: { FAKE_AGENT_PACK_BIN: cliPath } },
+    );
+
+    expect(result.stdout).toContain("Status: completed");
+    expect(result.stdout).toContain("- a001 [completed] retry");
+    expect(result.stdout).toContain("Attempt: 1");
+    expect(result.stdout).toContain("- a002 [completed] retry");
+    expect(result.stdout).toContain("Attempt: 2");
+    expect(result.stdout).toContain("Previous attempt 1 did not finish the pack.");
+    expect(result.stdout).toContain("- t001 [completed] Finish after retry");
   });
 
   it("runs an interactive agent with inherited stdio and no post-run report", async () => {

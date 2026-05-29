@@ -5,7 +5,7 @@ import path from "node:path";
 import fg from "fast-glob";
 import { loadAgents } from "./agents/load.js";
 import type { AgentInput } from "./agents/load.js";
-import { runAgentProcess } from "./agents/run.js";
+import { agentPrompt, runAgentProcess } from "./agents/run.js";
 import { renderBrief, renderSummary } from "./brief/render.js";
 import { listCatalogEntries, readCatalogEntry, resolveCatalogPath } from "./catalog.js";
 import { AgentPackError } from "./errors.js";
@@ -660,8 +660,14 @@ export interface RunPackInput {
 
 export interface RunPackResult {
   pack: PackState;
-  run: PackAgentRun;
+  runs: PackAgentRun[];
+  outcome: RunPackOutcome;
   exitCode: number;
+}
+
+export interface RunPackOutcome {
+  status: "completed" | "blocked" | "exhausted" | "failed";
+  attempts: number;
 }
 
 export async function runPack(input: RunPackInput): Promise<RunPackResult> {
@@ -672,53 +678,88 @@ export async function runPack(input: RunPackInput): Promise<RunPackResult> {
   await validateCachePaths(pack, store.paths);
   const agent = selectAgent(pack, input.runAgent);
   const mode = input.interactive ? "interactive" : "captured";
-  const runId = nextAgentRunId(pack.agentRuns ?? []);
-  const startedAt = new Date().toISOString();
-  const result = await runAgentProcess({
-    agent,
-    packId: pack.id,
-    stateDir: store.paths.stateDir,
-    mode,
-  });
-  const endedAt = new Date().toISOString();
-  const run: PackAgentRun = {
-    id: runId,
-    agent: agent.name,
-    mode,
-    status: agentRunStatus(result),
-    startedAt,
-    endedAt,
-    exitCode: result.exitCode,
-    signal: result.signal,
-    timedOut: result.timedOut,
-    stdout: result.stdout,
-    stdoutTruncated: result.stdoutTruncated,
-  };
-  const updated = await store.updatePack(
-    pack.id,
-    (pack) => {
-      pack.agentRuns = [...(pack.agentRuns ?? []), run];
-    },
-    "agent.run",
-    {
-      runId,
+  const maxAttempts = agentMaxAttempts(agent);
+  validateRunAttempts(agent, mode, maxAttempts);
+  let currentPack = pack;
+  const runs: PackAgentRun[] = [];
+  let lastResult: Awaited<ReturnType<typeof runAgentProcess>> | undefined;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const runId = nextAgentRunId(currentPack.agentRuns ?? []);
+    const startedAt = new Date().toISOString();
+    const result = await runAgentProcess({
+      agent,
+      packId: currentPack.id,
+      stateDir: store.paths.stateDir,
+      mode,
+      prompt: attempt === 1 ? agentPrompt() : agentRetryPrompt(currentPack, attempt),
+    });
+    lastResult = result;
+    const endedAt = new Date().toISOString();
+    const run: PackAgentRun = {
+      id: runId,
       agent: agent.name,
-      mode: run.mode,
-      status: run.status,
-      exitCode: run.exitCode,
-      signal: run.signal,
-      timedOut: run.timedOut,
-    },
-  );
-  return { pack: updated, run, exitCode: runPackExitCode(run, result, mode) };
+      attempt,
+      mode,
+      status: agentRunStatus(result),
+      startedAt,
+      endedAt,
+      exitCode: result.exitCode,
+      signal: result.signal,
+      timedOut: result.timedOut,
+      stdout: result.stdout,
+      stdoutTruncated: result.stdoutTruncated,
+    };
+    runs.push(run);
+    currentPack = await store.updatePack(
+      currentPack.id,
+      (pack) => {
+        pack.agentRuns = [...(pack.agentRuns ?? []), run];
+      },
+      "agent.run",
+      {
+        runId,
+        agent: agent.name,
+        attempt,
+        mode: run.mode,
+        status: run.status,
+        exitCode: run.exitCode,
+        signal: run.signal,
+        timedOut: run.timedOut,
+      },
+    );
+    const outcome = runAttemptOutcome(currentPack, run, attempt, maxAttempts);
+    if (outcome) {
+      return {
+        pack: currentPack,
+        runs,
+        outcome,
+        exitCode: runPackExitCode(run, result, mode, outcome),
+      };
+    }
+  }
+
+  const lastRun = runs.at(-1);
+  // maxAttempts is validated as positive, and final attempts always return an outcome.
+  if (!lastRun || !lastResult) {
+    throw new AgentPackError("agent did not run");
+  }
+  const outcome: RunPackOutcome = { status: "exhausted", attempts: runs.length };
+  return {
+    pack: currentPack,
+    runs,
+    outcome,
+    exitCode: runPackExitCode(lastRun, lastResult, mode, outcome),
+  };
 }
 
 function runPackExitCode(
   run: PackAgentRun,
   result: Awaited<ReturnType<typeof runAgentProcess>>,
   mode: PackAgentRun["mode"],
+  outcome: RunPackOutcome,
 ): number {
-  if (run.status === "completed") {
+  if (run.status === "completed" && outcome.status !== "exhausted") {
     return 0;
   }
   if (mode === "interactive") {
@@ -731,6 +772,75 @@ function runPackExitCode(
     }
   }
   return 1;
+}
+
+function agentMaxAttempts(agent: PackAgent): number {
+  return agent.maxAttempts ?? 1;
+}
+
+function validateRunAttempts(
+  agent: PackAgent,
+  mode: PackAgentRun["mode"],
+  maxAttempts: number,
+): void {
+  if (maxAttempts <= 1) {
+    return;
+  }
+  if (mode === "interactive") {
+    throw new AgentPackError("interactive agents cannot use maxAttempts greater than 1");
+  }
+  if (!agent.args.some((arg) => arg.includes("{prompt}"))) {
+    throw new AgentPackError(
+      "agents with maxAttempts greater than 1 must include {prompt} in args",
+    );
+  }
+}
+
+function runAttemptOutcome(
+  pack: PackState,
+  run: PackAgentRun,
+  attempt: number,
+  maxAttempts: number,
+): RunPackOutcome | undefined {
+  if (pack.taskCounts.blocked > 0) {
+    return { status: "blocked", attempts: attempt };
+  }
+  if (run.status !== "completed") {
+    if (attempt < maxAttempts) {
+      return undefined;
+    }
+    return { status: "failed", attempts: attempt };
+  }
+  if (pack.taskCounts.total === 0 && run.status === "completed") {
+    return { status: "completed", attempts: attempt };
+  }
+  if (pack.taskCounts.total > 0 && pack.taskCounts.completed === pack.taskCounts.total) {
+    return { status: "completed", attempts: attempt };
+  }
+  if (attempt < maxAttempts) {
+    return undefined;
+  }
+  return { status: "exhausted", attempts: attempt };
+}
+
+function agentRetryPrompt(pack: PackState, attempt: number): string {
+  const commandName = process.env.AGENT_PACK_CMD ?? "agent-pack";
+  const remaining = activeTasks(pack.tasks).filter((task) => task.status !== "completed");
+  const lines = [
+    `Previous attempt ${attempt - 1} did not finish the pack.`,
+    "",
+    `Run ${commandName} brief and continue working through the remaining tasks.`,
+    "",
+    "Remaining tasks:",
+  ];
+  for (const task of remaining) {
+    lines.push(`- ${task.id} [${task.status}] ${task.title}`);
+  }
+  lines.push(
+    "",
+    "If you cannot complete a task, mark it blocked with a note. A blocked task stops retries.",
+  );
+  return lines.join("\n");
 }
 
 export async function validateCachePaths(pack: PackState, paths: RuntimePaths): Promise<void> {
