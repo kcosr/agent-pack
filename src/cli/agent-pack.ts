@@ -277,7 +277,7 @@ function configureRunCommand(root: Command): void {
             : undefined,
         });
         if (options.json) {
-          printJson({ pack: result.pack, run: result.run });
+          printJson({ pack: result.pack, runs: result.runs, outcome: result.outcome });
         } else if (options.interactive) {
           // The child owned the terminal; keep post-run output silent.
         } else {

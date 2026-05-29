@@ -23,7 +23,7 @@ const manifestKeys = new Set([
   "contract",
 ]);
 const taskKeys = new Set(["id", "title", "category", "body", "doneWhen", "when"]);
-const agentKeys = new Set(["name", "command", "args", "timeoutSec"]);
+const agentKeys = new Set(["name", "command", "args", "timeoutSec", "maxAttempts"]);
 const inputKeys = new Set(inputDefinitionFieldNames);
 const includeKeys = new Set(["name", "description", "ref"]);
 const contractKeys = new Set(["do", "dont"]);
@@ -155,11 +155,18 @@ export function normalizeAgent(
   ) {
     throw new AgentPackError(`${label}.timeoutSec must be a positive integer`);
   }
+  if (
+    raw.maxAttempts !== undefined &&
+    (!Number.isInteger(raw.maxAttempts) || Number(raw.maxAttempts) <= 0)
+  ) {
+    throw new AgentPackError(`${label}.maxAttempts must be a positive integer`);
+  }
   return {
     name,
     command,
     args: Array.isArray(raw.args) ? raw.args.map((entry) => String(entry)) : undefined,
     timeoutSec: raw.timeoutSec === undefined ? undefined : Number(raw.timeoutSec),
+    maxAttempts: raw.maxAttempts === undefined ? undefined : Number(raw.maxAttempts),
   };
 }
 

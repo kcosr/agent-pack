@@ -49,6 +49,7 @@ function packAgent(agent: ManifestAgent, source?: SourceInfo): PackAgent {
     command: normalized.command,
     args: normalized.args ?? [],
     timeoutSec: normalized.timeoutSec,
+    maxAttempts: normalized.maxAttempts ?? 1,
     source,
   };
 }

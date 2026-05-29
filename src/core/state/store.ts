@@ -48,10 +48,11 @@ const referenceFields = new Set([
   "files",
 ]);
 const skillFields = new Set(["id", "name", "description", "source", "path"]);
-const agentFields = new Set(["name", "command", "args", "timeoutSec", "source"]);
+const agentFields = new Set(["name", "command", "args", "timeoutSec", "maxAttempts", "source"]);
 const agentRunFields = new Set([
   "id",
   "agent",
+  "attempt",
   "mode",
   "status",
   "startedAt",
@@ -498,6 +499,14 @@ function validatePackAgents(value: unknown, filePath: string): void {
         `invalid pack agent field 'agents[${index}].timeoutSec': ${filePath}`,
       );
     }
+    if (
+      agent.maxAttempts !== undefined &&
+      (!Number.isInteger(agent.maxAttempts) || Number(agent.maxAttempts) <= 0)
+    ) {
+      throw new AgentPackError(
+        `invalid pack agent field 'agents[${index}].maxAttempts': ${filePath}`,
+      );
+    }
     if (agent.source !== undefined) {
       validateSource(agent.source, `agents[${index}].source`, filePath);
     }
@@ -518,6 +527,11 @@ function validatePackAgentRuns(value: unknown, filePath: string): void {
     validateKnownFields(run, agentRunFields, `agentRuns[${index}]`, filePath);
     validateRequiredString(run.id, `agentRuns[${index}].id`, filePath);
     validateRequiredString(run.agent, `agentRuns[${index}].agent`, filePath);
+    if (run.attempt !== undefined && (!Number.isInteger(run.attempt) || Number(run.attempt) <= 0)) {
+      throw new AgentPackError(
+        `invalid pack agent run field 'agentRuns[${index}].attempt': ${filePath}`,
+      );
+    }
     if (typeof run.mode !== "string" || !agentRunModes.has(run.mode)) {
       throw new AgentPackError(`invalid pack agent run mode at index ${index}: ${filePath}`);
     }

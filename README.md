@@ -433,11 +433,14 @@ Agent definitions are simple subprocess launch profiles:
 name: claude
 command: claude
 args: ["--print", "{prompt}"]
+maxAttempts: 2
 ```
 
 `{prompt}` is the only supported template variable. It expands to a generated instruction that tells the subprocess to run `agent-pack brief` and follow the brief. The subprocess receives `AGENT_PACK_ID`, so the brief and follow-up task commands can target the pack without explicit `--id` arguments. Backend-specific flags such as model or effort belong in `args`.
 
-By default, `run` captures the subprocess stdout, stores it in the pack's `agentRuns`, and prints the final `agent-pack report` output. Backend stderr is not streamed, stored, or rendered. With `--json`, `run` prints `{ pack, run }`.
+By default, `run` captures the subprocess stdout, stores it in the pack's `agentRuns`, and prints the final `agent-pack report` output. Backend stderr is not streamed, stored, or rendered. With `--json`, `run` prints `{ pack, runs, outcome }`.
+
+`maxAttempts` defaults to `1`. When a captured run fails, times out, or exits with active tasks still pending or in progress, `agent-pack run` retries until the selected agent reaches `maxAttempts`. Each attempt is recorded as its own `agentRuns` entry. Retries stop as soon as all active tasks are completed or any active task is marked `blocked`; blocked tasks are treated as an intentional halt. Agents with `maxAttempts` greater than `1` must include `{prompt}` in `args` so retry attempts can receive a reminder listing remaining tasks.
 
 For an interactive backend session, pass `--interactive` and use an agent definition whose args start the backend in interactive mode:
 
@@ -451,7 +454,7 @@ command: claude
 args: ["--model", "claude-opus-4-7", "--effort", "xhigh", "{prompt}"]
 ```
 
-Interactive runs inherit stdin, stdout, and stderr from the current terminal. They do not capture output, do not apply `timeoutSec`, do not support `--json`, and do not print a pack report after the backend exits. They still append an `agentRuns` entry with mode, status, exit code, signal, and timestamps.
+Interactive runs inherit stdin, stdout, and stderr from the current terminal. They do not capture output, do not apply `timeoutSec`, do not retry with `maxAttempts`, do not support `--json`, and do not print a pack report after the backend exits. They still append an `agentRuns` entry with mode, status, exit code, signal, and timestamps.
 
 ### `brief`
 
@@ -612,7 +615,7 @@ JSON output shapes:
 | Command | JSON shape |
 |---|---|
 | `init --json` | `{ id, briefCommand, pack }` |
-| `run --json` | `{ pack, run }` |
+| `run --json` | `{ pack, runs, outcome }` |
 | `sync --id <id> --json` | Pack state object |
 | `clean --json` | `{ packIds, repoHashes, removed }` |
 | `list --json` | Array of status objects with `createdAt` and `updatedAt` |
@@ -778,7 +781,7 @@ Manifest parsing is strict. Unknown fields are rejected.
 | Manifest | `schemaVersion`, `name`, `instructions`, `inputs`, `tasks`, `references`, `skills`, `agents`, `contract` |
 | Input definition | `type`, `required`, `description`, `default`, `values` |
 | Inline task object | `id`, `title`, `category`, `body`, `doneWhen`, `when` |
-| Inline agent object | `name`, `command`, `args`, `timeoutSec` |
+| Inline agent object | `name`, `command`, `args`, `timeoutSec`, `maxAttempts` |
 | Reference or skill object | `name`, `description`, `ref` |
 | Contract | `do`, `dont` |
 
@@ -922,7 +925,7 @@ agents:
 
 ### Agent Files
 
-`--agent` and `--agents` load standalone YAML agent files. Agent objects use these fields: `name`, `command`, `args`, and `timeoutSec`. `timeoutSec` applies only to captured runs; it is ignored for `run --interactive`.
+`--agent` and `--agents` load standalone YAML agent files. Agent objects use these fields: `name`, `command`, `args`, `timeoutSec`, and `maxAttempts`. `timeoutSec` applies only to captured runs; it is ignored for `run --interactive`. `maxAttempts` defaults to `1` and applies only to captured runs.
 
 An agent file may contain one agent object:
 

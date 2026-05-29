@@ -6,6 +6,9 @@
 
 ### Added
 
+- Added `maxAttempts` for captured agent runs so failed or incomplete unblocked
+  packs can retry with a remaining-task reminder.
+
 ### Changed
 
 ### Fixed

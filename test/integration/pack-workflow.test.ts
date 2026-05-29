@@ -176,6 +176,7 @@ agents:
         command: "claude",
         args: ["--print", "{prompt}"],
         timeoutSec: undefined,
+        maxAttempts: 1,
         source: { kind: "file", path: "./pack.yaml" },
       },
     ]);
@@ -245,7 +246,7 @@ args:
     const result = await runPack({ packId: "run-one-agent" });
 
     expect(result.exitCode).toBe(0);
-    expect(result.run).toMatchObject({
+    expect(result.runs[0]).toMatchObject({
       id: "a001",
       agent: "echo-agent",
       mode: "captured",
@@ -254,8 +255,8 @@ args:
       timedOut: false,
       stdoutTruncated: false,
     });
-    expect(result.run.stdout).toContain("Run agent-pack brief and follow the instructions");
-    expect(result.run.stdout).not.toContain("brief --id");
+    expect(result.runs[0].stdout).toContain("Run agent-pack brief and follow the instructions");
+    expect(result.runs[0].stdout).not.toContain("brief --id");
     expect(result.pack.agentRuns).toHaveLength(1);
     const events = await readEvents("run-one-agent");
     expect(events.at(-1)).toMatchObject({
@@ -284,7 +285,7 @@ args:
     const result = await runPack({ packId: "interactive-agent-pack", interactive: true });
 
     expect(result.exitCode).toBe(0);
-    expect(result.run).toMatchObject({
+    expect(result.runs[0]).toMatchObject({
       id: "a001",
       agent: "interactive-agent",
       mode: "interactive",
@@ -313,7 +314,7 @@ args:
     const result = await runPack({ packId: "interactive-fail-pack", interactive: true });
 
     expect(result.exitCode).toBe(7);
-    expect(result.run).toMatchObject({
+    expect(result.runs[0]).toMatchObject({
       mode: "interactive",
       status: "failed",
       exitCode: 7,
@@ -357,7 +358,7 @@ args:
     const result = await runPack({ packId: "fail-agent-pack" });
 
     expect(result.exitCode).toBe(1);
-    expect(result.run).toMatchObject({
+    expect(result.runs[0]).toMatchObject({
       status: "failed",
       exitCode: 7,
       stdout: "failed output",
@@ -382,7 +383,7 @@ command: definitely-not-an-agent-pack-test-command
     const result = await runPack({ packId: "spawn-failure-pack" });
 
     expect(result.exitCode).toBe(1);
-    expect(result.run).toMatchObject({
+    expect(result.runs[0]).toMatchObject({
       status: "failed",
       exitCode: null,
       signal: null,
@@ -406,7 +407,7 @@ command: definitely-not-an-agent-pack-test-command
     const result = await runPack({ packId: "signal-agent-pack" });
 
     expect(result.exitCode).toBe(1);
-    expect(result.run).toMatchObject({
+    expect(result.runs[0]).toMatchObject({
       status: "signaled",
       exitCode: null,
       signal: "SIGTERM",
@@ -432,7 +433,7 @@ command: definitely-not-an-agent-pack-test-command
     const result = await runPack({ packId: "timeout-agent-pack" });
 
     expect(result.exitCode).toBe(1);
-    expect(result.run).toMatchObject({
+    expect(result.runs[0]).toMatchObject({
       status: "timed_out",
       exitCode: null,
       signal: "SIGKILL",
@@ -454,12 +455,164 @@ command: definitely-not-an-agent-pack-test-command
     const result = await runPack({ packId: "no-timeout-agent-pack" });
 
     expect(result.exitCode).toBe(0);
-    expect(result.run).toMatchObject({
+    expect(result.runs[0]).toMatchObject({
       status: "completed",
       exitCode: 0,
       timedOut: false,
       stdout: "done",
     });
+  });
+
+  it("retries incomplete unblocked runs until tasks complete", async () => {
+    await writeFile(
+      "agent.yaml",
+      nodePromptAgentYaml(
+        "retry-agent",
+        `
+const { readFileSync, writeFileSync, existsSync } = require("node:fs");
+const { join } = require("node:path");
+const marker = join(process.env.AGENT_PACK_STATE_DIR, "retry-count");
+const attempt = existsSync(marker) ? Number(readFileSync(marker, "utf8")) + 1 : 1;
+writeFileSync(marker, String(attempt));
+const prompt = process.argv[1];
+process.stdout.write(prompt);
+if (attempt < 2) process.exit(0);
+const packPath = join(process.env.AGENT_PACK_STATE_DIR, "packs", process.env.AGENT_PACK_ID + ".json");
+const pack = JSON.parse(readFileSync(packPath, "utf8"));
+const now = new Date().toISOString();
+pack.tasks[0].status = "completed";
+pack.tasks[0].completedAt = now;
+pack.taskCounts = { total: 1, pending: 0, inProgress: 0, completed: 1, blocked: 0 };
+pack.status = "completed";
+pack.updatedAt = now;
+writeFileSync(packPath, JSON.stringify(pack, null, 2) + "\\n");
+`,
+        "maxAttempts: 3",
+      ),
+    );
+    await initPack({
+      createId: "retry-completes-pack",
+      includes: [
+        { type: "agentRef", ref: "./agent.yaml" },
+        { type: "adHocTask", text: "Finish on retry" },
+      ],
+      gitRefresh: "auto",
+    });
+
+    const result = await runPack({ packId: "retry-completes-pack" });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.outcome).toEqual({ status: "completed", attempts: 2 });
+    expect(result.runs).toHaveLength(2);
+    expect(result.runs[0]).toMatchObject({ id: "a001", attempt: 1, status: "completed" });
+    expect(result.runs[1]).toMatchObject({ id: "a002", attempt: 2, status: "completed" });
+    expect(result.runs[1].stdout).toContain("Previous attempt 1 did not finish the pack.");
+    expect(result.runs[1].stdout).toContain("- t001 [pending] Finish on retry");
+    expect(result.pack.taskCounts).toMatchObject({ completed: 1, pending: 0 });
+  });
+
+  it("retries failed runs until tasks complete", async () => {
+    await writeFile(
+      "agent.yaml",
+      nodePromptAgentYaml(
+        "failure-retry-agent",
+        `
+const { readFileSync, writeFileSync, existsSync } = require("node:fs");
+const { join } = require("node:path");
+const marker = join(process.env.AGENT_PACK_STATE_DIR, "failure-retry-count");
+const attempt = existsSync(marker) ? Number(readFileSync(marker, "utf8")) + 1 : 1;
+writeFileSync(marker, String(attempt));
+if (attempt === 1) {
+  process.stdout.write("failed first");
+  process.exit(7);
+}
+const packPath = join(process.env.AGENT_PACK_STATE_DIR, "packs", process.env.AGENT_PACK_ID + ".json");
+const pack = JSON.parse(readFileSync(packPath, "utf8"));
+const now = new Date().toISOString();
+pack.tasks[0].status = "completed";
+pack.tasks[0].completedAt = now;
+pack.taskCounts = { total: 1, pending: 0, inProgress: 0, completed: 1, blocked: 0 };
+pack.status = "completed";
+pack.updatedAt = now;
+writeFileSync(packPath, JSON.stringify(pack, null, 2) + "\\n");
+process.stdout.write(process.argv[1]);
+`,
+        "maxAttempts: 2",
+      ),
+    );
+    await initPack({
+      createId: "failure-retry-pack",
+      includes: [
+        { type: "agentRef", ref: "./agent.yaml" },
+        { type: "adHocTask", text: "Recover after failure" },
+      ],
+      gitRefresh: "auto",
+    });
+
+    const result = await runPack({ packId: "failure-retry-pack" });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.outcome).toEqual({ status: "completed", attempts: 2 });
+    expect(result.runs.map((run) => run.status)).toEqual(["failed", "completed"]);
+    expect(result.runs[1].stdout).toContain("Previous attempt 1 did not finish the pack.");
+  });
+
+  it("stops retries when a task is blocked", async () => {
+    await writeFile(
+      "agent.yaml",
+      nodePromptAgentYaml(
+        "blocking-agent",
+        `
+const { readFileSync, writeFileSync } = require("node:fs");
+const { join } = require("node:path");
+const packPath = join(process.env.AGENT_PACK_STATE_DIR, "packs", process.env.AGENT_PACK_ID + ".json");
+const pack = JSON.parse(readFileSync(packPath, "utf8"));
+const now = new Date().toISOString();
+pack.tasks[0].status = "blocked";
+pack.tasks[0].blockedAt = now;
+pack.tasks[0].notes.push(now + " cannot proceed");
+pack.taskCounts = { total: 1, pending: 0, inProgress: 0, completed: 0, blocked: 1 };
+pack.status = "blocked";
+pack.updatedAt = now;
+writeFileSync(packPath, JSON.stringify(pack, null, 2) + "\\n");
+`,
+        "maxAttempts: 3",
+      ),
+    );
+    await initPack({
+      createId: "blocked-stops-pack",
+      includes: [
+        { type: "agentRef", ref: "./agent.yaml" },
+        { type: "adHocTask", text: "Block cleanly" },
+      ],
+      gitRefresh: "auto",
+    });
+
+    const result = await runPack({ packId: "blocked-stops-pack" });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.outcome).toEqual({ status: "blocked", attempts: 1 });
+    expect(result.runs).toHaveLength(1);
+    expect(result.pack.taskCounts.blocked).toBe(1);
+  });
+
+  it("rejects retry settings that cannot receive retry prompts", async () => {
+    await writeFile(
+      "agent.yaml",
+      nodeAgentYaml("no-prompt-retry-agent", "process.exit(0)", "maxAttempts: 2"),
+    );
+    await initPack({
+      createId: "no-prompt-retry-pack",
+      includes: [{ type: "agentRef", ref: "./agent.yaml" }],
+      gitRefresh: "auto",
+    });
+
+    await expect(runPack({ packId: "no-prompt-retry-pack" })).rejects.toThrow(
+      "agents with maxAttempts greater than 1 must include {prompt} in args",
+    );
+    await expect(runPack({ packId: "no-prompt-retry-pack", interactive: true })).rejects.toThrow(
+      "interactive agents cannot use maxAttempts greater than 1",
+    );
   });
 
   it("caps captured stdout and marks truncated output", async () => {
@@ -476,12 +629,12 @@ command: definitely-not-an-agent-pack-test-command
     const result = await runPack({ packId: "verbose-agent-pack" });
 
     expect(result.exitCode).toBe(0);
-    expect(result.run).toMatchObject({
+    expect(result.runs[0]).toMatchObject({
       status: "completed",
       exitCode: 0,
       stdoutTruncated: true,
     });
-    expect(Buffer.byteLength(result.run.stdout, "utf8")).toBe(64 * 1024);
+    expect(Buffer.byteLength(result.runs[0].stdout, "utf8")).toBe(64 * 1024);
   });
 
   it("captures inputs, hides locked tasks, and unlocks them when inputs change", async () => {
@@ -1992,6 +2145,18 @@ function nodeAgentYaml(name: string, script: string, extra = ""): string {
     `name: ${name}`,
     `command: ${JSON.stringify(process.execPath)}`,
     `args: [${JSON.stringify("-e")}, ${JSON.stringify(script)}]`,
+    extra,
+    "",
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
+}
+
+function nodePromptAgentYaml(name: string, script: string, extra = ""): string {
+  return [
+    `name: ${name}`,
+    `command: ${JSON.stringify(process.execPath)}`,
+    `args: [${JSON.stringify("-e")}, ${JSON.stringify(script)}, ${JSON.stringify("{prompt}")}]`,
     extra,
     "",
   ]
