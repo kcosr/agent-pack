@@ -105,12 +105,11 @@ export function agentPrompt(): string {
 }
 
 function expandAgentArg(value: string, prompt: string): string {
-  const expanded = value.replaceAll("{prompt}", prompt);
-  const unknown = /\{[A-Za-z][A-Za-z0-9_]*\}/.exec(expanded);
+  const unknown = /\{[A-Za-z][A-Za-z0-9_]*\}/.exec(value.replaceAll("{prompt}", ""));
   if (unknown) {
     throw new AgentPackError(`unsupported agent arg placeholder: ${unknown[0]}`);
   }
-  return expanded;
+  return value.replaceAll("{prompt}", prompt);
 }
 
 function spawnAgent(input: {

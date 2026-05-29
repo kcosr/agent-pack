@@ -494,7 +494,7 @@ writeFileSync(packPath, JSON.stringify(pack, null, 2) + "\\n");
       createId: "retry-completes-pack",
       includes: [
         { type: "agentRef", ref: "./agent.yaml" },
-        { type: "adHocTask", text: "Finish on retry" },
+        { type: "adHocTask", text: "Finish {config} on retry" },
       ],
       gitRefresh: "auto",
     });
@@ -507,8 +507,36 @@ writeFileSync(packPath, JSON.stringify(pack, null, 2) + "\\n");
     expect(result.runs[0]).toMatchObject({ id: "a001", attempt: 1, status: "completed" });
     expect(result.runs[1]).toMatchObject({ id: "a002", attempt: 2, status: "completed" });
     expect(result.runs[1].stdout).toContain("Previous attempt 1 did not finish the pack.");
-    expect(result.runs[1].stdout).toContain("- t001 [pending] Finish on retry");
+    expect(result.runs[1].stdout).toContain("- t001 [pending] Finish {config} on retry");
     expect(result.pack.taskCounts).toMatchObject({ completed: 1, pending: 0 });
+  });
+
+  it("exhausts attempts when captured agents exit cleanly with tasks remaining", async () => {
+    await writeFile(
+      "agent.yaml",
+      nodePromptAgentYaml(
+        "exhausting-agent",
+        "process.stdout.write(process.argv[1]); process.exit(0)",
+        "maxAttempts: 2",
+      ),
+    );
+    await initPack({
+      createId: "exhausted-pack",
+      includes: [
+        { type: "agentRef", ref: "./agent.yaml" },
+        { type: "adHocTask", text: "Remain pending" },
+      ],
+      gitRefresh: "auto",
+    });
+
+    const result = await runPack({ packId: "exhausted-pack" });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.outcome).toEqual({ status: "exhausted", attempts: 2 });
+    expect(result.runs).toHaveLength(2);
+    expect(result.runs.map((run) => run.status)).toEqual(["completed", "completed"]);
+    expect(result.runs[1].stdout).toContain("- t001 [pending] Remain pending");
+    expect(result.pack.taskCounts).toMatchObject({ pending: 1, completed: 0, blocked: 0 });
   });
 
   it("retries failed runs until tasks complete", async () => {

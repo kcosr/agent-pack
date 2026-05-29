@@ -685,7 +685,7 @@ export async function runPack(input: RunPackInput): Promise<RunPackResult> {
   let lastResult: Awaited<ReturnType<typeof runAgentProcess>> | undefined;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const runId = nextAgentRunId([...(currentPack.agentRuns ?? []), ...runs]);
+    const runId = nextAgentRunId(currentPack.agentRuns ?? []);
     const startedAt = new Date().toISOString();
     const result = await runAgentProcess({
       agent,
@@ -728,7 +728,7 @@ export async function runPack(input: RunPackInput): Promise<RunPackResult> {
         timedOut: run.timedOut,
       },
     );
-    const outcome = runAttemptOutcome(currentPack, run, result, attempt, maxAttempts);
+    const outcome = runAttemptOutcome(currentPack, run, attempt, maxAttempts);
     if (outcome) {
       return {
         pack: currentPack,
@@ -740,6 +740,7 @@ export async function runPack(input: RunPackInput): Promise<RunPackResult> {
   }
 
   const lastRun = runs.at(-1);
+  // maxAttempts is validated as positive, and final attempts always return an outcome.
   if (!lastRun || !lastResult) {
     throw new AgentPackError("agent did not run");
   }
@@ -798,14 +799,13 @@ function validateRunAttempts(
 function runAttemptOutcome(
   pack: PackState,
   run: PackAgentRun,
-  result: Awaited<ReturnType<typeof runAgentProcess>>,
   attempt: number,
   maxAttempts: number,
 ): RunPackOutcome | undefined {
   if (pack.taskCounts.blocked > 0) {
     return { status: "blocked", attempts: attempt };
   }
-  if (run.status !== "completed" || result.spawnError) {
+  if (run.status !== "completed") {
     if (attempt < maxAttempts) {
       return undefined;
     }
