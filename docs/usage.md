@@ -8,6 +8,7 @@ Requirements:
 
 - Node.js 20 or newer
 - Git and `tar` on `PATH` for git-backed inputs
+- Bun when manually building a standalone executable with `npm run build:bun`
 
 ## Quick Start
 
@@ -206,6 +207,8 @@ The npm package includes an `examples/` directory that is already laid out as a 
 EXAMPLES_DIR="$(agent-pack --help | sed -n 's/^[[:space:]]*Examples[[:space:]][[:space:]]*//p')"
 AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR" agent-pack init --manifest code-review "Review scope: unstaged changes."
 ```
+
+The manual Bun standalone build emits `dist-bin/agent-pack` and omits npm package resource paths from help. Use a real catalog directory with `AGENT_PACK_CONFIG_DIR` when running that copied executable.
 
 Other bundled manifests include `docs-review` for documentation review and
 `feature-design-summary` for creating a repository-grounded feature design

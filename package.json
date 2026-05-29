@@ -9,6 +9,7 @@
   "files": ["dist", "README.md", "docs", "examples"],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/chmod-bin.mjs",
+    "build:bun": "node scripts/build-bun.mjs",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run test/unit test/integration",
     "test:smoke": "npm run build && vitest run test/smoke",

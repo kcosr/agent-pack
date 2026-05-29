@@ -52,8 +52,11 @@ import {
   inputNameArgument,
   inputValueArgument,
 } from "./completion.js";
+import { type TableColumn, renderTable } from "./table.js";
 
 let startupError: AgentPackError | undefined;
+
+declare const __AGENT_PACK_VERSION__: string | undefined;
 
 export function configureProgram(): Command {
   const root = new Command();
@@ -126,14 +129,12 @@ export function configureProgram(): Command {
     .option("--json", "emit machine-readable output")
     .action(async (options) => {
       await run(async () => {
-        const packs = await listPacks();
+        const packs = sortPacksForList(await listPacks());
         if (options.json) {
           printJson(packs.map(statusJson));
           return;
         }
-        for (const pack of packs) {
-          process.stdout.write(statusRow(pack));
-        }
+        process.stdout.write(statusTable(packs));
       });
     });
 
@@ -539,9 +540,7 @@ function configureInputCommands(root: Command): void {
           printJson(entries);
           return;
         }
-        for (const entry of entries) {
-          process.stdout.write(inputRow(entry));
-        }
+        process.stdout.write(inputTable(entries));
       });
     });
 
@@ -684,9 +683,7 @@ function configureCatalogCommands(root: Command): void {
           printJson(entries);
           return;
         }
-        for (const entry of entries) {
-          process.stdout.write(`${entry.type}\t${entry.name}\t${entry.path}\n`);
-        }
+        process.stdout.write(catalogTable(entries));
       });
     });
 
@@ -788,6 +785,8 @@ function statusJson(pack: PackState) {
     id: pack.id,
     name: pack.name,
     status: pack.status,
+    createdAt: pack.createdAt,
+    updatedAt: pack.updatedAt,
     tasks: pack.taskCounts,
     references: pack.references.length,
     skills: pack.skills.length,
@@ -809,8 +808,33 @@ function taskJson(task: PackState["tasks"][number]) {
   };
 }
 
-function statusRow(pack: PackState): string {
-  return `${pack.id}\t${pack.name ?? ""}\t${pack.status}\t${pack.taskCounts.completed}/${pack.taskCounts.total}\tblocked:${pack.taskCounts.blocked}\n`;
+function statusTable(packs: PackState[]): string {
+  return renderTable(
+    [
+      { header: "ID", value: (pack) => pack.id },
+      { header: "NAME", value: (pack) => pack.name },
+      { header: "STATUS", value: (pack) => pack.status },
+      {
+        header: "TASKS",
+        value: (pack) => `${pack.taskCounts.completed}/${pack.taskCounts.total}`,
+      },
+      { header: "BLOCKED", value: (pack) => pack.taskCounts.blocked },
+      { header: "CREATED", value: (pack) => formatListTimestamp(pack.createdAt) },
+      { header: "UPDATED", value: (pack) => formatListTimestamp(pack.updatedAt) },
+    ],
+    packs,
+  );
+}
+
+function sortPacksForList(packs: PackState[]): PackState[] {
+  return [...packs].sort((left, right) => {
+    const updated = right.updatedAt.localeCompare(left.updatedAt);
+    return updated === 0 ? left.id.localeCompare(right.id) : updated;
+  });
+}
+
+function formatListTimestamp(value: string): string {
+  return value.slice(0, 16).replace("T", " ");
 }
 
 function renderTaskMutation(pack: PackState, taskId: string, action: string): string {
@@ -825,15 +849,27 @@ function taskMutationLabel(status: TaskStatus): string {
   return status === "in_progress" ? "started" : status;
 }
 
-function inputRow(entry: Awaited<ReturnType<typeof listInputs>>[number]): string {
-  return `${[
-    entry.name,
-    entry.value ?? "",
-    entry.required ? "required" : "optional",
-    entry.type,
-    entry.source ?? "",
-    entry.description ?? "",
-  ].join("\t")}\n`;
+function inputTable(entries: Awaited<ReturnType<typeof listInputs>>): string {
+  return renderTable(
+    [
+      { header: "NAME", value: (entry) => entry.name },
+      { header: "VALUE", value: (entry) => entry.value },
+      { header: "REQUIRED", value: (entry) => (entry.required ? "yes" : "no") },
+      { header: "TYPE", value: (entry) => entry.type },
+      { header: "SOURCE", value: (entry) => entry.source },
+      { header: "DESCRIPTION", value: (entry) => entry.description },
+    ],
+    entries,
+  );
+}
+
+function catalogTable(entries: Awaited<ReturnType<typeof catalogList>>): string {
+  const columns: TableColumn<(typeof entries)[number]>[] = [
+    { header: "TYPE", value: (entry) => entry.type },
+    { header: "NAME", value: (entry) => entry.name },
+    { header: "PATH", value: (entry) => entry.path },
+  ];
+  return renderTable(columns, entries);
 }
 
 function inputMutationJson(result: Awaited<ReturnType<typeof setInput>>) {
@@ -878,12 +914,16 @@ function printJson(value: unknown): void {
 }
 
 function packageHelpText(): string {
+  const root = packageResourceRoot();
+  if (!root) {
+    return "";
+  }
   const resources = [
     ["README", "README.md"],
     ["Usage", "docs/usage.md"],
     ["Examples", "examples"],
   ]
-    .map(([label, relativePath]) => ({ label, path: path.join(packageRoot(), relativePath) }))
+    .map(([label, relativePath]) => ({ label, path: path.join(root, relativePath) }))
     .filter((resource) => existsSync(resource.path));
   if (resources.length === 0) {
     return "";
@@ -892,6 +932,13 @@ function packageHelpText(): string {
   return `\nResources:\n${resources
     .map((resource) => `  ${resource.label.padEnd(width)}  ${resource.path}`)
     .join("\n")}`;
+}
+
+function packageResourceRoot(): string | undefined {
+  if (isCompiledBun()) {
+    return undefined;
+  }
+  return packageRoot();
 }
 
 function packageRoot(): string {
@@ -906,10 +953,23 @@ function packageRoot(): string {
 }
 
 function packageVersion(): string {
+  if (typeof __AGENT_PACK_VERSION__ === "string" && __AGENT_PACK_VERSION__) {
+    return __AGENT_PACK_VERSION__;
+  }
+  if (isCompiledBun()) {
+    return "0.0.0";
+  }
   const pkg = JSON.parse(readFileSync(path.join(packageRoot(), "package.json"), "utf8")) as {
     version?: unknown;
   };
   return typeof pkg.version === "string" ? pkg.version : "0.0.0";
+}
+
+function isCompiledBun(): boolean {
+  return (
+    typeof (process.versions as NodeJS.ProcessVersions & { bun?: string }).bun === "string" &&
+    import.meta.url.includes("$bunfs")
+  );
 }
 
 async function run(fn: () => Promise<void>): Promise<void> {
