@@ -123,9 +123,10 @@ describe("agent-pack CLI git smoke", () => {
     const env = { AGENT_PACK_CONFIG_DIR: path.resolve("examples") };
 
     const list = await runCli(["catalog", "list", "--type", "manifest"], { cwd: workspace, env });
-    expect(list.stdout).toContain("manifest\tcode-review\t");
-    expect(list.stdout).toContain("manifest\tdemo\t");
-    expect(list.stdout).toContain("manifest\tdocs-review\t");
+    expect(list.stdout).toContain("TYPE      NAME");
+    expect(list.stdout).toContain("manifest  code-review");
+    expect(list.stdout).toContain("manifest  demo");
+    expect(list.stdout).toContain("manifest  docs-review");
 
     const candidates = await runCli(["__complete", "do", "init", "--manifest"], {
       cwd: workspace,
@@ -170,6 +171,71 @@ describe("agent-pack CLI git smoke", () => {
     });
     expect(defaultFeatureBrief.stdout).toContain("Resolve the reusable feature slug");
     expect(defaultFeatureBrief.stdout).toContain("Create the feature branch");
+  });
+
+  it("lists packs as an updated-time sorted table and JSON includes timestamps", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-list-smoke-"));
+    await writeFile(path.join(workspace, "pack.yaml"), "name: first\ntasks:\n  - title: First\n");
+    await writeFile(path.join(workspace, "later.yaml"), "name: later\ntasks:\n  - title: Later\n");
+
+    await runCli(["init", "--create-id", "first-pack", "--manifest", "./pack.yaml"], {
+      cwd: workspace,
+    });
+    await runCli(["init", "--create-id", "later-pack", "--manifest", "./later.yaml"], {
+      cwd: workspace,
+    });
+    await runCli(["task", "start", "t001", "--id", "first-pack"], { cwd: workspace });
+
+    const list = await runCli(["list"], { cwd: workspace });
+    const lines = list.stdout.trimEnd().split("\n");
+    expect(lines[0]).toBe(
+      "ID          NAME   STATUS       TASKS  BLOCKED  CREATED           UPDATED",
+    );
+    const firstColumns = lines[1]?.split(/ {2,}/);
+    const laterColumns = lines[2]?.split(/ {2,}/);
+    expect(firstColumns).toEqual([
+      "first-pack",
+      "first",
+      "in_progress",
+      "0/1",
+      "0",
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/),
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/),
+    ]);
+    expect(laterColumns).toEqual([
+      "later-pack",
+      "later",
+      "pending",
+      "0/1",
+      "0",
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/),
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/),
+    ]);
+
+    const json = await runCli(["list", "--json"], { cwd: workspace });
+    const parsed = JSON.parse(json.stdout);
+    expect(parsed).toEqual([
+      expect.objectContaining({
+        id: "first-pack",
+        createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        updatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      }),
+      expect.objectContaining({
+        id: "later-pack",
+        createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        updatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      }),
+    ]);
+  });
+
+  it("prints the list header when there are no packs", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "agent-pack-empty-list-smoke-"));
+
+    const list = await runCli(["list"], { cwd: workspace });
+    expect(list.stdout).toBe("ID  NAME  STATUS  TASKS  BLOCKED  CREATED  UPDATED\n");
+
+    const json = await runCli(["list", "--json"], { cwd: workspace });
+    expect(JSON.parse(json.stdout)).toEqual([]);
   });
 
   it("generates a suffixed pack id when init has no explicit id", async () => {
@@ -553,6 +619,16 @@ tasks:
       { name: "include_tests", value: true, source: "default" },
       { name: "report_path" },
     ]);
+    const inputText = await runCli(["input", "list", "--id", "input-pack"], {
+      cwd: workspace,
+    });
+    expect(inputText.stdout).toContain(
+      "NAME           VALUE         REQUIRED  TYPE     SOURCE   DESCRIPTION",
+    );
+    expect(inputText.stdout).toContain(
+      "scope          auth changes  yes       string   cli      Review scope.",
+    );
+    expect(inputText.stdout).toContain("include_tests  true          no        boolean  default");
 
     const severity = await runCli(["input", "get", "severity", "--id", "input-pack"], {
       cwd: workspace,
@@ -717,8 +793,9 @@ tasks:
     const env = { AGENT_PACK_CONFIG_DIR: configDir };
 
     const list = await runCli(["catalog", "list"], { cwd: workspace, env });
-    expect(list.stdout).toContain("manifest\treview/code-review\t");
-    expect(list.stdout).toContain("task\treview/security\t");
+    expect(list.stdout).toContain("TYPE      NAME                PATH");
+    expect(list.stdout).toContain("manifest  review/code-review");
+    expect(list.stdout).toContain("task      review/security");
 
     const listJson = await runCli(["catalog", "list", "--type", "task", "--json"], {
       cwd: workspace,

@@ -528,7 +528,7 @@ agent-pack list
 agent-pack list --json
 ```
 
-Text output is tab-separated: pack id, pack name, status, completed/total task count, and a `blocked:N` field. Use `list --json` for scripts that need to discover pack IDs.
+Text output is an aligned table sorted by most recently updated pack first. It includes pack id, name, status, completed/total task count, blocked count, created time, and updated time. Use `list --json` for scripts that need raw timestamps and stable fields.
 
 ### Task Commands
 
@@ -568,7 +568,7 @@ agent-pack input set severity high --id reviewer-001
 agent-pack input unset severity --id reviewer-001
 ```
 
-`agent-pack input list` shows declared inputs, effective values, required flags, types, value sources, and descriptions. `input get` prints one effective value.
+`agent-pack input list` shows declared inputs as an aligned table with effective values, required flags, types, value sources, and descriptions. `input get` prints one effective value.
 
 `agent-pack input set` validates the new value against the stored manifest schema, updates the pack, and unlocks any conditional tasks whose `when` conditions are now satisfied. `input unset` clears optional inputs without defaults, reverts inputs with defaults back to those defaults, and rejects required inputs that have no default. Once a task unlocks, it stays active even if a later input change would no longer satisfy its condition.
 
@@ -615,7 +615,7 @@ JSON output shapes:
 | `run --json` | `{ pack, run }` |
 | `sync --id <id> --json` | Pack state object |
 | `clean --json` | `{ packIds, repoHashes, removed }` |
-| `list --json` | Array of status objects |
+| `list --json` | Array of status objects with `createdAt` and `updatedAt` |
 | `status --json` | Resolved paths and current defaults |
 | `summary --json` | `{ id, name, status, tasks, references, skills, agents }` |
 | `reference add <ref> --json` | `{ references, skipped, summary }` |
@@ -702,7 +702,7 @@ agent-pack catalog show manifest review/code-review
 agent-pack catalog path task review/security
 ```
 
-Text `catalog list` output is tab-separated: type, catalog name, and absolute path. `catalog list` creates the catalog directories when they do not exist.
+Text `catalog list` output is an aligned table with type, catalog name, and absolute path. `catalog list` creates the catalog directories when they do not exist.
 
 Installed npm packages include an `examples/` directory that is already laid out as a catalog root. `agent-pack --help` prints the installed examples path. Point `AGENT_PACK_CONFIG_DIR` at that directory when you want to try the packaged examples by bare catalog name:
 

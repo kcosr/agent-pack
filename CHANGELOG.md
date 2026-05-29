@@ -24,6 +24,9 @@
 
 ### Changed
 
+- Changed `agent-pack list`, `agent-pack catalog list`, and
+  `agent-pack input list` text output to render aligned tables
+  ([#8](https://github.com/kcosr/agent-pack/pull/8)).
 - Changed task status and note command output to print compact task-focused
   confirmations instead of full pack summaries
   ([#6](https://github.com/kcosr/agent-pack/pull/6)).

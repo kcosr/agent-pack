@@ -52,6 +52,7 @@ import {
   inputNameArgument,
   inputValueArgument,
 } from "./completion.js";
+import { type TableColumn, renderTable } from "./table.js";
 
 let startupError: AgentPackError | undefined;
 
@@ -133,9 +134,7 @@ export function configureProgram(): Command {
           printJson(packs.map(statusJson));
           return;
         }
-        for (const pack of packs) {
-          process.stdout.write(statusRow(pack));
-        }
+        process.stdout.write(statusTable(packs));
       });
     });
 
@@ -541,9 +540,7 @@ function configureInputCommands(root: Command): void {
           printJson(entries);
           return;
         }
-        for (const entry of entries) {
-          process.stdout.write(inputRow(entry));
-        }
+        process.stdout.write(inputTable(entries));
       });
     });
 
@@ -686,9 +683,7 @@ function configureCatalogCommands(root: Command): void {
           printJson(entries);
           return;
         }
-        for (const entry of entries) {
-          process.stdout.write(`${entry.type}\t${entry.name}\t${entry.path}\n`);
-        }
+        process.stdout.write(catalogTable(entries));
       });
     });
 
@@ -790,6 +785,8 @@ function statusJson(pack: PackState) {
     id: pack.id,
     name: pack.name,
     status: pack.status,
+    createdAt: pack.createdAt,
+    updatedAt: pack.updatedAt,
     tasks: pack.taskCounts,
     references: pack.references.length,
     skills: pack.skills.length,
@@ -811,8 +808,33 @@ function taskJson(task: PackState["tasks"][number]) {
   };
 }
 
-function statusRow(pack: PackState): string {
-  return `${pack.id}\t${pack.name ?? ""}\t${pack.status}\t${pack.taskCounts.completed}/${pack.taskCounts.total}\tblocked:${pack.taskCounts.blocked}\n`;
+function statusTable(packs: PackState[]): string {
+  return renderTable(
+    [
+      { header: "ID", value: (pack) => pack.id },
+      { header: "NAME", value: (pack) => pack.name },
+      { header: "STATUS", value: (pack) => pack.status },
+      {
+        header: "TASKS",
+        value: (pack) => `${pack.taskCounts.completed}/${pack.taskCounts.total}`,
+      },
+      { header: "BLOCKED", value: (pack) => pack.taskCounts.blocked },
+      { header: "CREATED", value: (pack) => formatListTimestamp(pack.createdAt) },
+      { header: "UPDATED", value: (pack) => formatListTimestamp(pack.updatedAt) },
+    ],
+    sortPacksForList(packs),
+  );
+}
+
+function sortPacksForList(packs: PackState[]): PackState[] {
+  return [...packs].sort((left, right) => {
+    const updated = right.updatedAt.localeCompare(left.updatedAt);
+    return updated === 0 ? left.id.localeCompare(right.id) : updated;
+  });
+}
+
+function formatListTimestamp(value: string): string {
+  return value.slice(0, 16).replace("T", " ");
 }
 
 function renderTaskMutation(pack: PackState, taskId: string, action: string): string {
@@ -827,15 +849,27 @@ function taskMutationLabel(status: TaskStatus): string {
   return status === "in_progress" ? "started" : status;
 }
 
-function inputRow(entry: Awaited<ReturnType<typeof listInputs>>[number]): string {
-  return `${[
-    entry.name,
-    entry.value ?? "",
-    entry.required ? "required" : "optional",
-    entry.type,
-    entry.source ?? "",
-    entry.description ?? "",
-  ].join("\t")}\n`;
+function inputTable(entries: Awaited<ReturnType<typeof listInputs>>): string {
+  return renderTable(
+    [
+      { header: "NAME", value: (entry) => entry.name },
+      { header: "VALUE", value: (entry) => entry.value },
+      { header: "REQUIRED", value: (entry) => (entry.required ? "yes" : "no") },
+      { header: "TYPE", value: (entry) => entry.type },
+      { header: "SOURCE", value: (entry) => entry.source },
+      { header: "DESCRIPTION", value: (entry) => entry.description },
+    ],
+    entries,
+  );
+}
+
+function catalogTable(entries: Awaited<ReturnType<typeof catalogList>>): string {
+  const columns: TableColumn<(typeof entries)[number]>[] = [
+    { header: "TYPE", value: (entry) => entry.type },
+    { header: "NAME", value: (entry) => entry.name },
+    { header: "PATH", value: (entry) => entry.path },
+  ];
+  return renderTable(columns, entries);
 }
 
 function inputMutationJson(result: Awaited<ReturnType<typeof setInput>>) {
