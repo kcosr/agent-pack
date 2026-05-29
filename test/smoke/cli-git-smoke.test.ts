@@ -231,8 +231,11 @@ describe("agent-pack CLI git smoke", () => {
       cwd: workspace,
     });
     const summary = JSON.parse(summaryJson.stdout);
-    expect(summary).not.toHaveProperty("createdAt");
-    expect(summary).not.toHaveProperty("updatedAt");
+    expect(summary).toMatchObject({
+      id: "first-pack",
+      createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      updatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+    });
   });
 
   it("prints the list header when there are no packs", async () => {
@@ -391,6 +394,8 @@ references:
     expect(JSON.parse(summaryJson.stdout)).toMatchObject({
       id: "task-pack",
       status: "completed",
+      createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      updatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
       tasks: { completed: 1, total: 1 },
     });
 

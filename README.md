@@ -617,7 +617,7 @@ JSON output shapes:
 | `clean --json` | `{ packIds, repoHashes, removed }` |
 | `list --json` | Array of status objects with `createdAt` and `updatedAt` |
 | `status --json` | Resolved paths and current defaults |
-| `summary --json` | `{ id, name, status, tasks, references, skills, agents }` |
+| `summary --json` | `{ id, name, status, createdAt, updatedAt, tasks, references, skills, agents }` |
 | `reference add <ref> --json` | `{ references, skipped, summary }` |
 | `skill add <ref> --json` | `{ skills, skipped, summary }` |
 | `task add <title> --json` | `{ task, summary }` |

@@ -131,7 +131,7 @@ export function configureProgram(): Command {
       await run(async () => {
         const packs = sortPacksForList(await listPacks());
         if (options.json) {
-          printJson(packs.map(listStatusJson));
+          printJson(packs.map(statusJson));
           return;
         }
         process.stdout.write(statusTable(packs));
@@ -785,18 +785,12 @@ function statusJson(pack: PackState) {
     id: pack.id,
     name: pack.name,
     status: pack.status,
+    createdAt: pack.createdAt,
+    updatedAt: pack.updatedAt,
     tasks: pack.taskCounts,
     references: pack.references.length,
     skills: pack.skills.length,
     agents: pack.agents?.length ?? 0,
-  };
-}
-
-function listStatusJson(pack: PackState) {
-  return {
-    ...statusJson(pack),
-    createdAt: pack.createdAt,
-    updatedAt: pack.updatedAt,
   };
 }
 
