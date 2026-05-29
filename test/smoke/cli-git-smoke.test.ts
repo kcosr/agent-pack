@@ -6,6 +6,17 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { runCli } from "../helpers/cli.js";
 
+const bunIt = commandExists("bun") ? it : it.skip;
+
+function commandExists(command: string): boolean {
+  try {
+    execFileSync("bash", ["-lc", `command -v ${command}`], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 describe("agent-pack CLI git smoke", () => {
   it("prints package resources in top-level help", async () => {
     const result = await runCli(["--help"]);
@@ -46,6 +57,65 @@ describe("agent-pack CLI git smoke", () => {
     });
 
     expect(stdout.trim()).toBe(pkg.version);
+  });
+
+  bunIt("builds a standalone Bun executable without package resources", async () => {
+    const scratchRoot = path.resolve(".agent-pack", "smoke");
+    await mkdir(scratchRoot, { recursive: true });
+    const workspace = await mkdtemp(path.join(scratchRoot, "bun-bin-"));
+    const binPath = path.join(workspace, "agent-pack");
+    const configDir = path.join(workspace, "config");
+    await mkdir(configDir, { recursive: true });
+
+    execFileSync(process.execPath, ["scripts/build-bun.mjs", "--outfile", binPath], {
+      cwd: path.resolve("."),
+      stdio: "pipe",
+    });
+
+    const env = {
+      ...process.env,
+      AGENT_PACK_CACHE_DIR: path.join(workspace, ".agent-pack/cache"),
+      AGENT_PACK_CONFIG_DIR: configDir,
+      AGENT_PACK_GIT_REFRESH: undefined,
+      AGENT_PACK_ID: undefined,
+      AGENT_PACK_STATE_DIR: undefined,
+    };
+    const pkg = JSON.parse(await readFile(path.resolve("package.json"), "utf8"));
+
+    const version = execFileSync(binPath, ["--version"], {
+      cwd: workspace,
+      encoding: "utf8",
+      env,
+    });
+    expect(version.trim()).toBe(pkg.version);
+
+    const help = execFileSync(binPath, ["--help"], {
+      cwd: workspace,
+      encoding: "utf8",
+      env,
+    });
+    expect(help).toContain("Usage: agent-pack");
+    expect(help).not.toContain("Resources:");
+
+    await writeFile(path.join(workspace, "pack.yaml"), "tasks:\n  - title: Inspect Bun binary\n");
+    const init = execFileSync(
+      binPath,
+      ["init", "--create-id", "bun-pack", "--manifest", "./pack.yaml"],
+      {
+        cwd: workspace,
+        encoding: "utf8",
+        env,
+      },
+    );
+    expect(init).toContain("Created pack bun-pack");
+
+    const report = execFileSync(binPath, ["report", "--id", "bun-pack"], {
+      cwd: workspace,
+      encoding: "utf8",
+      env,
+    });
+    expect(report).toContain("Pack: bun-pack");
+    expect(report).toContain("- t001 [pending] Inspect Bun binary");
   });
 
   it("uses packaged examples as a catalog root", async () => {

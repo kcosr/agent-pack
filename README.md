@@ -131,6 +131,15 @@ Requirements:
 - Git and `tar` on `PATH` for git-backed references, skills, and agents
 - Git authentication for private repositories. `agent-pack` shells out to `git`, so SSH agent, credential helper, netrc, platform keychain, GitHub CLI, or configured askpass can work.
 
+For a manual standalone executable, install Bun and run:
+
+```bash
+npm run build:bun
+./dist-bin/agent-pack --help
+```
+
+The Bun build is not part of the npm release flow. It writes a local executable to `dist-bin/agent-pack` for manual copying. Because the executable is a single file, top-level help omits npm package resource paths such as README, usage docs, and examples.
+
 `agent-pack` works with any agent CLI or editor agent that can read a text prompt and run shell commands in your workspace. The examples use POSIX shell syntax; on Windows PowerShell, use backticks for line continuations or write commands on one line, and prefer double-quoted globs such as `"./docs/**/*.md"`.
 
 ## Core Concepts
@@ -701,6 +710,8 @@ Installed npm packages include an `examples/` directory that is already laid out
 EXAMPLES_DIR="$(agent-pack --help | sed -n 's/^[[:space:]]*Examples[[:space:]][[:space:]]*//p')"
 AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR" agent-pack init --manifest code-review "Review scope: unstaged changes."
 ```
+
+Standalone Bun executables do not include these package resource paths. To use the examples with a copied executable, point `AGENT_PACK_CONFIG_DIR` at a real `examples/` checkout or another catalog directory.
 
 ### `completion`
 

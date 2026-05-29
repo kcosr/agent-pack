@@ -55,6 +55,8 @@ import {
 
 let startupError: AgentPackError | undefined;
 
+declare const __AGENT_PACK_VERSION__: string | undefined;
+
 export function configureProgram(): Command {
   const root = new Command();
   root
@@ -878,12 +880,16 @@ function printJson(value: unknown): void {
 }
 
 function packageHelpText(): string {
+  const root = packageResourceRoot();
+  if (!root) {
+    return "";
+  }
   const resources = [
     ["README", "README.md"],
     ["Usage", "docs/usage.md"],
     ["Examples", "examples"],
   ]
-    .map(([label, relativePath]) => ({ label, path: path.join(packageRoot(), relativePath) }))
+    .map(([label, relativePath]) => ({ label, path: path.join(root, relativePath) }))
     .filter((resource) => existsSync(resource.path));
   if (resources.length === 0) {
     return "";
@@ -892,6 +898,13 @@ function packageHelpText(): string {
   return `\nResources:\n${resources
     .map((resource) => `  ${resource.label.padEnd(width)}  ${resource.path}`)
     .join("\n")}`;
+}
+
+function packageResourceRoot(): string | undefined {
+  if (isCompiledBun()) {
+    return undefined;
+  }
+  return packageRoot();
 }
 
 function packageRoot(): string {
@@ -906,10 +919,23 @@ function packageRoot(): string {
 }
 
 function packageVersion(): string {
+  if (typeof __AGENT_PACK_VERSION__ === "string" && __AGENT_PACK_VERSION__) {
+    return __AGENT_PACK_VERSION__;
+  }
+  if (isCompiledBun()) {
+    return "0.0.0";
+  }
   const pkg = JSON.parse(readFileSync(path.join(packageRoot(), "package.json"), "utf8")) as {
     version?: unknown;
   };
   return typeof pkg.version === "string" ? pkg.version : "0.0.0";
+}
+
+function isCompiledBun(): boolean {
+  return (
+    typeof (process.versions as NodeJS.ProcessVersions & { bun?: string }).bun === "string" &&
+    import.meta.url.startsWith("file:///$bunfs/")
+  );
 }
 
 async function run(fn: () => Promise<void>): Promise<void> {
