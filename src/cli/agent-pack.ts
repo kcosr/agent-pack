@@ -129,9 +129,9 @@ export function configureProgram(): Command {
     .option("--json", "emit machine-readable output")
     .action(async (options) => {
       await run(async () => {
-        const packs = await listPacks();
+        const packs = sortPacksForList(await listPacks());
         if (options.json) {
-          printJson(packs.map(statusJson));
+          printJson(packs.map(listStatusJson));
           return;
         }
         process.stdout.write(statusTable(packs));
@@ -785,12 +785,18 @@ function statusJson(pack: PackState) {
     id: pack.id,
     name: pack.name,
     status: pack.status,
-    createdAt: pack.createdAt,
-    updatedAt: pack.updatedAt,
     tasks: pack.taskCounts,
     references: pack.references.length,
     skills: pack.skills.length,
     agents: pack.agents?.length ?? 0,
+  };
+}
+
+function listStatusJson(pack: PackState) {
+  return {
+    ...statusJson(pack),
+    createdAt: pack.createdAt,
+    updatedAt: pack.updatedAt,
   };
 }
 
@@ -822,7 +828,7 @@ function statusTable(packs: PackState[]): string {
       { header: "CREATED", value: (pack) => formatListTimestamp(pack.createdAt) },
       { header: "UPDATED", value: (pack) => formatListTimestamp(pack.updatedAt) },
     ],
-    sortPacksForList(packs),
+    packs,
   );
 }
 
@@ -968,7 +974,7 @@ function packageVersion(): string {
 function isCompiledBun(): boolean {
   return (
     typeof (process.versions as NodeJS.ProcessVersions & { bun?: string }).bun === "string" &&
-    import.meta.url.startsWith("file:///$bunfs/")
+    import.meta.url.includes("$bunfs")
   );
 }
 

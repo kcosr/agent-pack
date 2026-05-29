@@ -2,6 +2,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const args = process.argv.slice(2);
 let outfile = path.join("dist-bin", "agent-pack");
@@ -20,12 +21,20 @@ for (let index = 0; index < args.length; index += 1) {
   throw new Error(`unsupported argument: ${arg}`);
 }
 
-const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const absoluteOutfile = path.isAbsolute(outfile) ? outfile : path.resolve(process.cwd(), outfile);
+const pkg = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8"));
 if (typeof pkg.version !== "string" || !pkg.version) {
   throw new Error("package.json version must be a non-empty string");
 }
 
-mkdirSync(path.dirname(outfile), { recursive: true });
+try {
+  execFileSync("bun", ["--version"], { stdio: "ignore" });
+} catch {
+  throw new Error("Bun is required to build a standalone executable; install bun and retry.");
+}
+
+mkdirSync(path.dirname(absoluteOutfile), { recursive: true });
 
 execFileSync(
   "bun",
@@ -35,8 +44,8 @@ execFileSync(
     "--define",
     `__AGENT_PACK_VERSION__=${JSON.stringify(pkg.version)}`,
     "--outfile",
-    outfile,
+    absoluteOutfile,
     "src/cli/main.ts",
   ],
-  { stdio: "inherit" },
+  { cwd: repoRoot, stdio: "inherit" },
 );

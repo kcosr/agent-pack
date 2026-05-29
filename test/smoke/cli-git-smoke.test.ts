@@ -226,6 +226,13 @@ describe("agent-pack CLI git smoke", () => {
         updatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
       }),
     ]);
+
+    const summaryJson = await runCli(["summary", "--id", "first-pack", "--json"], {
+      cwd: workspace,
+    });
+    const summary = JSON.parse(summaryJson.stdout);
+    expect(summary).not.toHaveProperty("createdAt");
+    expect(summary).not.toHaveProperty("updatedAt");
   });
 
   it("prints the list header when there are no packs", async () => {
