@@ -67,6 +67,11 @@ import type {
 
 export async function initPack(input: InitInput): Promise<PackState> {
   const store = new StateStore({ stateDir: input.stateDir });
+  const pack = await buildPack(input, store);
+  return commitNewPack(store, pack);
+}
+
+async function buildPack(input: InitInput, store: StateStore): Promise<PackState> {
   const paths = store.paths;
   const taskInputs: TaskInput[] = [];
   const agentInputs: AgentInput[] = [];
@@ -148,6 +153,10 @@ export async function initPack(input: InitInput): Promise<PackState> {
     agents: agents.length ? agents : undefined,
     contract,
   };
+  return pack;
+}
+
+async function commitNewPack(store: StateStore, pack: PackState): Promise<PackState> {
   await store.createPack(pack);
   return store.loadPack(pack.id);
 }
@@ -671,16 +680,17 @@ export interface RunPackOutcome {
 }
 
 export async function runPack(input: RunPackInput): Promise<RunPackResult> {
-  const pack = input.init
-    ? await initPack(input.init)
-    : await new StateStore({ stateDir: input.stateDir }).loadPack(input.packId);
   const store = new StateStore({ stateDir: input.init?.stateDir ?? input.stateDir });
+  const pack = input.init ? await buildPack(input.init, store) : await store.loadPack(input.packId);
   await validateCachePaths(pack, store.paths);
   const agent = selectAgent(pack, input.runAgent);
   const mode = input.interactive ? "interactive" : "captured";
   const maxAttempts = agentMaxAttempts(agent);
   validateRunAttempts(agent, mode, maxAttempts);
   let currentPack = pack;
+  if (input.init) {
+    currentPack = await commitNewPack(store, pack);
+  }
   const runs: PackAgentRun[] = [];
   let lastResult: Awaited<ReturnType<typeof runAgentProcess>> | undefined;
 

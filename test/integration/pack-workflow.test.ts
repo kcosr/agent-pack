@@ -339,6 +339,55 @@ args:
     );
   });
 
+  it("creates and runs a new pack from run inputs", async () => {
+    await writeFile(
+      "agent.yaml",
+      nodePromptAgentYaml("actual", "process.stdout.write(process.argv[1])"),
+    );
+
+    const result = await runPack({
+      runAgent: "actual",
+      init: {
+        createId: "run-init-success",
+        includes: [{ type: "agentRef", ref: "./agent.yaml" }],
+        gitRefresh: "auto",
+      },
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.outcome).toEqual({ status: "completed", attempts: 1 });
+    expect(result.runs).toHaveLength(1);
+    expect(result.runs[0]).toMatchObject({
+      id: "a001",
+      agent: "actual",
+      status: "completed",
+    });
+    await expect(summaryPack("run-init-success")).resolves.toMatchObject({
+      id: "run-init-success",
+      agentRuns: [expect.objectContaining({ id: "a001", agent: "actual" })],
+    });
+  });
+
+  it("does not create a new pack when run selects a missing agent", async () => {
+    await writeFile("agent.yaml", "name: actual\ncommand: node\n");
+
+    await expect(
+      runPack({
+        runAgent: "missing",
+        init: {
+          createId: "missing-run-agent",
+          includes: [{ type: "agentRef", ref: "./agent.yaml" }],
+          gitRefresh: "auto",
+        },
+      }),
+    ).rejects.toThrow("agent not found in pack missing-run-agent: missing");
+
+    await expect(summaryPack("missing-run-agent")).rejects.toThrow(
+      "pack not found: missing-run-agent",
+    );
+    await expect(listPacks()).resolves.toEqual([]);
+  });
+
   it("records failed agent exits", async () => {
     await writeFile(
       "agent.yaml",

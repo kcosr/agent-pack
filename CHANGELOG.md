@@ -18,6 +18,9 @@
 
 ### Fixed
 
+- Fixed `agent-pack run` failures for invalid new-pack run agent selection so
+  they do not leave a newly created pack behind.
+
 ### Removed
 
 ## [0.2.0] - 2026-05-29
