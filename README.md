@@ -1173,6 +1173,22 @@ export AGENT_PACK_ID=<generated-id>
 agent-pack brief
 ```
 
+Create a design-review pack:
+
+```bash
+agent-pack init \
+  --manifest ./examples/manifests/design-review.yaml \
+  "Review docs/design/design-summary-cache.md."
+
+export AGENT_PACK_ID=<generated-id>
+agent-pack brief
+```
+
+The design-review manifest reviews a design document against the repository's
+actual code, docs, tests, and conventions. Name the design path in the prompt,
+or pass `--input design_path=<path>` when you want the target path captured as a
+pack input.
+
 Create a feature design-summary pack:
 
 ```bash

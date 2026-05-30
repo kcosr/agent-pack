@@ -126,6 +126,7 @@ describe("agent-pack CLI git smoke", () => {
     expect(list.stdout).toContain("TYPE      NAME");
     expect(list.stdout).toContain("manifest  code-review");
     expect(list.stdout).toContain("manifest  demo");
+    expect(list.stdout).toContain("manifest  design-review");
     expect(list.stdout).toContain("manifest  docs-review");
 
     const candidates = await runCli(["__complete", "do", "init", "--manifest"], {
@@ -133,6 +134,27 @@ describe("agent-pack CLI git smoke", () => {
       env,
     });
     expect(candidates.stdout).toBe("docs-review\n");
+
+    await runCli(
+      [
+        "init",
+        "--create-id",
+        "design-review",
+        "--manifest",
+        "design-review",
+        "--input",
+        "design_path=docs/design/example.md",
+        "Review docs/design/example.md.",
+      ],
+      { cwd: workspace, env },
+    );
+    const designBrief = await runCli(["brief", "--id", "design-review"], {
+      cwd: workspace,
+      env,
+    });
+    expect(designBrief.stdout).toContain("Name: design-review");
+    expect(designBrief.stdout).toContain("Resolve and read the design document");
+    expect(designBrief.stdout).toContain("design_path");
 
     await runCli(
       [

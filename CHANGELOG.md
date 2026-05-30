@@ -13,8 +13,13 @@
 - Added `maxAttempts` for captured agent runs so failed or incomplete unblocked
   packs can retry with a remaining-task reminder
   ([#9](https://github.com/kcosr/agent-pack/pull/9)).
+- Added a bundled `design-review` example manifest for reviewing repository
+  design documents without requiring a specific design-doc format.
 
 ### Changed
+
+- Clarified that bundled `feature-design-summary` outputs should be
+  independently reviewable by a design reviewer.
 
 ### Fixed
 

@@ -39,6 +39,10 @@ instructions: |
   feature." line when those sections are genuinely empty. Do not leave
   placeholders in the final file.
 
+  The finished summary should be independently reviewable. A reviewer should be
+  able to approve, block, or request changes from the summary and repository
+  evidence without relying on hidden task notes or unstated context.
+
 inputs:
   create_branch:
     type: boolean
@@ -294,11 +298,11 @@ tasks:
         - Surface Inventory: paste the inventory from `produce-surface-inventory`.
         - Schema: schema diff for data / schema features, otherwise `_No schema changes._`.
         - Impact Surface: markdown table with `File | Responsibility | Existing tests`.
-        - Higher-Level Implementation Steps: 5 to 10 bullets at design level, not line-by-line coding instructions.
+        - Higher-Level Implementation Steps: 5 to 10 bullets at design level, not line-by-line coding instructions. Identify sequencing, dependencies, and validation points.
         - Diagrams: Mermaid diagrams only when they add real signal, otherwise `_No diagrams applicable._`.
         - Risks: bullet list from `assess-risks-tests`.
         - Test Strategy: tests and commands from `assess-risks-tests`.
-        - Open Assumptions: non-contract assumptions from `capture-feature`.
+        - Open Assumptions: reviewable non-contract assumptions from `capture-feature`, each phrased as something that can be confirmed or challenged.
 
       Do not perform new analysis here. If evidence is missing, return to the
       upstream task notes first. Do not leave placeholders.
@@ -318,6 +322,7 @@ tasks:
         - all file paths and commands are accurate
         - the contract is concrete and not guesswork
         - the surface inventory covers every user-visible name from the contract
+        - every open assumption is reviewable and not a hidden requirement
         - risks and test strategy cover the impacted shared paths
         - no extra workflow artifact, worktree, nested review, commit, PR, or implementation execution instructions were included
         - the summary path uses the resolved slug unless the prompt explicitly named an output path

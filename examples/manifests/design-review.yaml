@@ -1,0 +1,292 @@
+schemaVersion: 1
+name: design-review
+instructions: |
+  Perform a standalone review of a design document for the target repository.
+  The user should name the design document in the pack prompt, for example
+  "Review docs/design/design-summary-cache.md". If the optional `design_path`
+  input is set, use it as the target design path unless the prompt clearly names
+  a different path.
+
+  You are reviewing the design, not implementing it and not rewriting it. Use
+  read-only commands to inspect the repository and validate the design against
+  real code, docs, tests, build metadata, and existing conventions. Do not modify
+  files in the reviewed repository.
+
+  This pack pairs well with the `feature-design-summary` pack, but it must not
+  require that exact section layout. If the design uses those sections, treat
+  them as review anchors. If it uses another format, extract the same concepts:
+  scope, observable contract, surface inventory, schema/data changes, impact
+  surface, implementation approach, risks, test strategy, and assumptions.
+
+  For every finding, use this format in task notes:
+
+      [SEVERITY] <design-path>:line - short title
+        Observation: what the design says or omits.
+        Why it matters: the concrete implementation, user, maintenance, or
+          review failure mode.
+        Suggested fix: the specific design revision needed before implementation.
+
+  When a finding depends on repository reality, cite the relevant code or doc
+  path in the observation or suggested fix. Prefer line-specific citations when
+  practical.
+
+  Severity guide:
+
+      CRITICAL: design would cause data loss, security exposure, broken contract,
+      impossible implementation, or a severely misleading handoff.
+      HIGH: missing or wrong contract detail, unwired user-facing surface,
+      unhandled migration/error path, or implementation plan that cannot safely
+      produce the stated outcome.
+      MEDIUM: meaningful ambiguity, weak sequencing, missing test coverage for a
+      risky path, repo-fit mismatch, or unsupported assumption.
+      LOW: minor clarity issue, small evidence gap, terminology drift, or
+      non-blocking structure problem.
+      NIT: pure style preference; use sparingly.
+
+  Be honest. A review dimension with no real issues should say "No issues found
+  in this dimension." Do not pad the review with weak findings.
+
+inputs:
+  design_path:
+    type: string
+    description: Optional path to the design document. The prompt can name the path instead.
+
+tasks:
+  - id: resolve-design
+    title: Resolve and read the design document
+    category: review
+    body: |
+      Identify the design document to review.
+
+      Resolution order:
+        1. A clear path named in the pack prompt.
+        2. The optional `design_path` input, if set.
+        3. A single obvious design document in common locations such as
+           `docs/design/`, `design/`, or the repository root.
+
+      If no single target can be resolved, mark this task blocked with a concise
+      question asking for the path. If the resolved file is missing or unreadable,
+      block with the exact path and error.
+
+      Read the design in full. Capture in notes:
+        - resolved design path
+        - the feature or change the design proposes
+        - whether it appears to be a `feature-design-summary` output or another
+          design format
+        - the main sections or structure present in the document
+        - any explicit non-goals, assumptions, and compatibility posture
+    doneWhen:
+      - Notes record the resolved design path and design structure.
+      - Missing or ambiguous design paths are blocked with a specific question.
+
+  - id: orient
+    title: Orient to repository context
+    category: review
+    body: |
+      Read enough repository context to verify the design against reality:
+        - AGENTS.md, CLAUDE.md, CONTRIBUTING.md, and README files when present
+        - Build manifests such as package.json, Cargo.toml, go.mod, pyproject.toml
+        - Existing docs related to the design area
+        - Relevant source files, schemas, config parsers, command definitions,
+          API handlers, UI components, persistence code, and tests
+
+      Do not try to understand the entire repository unless the design scope
+      requires it. Focus on the files and conventions the design claims to touch
+      or depend on.
+
+      Capture in notes:
+        - project purpose and relevant modules
+        - exact build, lint, test, and documentation commands if discoverable
+        - files and tests read to validate the design
+        - repo-specific rules that affect the design
+    doneWhen:
+      - Notes summarize the relevant repo context and files inspected.
+      - Notes identify exact check commands where the repo exposes them.
+
+  - id: contract-scope
+    title: Contract and scope clarity
+    category: review
+    body: |
+      Review whether the design defines the observable contract well enough for
+      implementation and later review.
+
+      Check the applicable dimensions:
+        - CLI: commands, args, flags, defaults, text output, JSON output, exit
+          codes, malformed input, duplicate or missing resources.
+        - API / library: signature, arguments, return shape, errors, auth,
+          request / response schema, and compatibility statement.
+        - Data / schema: field names, types, nullability, defaults, indexes,
+          migration direction, rollback, and behavior for pre-existing data.
+        - UI: entry point, states, transitions, loading, empty, error, keyboard,
+          accessibility, and responsive behavior.
+        - Refactor: files in scope, files out of scope, behavior-preservation
+          criteria, and rollback or recovery expectations.
+
+      Flag missing or vague contract details that would cause two reasonable
+      implementers to build different observable behavior. Also flag scope creep:
+      work the design introduces but does not justify from the stated problem.
+
+      Default contract posture: prefer the final shape directly. Unless the
+      design explicitly calls for migration or compatibility, flag fallback
+      readers, heuristic detection, alias fields, bridge routes, or dual-shape
+      parsers as design risk.
+    doneWhen:
+      - Notes list contract and scope findings or explicitly say none were found.
+
+  - id: surface-completeness
+    title: Surface inventory completeness
+    category: review
+    body: |
+      Treat the design's Surface Inventory as a load-bearing contract when it has
+      one. If the design lacks a surface inventory, derive one from the proposed
+      behavior and decide whether the omission matters.
+
+      Review every named user-facing or persisted entity introduced, changed, or
+      removed by the design:
+        - CLI flags, positionals, subcommands, and output fields
+        - HTTP routes, RPC methods, public exports, and event names
+        - env vars, config keys, manifest fields, schema fields, and persisted
+          state
+        - UI labels, controls, states, navigation entries, and visible errors
+        - docs, examples, changelog entries, and compatibility notes when they
+          are part of the user-facing contract
+
+      For each surface, check whether the design accounts for:
+        - declaration or parser where the value enters
+        - consumer where business logic reads it
+        - tests at the outermost practical entry point
+        - docs or examples when user-facing docs are expected
+        - symmetric peers that must stay aligned
+        - removal twins and old names that must leave live runtime paths
+
+      If the design says there are no user-visible surfaces, verify that claim
+      against the proposed change.
+    doneWhen:
+      - Notes list surface completeness findings or explicitly say none were found.
+
+  - id: repo-fit
+    title: Repository fit and architectural consistency
+    category: review
+    body: |
+      Check whether the design fits the repository's existing shape.
+
+      Look for mismatches with:
+        - module boundaries and ownership
+        - naming, file layout, and command/config conventions
+        - existing helper APIs, schemas, parsers, serializers, state reducers,
+          lifecycle handlers, database layers, and UI state patterns
+        - current test organization and fixture style
+        - release, changelog, documentation, or migration practices
+
+      Favor findings where the mismatch would create maintenance cost, hidden
+      duplication, confusing asymmetry, or a bug-prone implementation. Do not
+      require the design to preserve bad existing patterns when it explicitly
+      justifies a better end-state shape.
+    doneWhen:
+      - Notes list repo-fit findings or explicitly say none were found.
+
+  - id: implementation-approach
+    title: Implementation approach quality
+    category: review
+    body: |
+      Review the proposed implementation steps at design level. This is not an
+      agent-runner assignment review and not a demand for line-by-line tasks.
+
+      Check whether the design:
+        - sequences dependent work in a plausible order
+        - identifies shared paths that need preservation tests
+        - names concrete files, modules, or subsystems where appropriate
+        - separates behavior changes from mechanical cleanup
+        - explains data migration, cleanup, rollback, or one-way changes when
+          they matter
+        - makes implementation constraints explicit instead of hiding them in
+          assumptions
+        - avoids prescribing unnecessary workflow machinery, commits, PRs,
+          nested reviews, or tool-specific run semantics
+
+      Flag implementation steps that are too vague to review, too detailed to be
+      useful as a design, or inconsistent with the contract and surface inventory.
+    doneWhen:
+      - Notes list implementation-approach findings or explicitly say none were found.
+
+  - id: risks-tests
+    title: Risks, edge cases, and test strategy
+    category: review
+    body: |
+      Review whether the design identifies the risky paths and proposes adequate
+      validation.
+
+      Check:
+        - malformed input, missing files, permission errors, network failures,
+          subprocess failures, empty input, duplicate resources, and partial
+          writes where applicable
+        - concurrency, async settlement, cancellation, lifecycle, retries,
+          cleanup, and state-machine transitions
+        - security and trust boundaries: CLI args, env vars, config files,
+          untrusted paths, regexes, shell commands, dynamic imports, persisted
+          secrets, prompt injection exposure, and log/error output
+        - schema or persistence compatibility and migration risks
+        - representative tests for shared paths and symmetric peers
+        - exact check commands and any manual verification that remains
+
+      Missing tests are findings when they cover a design risk, changed shared
+      path, persisted/user-facing behavior, or previously fragile area.
+    doneWhen:
+      - Notes list risk and test-strategy findings or explicitly say none were found.
+
+  - id: synthesis
+    title: Top design findings synthesis
+    category: synthesis
+    body: |
+      Read back through all review task notes and build a single ranked list of
+      the top 10 findings. Order by severity and then impact. Each entry must
+      cite the design path and line when possible, plus any repository file that
+      proves or contextualizes the issue.
+
+      If fewer than 10 real issues exist, list only the real issues and stop.
+      Include:
+        - one sentence on whether the design is close to implementation-ready
+        - the highest-leverage design revision, if one exists
+        - a recommendation using exactly one of: "approve", "approve with
+          changes", or "block"
+    doneWhen:
+      - Notes contain a ranked findings list or state that no real issues were found.
+      - Notes include implementation-readiness, highest-leverage revision if any, and recommendation.
+
+  - id: approval
+    title: Approve or block design
+    category: gate
+    body: |
+      Make the final design decision.
+
+      Block if any HIGH or CRITICAL finding is unresolved, if synthesis says
+      "approve with changes" or "block", or if you could not trace a suspected
+      design risk deeply enough to judge whether it is real. Complete only if
+      the synthesis recommendation is "approve" and you would personally stand
+      behind this design being handed to an implementer as-is.
+
+      Write one of these records in Notes:
+
+          APPROVED for implementation.
+          Rationale: <one to three sentences.>
+          Residual findings: <open MEDIUM/LOW items accepted by the caller, or "none".>
+
+          BLOCKED -- design needs revision.
+          Unresolved: <specific blocking findings with design/code citations.>
+          Path to approval: <concrete design revisions or decisions needed for approval.>
+    doneWhen:
+      - Notes contain either an APPROVED or BLOCKED decision record.
+
+contract:
+  do:
+    - Review the design against repository reality, not only against its own prose.
+    - Cite design paths and line numbers for every finding when practical.
+    - Cite code, docs, schemas, or tests when a finding depends on repo evidence.
+    - Keep findings focused on implementation readiness and user-visible correctness.
+    - Record findings in the task notes for the dimension where they were found.
+  dont:
+    - Modify the design or implementation files.
+    - Require the design to use the `feature-design-summary` section layout.
+    - Review agent-runner assignment wiring unless the design itself is about agent-runner.
+    - Invent findings to make the review look comprehensive.
+    - Mark approval complete when unresolved HIGH or CRITICAL findings remain.
