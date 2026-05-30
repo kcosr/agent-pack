@@ -223,7 +223,8 @@ AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR" agent-pack init --manifest code-review "Re
 
 The manual Bun standalone build emits `dist-bin/agent-pack` and omits npm package resource paths from help. Use a real catalog directory with `AGENT_PACK_CONFIG_DIR` when running that copied executable.
 
-Other bundled manifests include `docs-review` for documentation review and
+Other bundled manifests include `docs-review` for documentation review,
+`design-review` for reviewing design documents against the repository, and
 `feature-design-summary` for creating a repository-grounded feature design
 summary markdown file from a feature brief. The feature design-summary manifest
 creates a feature branch from `main` by default; pass
