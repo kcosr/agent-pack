@@ -19,7 +19,8 @@
 ### Fixed
 
 - Fixed `agent-pack run` failures for invalid new-pack run agent selection so
-  they do not leave a newly created pack behind.
+  they do not leave a newly created pack behind
+  ([#10](https://github.com/kcosr/agent-pack/pull/10)).
 
 ### Removed
 
