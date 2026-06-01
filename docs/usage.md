@@ -72,9 +72,15 @@ agents:
 ```bash
 agent-pack run --manifest ./pack.yaml --run-agent claude "Review scope: unstaged changes."
 agent-pack run --id <existing-pack-id> --run-agent claude
+agent-pack run --id <existing-pack-id> "Please re-check after my edits."
 ```
 
-If a pack has exactly one stored agent, `--run-agent` can be omitted. Captured `run` executions capture agent stdout, record it in `agentRuns`, and print the final report. Backend stderr is not streamed or stored.
+If a pack has exactly one stored agent, `--run-agent` can be omitted. For
+existing packs, the positional argument is a follow-up message for that run and
+is recorded on the `agentRuns` entry. Agents must include `{prompt}` in `args`
+to receive a follow-up message. Captured `run` executions capture agent stdout,
+record it in `agentRuns`, and print the final report. Backend stderr is not
+streamed or stored.
 
 For an interactive backend session, use an agent definition whose args start the backend interactively and pass `--interactive`:
 

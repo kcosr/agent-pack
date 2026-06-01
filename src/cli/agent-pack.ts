@@ -248,11 +248,15 @@ function configureRunCommand(root: Command): void {
     .option("--state-dir <path>", "override the state directory")
     .option("--interactive", "run the agent with inherited terminal stdio")
     .option("--json", "emit machine-readable output")
-    .argument("[prompt]", "one-off prompt rendered at the top of a new pack brief")
+    .argument(
+      "[prompt]",
+      "new pack prompt, or follow-up message when --id targets an existing pack",
+    )
     .action(async (prompt, options) => {
       await run(async () => {
-        const createInputs = hasCreateInputs(includes, inputAssignments, prompt, options);
-        if (options.id && createInputs) {
+        const hasNewPackInputs = hasCreateInputs(includes, inputAssignments, options);
+        const createInputs = hasNewPackInputs || (!options.id && Boolean(prompt));
+        if (options.id && hasNewPackInputs) {
           throw new AgentPackError("--id cannot be combined with create-and-run options");
         }
         if (options.interactive && options.json) {
@@ -261,6 +265,7 @@ function configureRunCommand(root: Command): void {
         const result = await runPack({
           packId: createInputs ? undefined : options.id,
           runAgent: options.runAgent,
+          message: options.id ? prompt : undefined,
           interactive: options.interactive,
           stateDir: options.stateDir,
           init: createInputs
@@ -400,13 +405,11 @@ function addCompositionOptions(
 function hasCreateInputs(
   includes: InitInclude[],
   inputAssignments: string[],
-  prompt: string | undefined,
   options: { name?: string; createId?: string },
 ): boolean {
   return (
     includes.length > 0 ||
     inputAssignments.length > 0 ||
-    Boolean(prompt) ||
     Boolean(options.name) ||
     Boolean(options.createId)
   );

@@ -100,6 +100,7 @@ export interface PackAgent {
 export interface PackAgentRun {
   id: string;
   agent: string;
+  message?: string;
   attempt?: number;
   mode: PackAgentRunMode;
   status: PackAgentRunStatus;

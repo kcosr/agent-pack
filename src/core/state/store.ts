@@ -52,6 +52,7 @@ const agentFields = new Set(["name", "command", "args", "timeoutSec", "maxAttemp
 const agentRunFields = new Set([
   "id",
   "agent",
+  "message",
   "attempt",
   "mode",
   "status",
@@ -527,6 +528,7 @@ function validatePackAgentRuns(value: unknown, filePath: string): void {
     validateKnownFields(run, agentRunFields, `agentRuns[${index}]`, filePath);
     validateRequiredString(run.id, `agentRuns[${index}].id`, filePath);
     validateRequiredString(run.agent, `agentRuns[${index}].agent`, filePath);
+    validateOptionalString(run.message, `agentRuns[${index}].message`, filePath);
     if (run.attempt !== undefined && (!Number.isInteger(run.attempt) || Number(run.attempt) <= 0)) {
       throw new AgentPackError(
         `invalid pack agent run field 'agentRuns[${index}].attempt': ${filePath}`,

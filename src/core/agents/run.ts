@@ -99,9 +99,33 @@ function spawnInteractiveAgent(input: {
   });
 }
 
-export function agentPrompt(): string {
+export function agentPrompt(message?: string): string {
   const commandName = process.env.AGENT_PACK_CMD ?? "agent-pack";
-  return `Run ${commandName} brief and follow the instructions. Update task status as you work. When finished, stop.`;
+  const normalizedMessage = normalizeMessage(message);
+  const lines = [
+    `Run ${commandName} brief and follow the instructions.`,
+    ...formatMessageLines(normalizedMessage),
+    ...(normalizedMessage ? [""] : []),
+    "Update task status as you work. When finished, stop.",
+  ];
+  return lines.join("\n");
+}
+
+export function messageLines(message: string | undefined): string[] {
+  const normalizedMessage = normalizeMessage(message);
+  return formatMessageLines(normalizedMessage);
+}
+
+function formatMessageLines(normalizedMessage: string | undefined): string[] {
+  if (!normalizedMessage) {
+    return [];
+  }
+  return ["", "Follow-up message:", normalizedMessage];
+}
+
+export function normalizeMessage(message: string | undefined): string | undefined {
+  const trimmed = message?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 function expandAgentArg(value: string, prompt: string): string {
