@@ -280,6 +280,12 @@ function formatAgentRunReportEntry(run: PackAgentRun): string {
     lines.push(`  Attempt: ${run.attempt}`);
   }
   lines.push(`  Mode: ${run.mode}`);
+  if (run.message) {
+    lines.push("  Message:");
+    for (const line of run.message.split("\n")) {
+      lines.push(`    ${line}`);
+    }
+  }
   if (run.endedAt) {
     lines.push(`  Ended: ${run.endedAt}`);
   }

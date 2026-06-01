@@ -6,6 +6,9 @@
 
 ### Added
 
+- Added positional follow-up messages for `agent-pack run --id <pack>`, with the
+  message passed to the agent and recorded on the agent run.
+
 ### Changed
 
 ### Fixed

@@ -478,6 +478,16 @@ args:
   - "{prompt}"
 `,
     );
+    await writeFile(
+      path.join(workspace, "echo-agent.yaml"),
+      `name: echo
+command: ${JSON.stringify(process.execPath)}
+args:
+  - -e
+  - "process.stdout.write(process.argv[1])"
+  - "{prompt}"
+`,
+    );
 
     const result = await runCli(
       [
@@ -502,22 +512,57 @@ args:
     expect(result.stdout).not.toContain("brief --id run-pack");
     expect(result.stdout).toContain("- t001 [completed] Inspect through fake agent");
 
-    const json = await runCli(["run", "--id", "run-pack", "--json"], {
-      cwd: workspace,
-      env: { FAKE_AGENT_PACK_BIN: cliPath },
-    });
+    const createWithPrompt = await runCli(
+      [
+        "run",
+        "--create-id",
+        "prompt-run-pack",
+        "--agent",
+        "./echo-agent.yaml",
+        "--json",
+        "Create this pack with an initial prompt.",
+      ],
+      { cwd: workspace },
+    );
+    const created = JSON.parse(createWithPrompt.stdout);
+    expect(created.pack.prompt).toBe("Create this pack with an initial prompt.");
+    expect(created.runs[0].message).toBeUndefined();
+    expect(created.runs[0].stdout).toContain("Run agent-pack brief and follow the instructions");
+    expect(created.runs[0].stdout).not.toContain("Follow-up message:");
+
+    const json = await runCli(
+      ["run", "--id", "run-pack", "--json", "Please re-check after the latest edits."],
+      {
+        cwd: workspace,
+        env: { FAKE_AGENT_PACK_BIN: cliPath },
+      },
+    );
     const parsed = JSON.parse(json.stdout);
     expect(parsed.runs).toHaveLength(1);
     expect(parsed.runs[0]).toMatchObject({
       id: "a002",
       agent: "fake",
+      message: "Please re-check after the latest edits.",
       attempt: 1,
       mode: "captured",
       status: "completed",
     });
     expect(parsed.runs[0].stdout).toContain("fake agent stdout");
+    expect(parsed.runs[0].stdout).toContain("Follow-up message:");
+    expect(parsed.runs[0].stdout).toContain("Please re-check after the latest edits.");
     expect(parsed.outcome).toEqual({ status: "completed", attempts: 1 });
     expect(parsed.pack.agentRuns).toHaveLength(2);
+    expect(parsed.pack.agentRuns[1]).toMatchObject({
+      id: "a002",
+      message: "Please re-check after the latest edits.",
+    });
+
+    const rejected = await runCli(
+      ["run", "--id", "run-pack", "--name", "bad-create-input", "This should stay a message."],
+      { cwd: workspace, env: { FAKE_AGENT_PACK_BIN: cliPath }, reject: false },
+    );
+    expect(rejected.exitCode).not.toBe(0);
+    expect(rejected.stderr).toContain("--id cannot be combined with create-and-run options");
   });
 
   it("retries a configured agent when tasks remain", async () => {

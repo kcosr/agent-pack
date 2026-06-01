@@ -271,6 +271,102 @@ args:
     });
   });
 
+  it("sends a positional follow-up message when running an existing pack", async () => {
+    await writeFile(
+      "agent.yaml",
+      `name: echo-agent
+command: ${JSON.stringify(process.execPath)}
+args:
+  - -e
+  - "process.stdout.write(process.argv[1])"
+  - "{prompt}"
+`,
+    );
+    await initPack({
+      createId: "run-follow-up-pack",
+      includes: [{ type: "agentRef", ref: "./agent.yaml" }],
+      gitRefresh: "auto",
+    });
+
+    const result = await runPack({
+      packId: "run-follow-up-pack",
+      message: "Please re-check the design after my edits.",
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.runs[0]).toMatchObject({
+      id: "a001",
+      agent: "echo-agent",
+      message: "Please re-check the design after my edits.",
+      status: "completed",
+    });
+    expect(result.runs[0].stdout).toContain("Run agent-pack brief and follow the instructions.");
+    expect(result.runs[0].stdout).toContain("Follow-up message:");
+    expect(result.runs[0].stdout).toContain("Please re-check the design after my edits.");
+    await expect(summaryPack("run-follow-up-pack")).resolves.toMatchObject({
+      agentRuns: [
+        expect.objectContaining({
+          id: "a001",
+          message: "Please re-check the design after my edits.",
+        }),
+      ],
+    });
+    const events = await readEvents("run-follow-up-pack");
+    expect(events.at(-1)).toMatchObject({
+      type: "agent.run",
+      data: {
+        runId: "a001",
+        message: "Please re-check the design after my edits.",
+      },
+    });
+  });
+
+  it("ignores empty follow-up messages when running an existing pack", async () => {
+    await writeFile(
+      "agent.yaml",
+      `name: echo-agent
+command: ${JSON.stringify(process.execPath)}
+args:
+  - -e
+  - "process.stdout.write(process.argv[1])"
+  - "{prompt}"
+`,
+    );
+    await initPack({
+      createId: "run-empty-message-pack",
+      includes: [{ type: "agentRef", ref: "./agent.yaml" }],
+      gitRefresh: "auto",
+    });
+
+    const result = await runPack({
+      packId: "run-empty-message-pack",
+      message: "   ",
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.runs[0].message).toBeUndefined();
+    expect(result.runs[0].stdout).not.toContain("Follow-up message:");
+    expect(result.pack.agentRuns?.[0]?.message).toBeUndefined();
+  });
+
+  it("rejects follow-up messages for agents that cannot receive prompts", async () => {
+    await writeFile("agent.yaml", nodeAgentYaml("no-prompt-agent", "process.exit(0)"));
+    await initPack({
+      createId: "no-prompt-message-pack",
+      includes: [{ type: "agentRef", ref: "./agent.yaml" }],
+      gitRefresh: "auto",
+    });
+
+    await expect(
+      runPack({
+        packId: "no-prompt-message-pack",
+        message: "Please re-check this pack.",
+      }),
+    ).rejects.toThrow(
+      "agent no-prompt-agent args must include {prompt} to receive a follow-up message",
+    );
+  });
+
   it("runs interactive agents without timeout or output capture", async () => {
     await writeFile(
       "agent.yaml",
@@ -548,14 +644,31 @@ writeFileSync(packPath, JSON.stringify(pack, null, 2) + "\\n");
       gitRefresh: "auto",
     });
 
-    const result = await runPack({ packId: "retry-completes-pack" });
+    const result = await runPack({
+      packId: "retry-completes-pack",
+      message: "Carry this follow-up into retry prompts.",
+    });
 
     expect(result.exitCode).toBe(0);
     expect(result.outcome).toEqual({ status: "completed", attempts: 2 });
     expect(result.runs).toHaveLength(2);
-    expect(result.runs[0]).toMatchObject({ id: "a001", attempt: 1, status: "completed" });
-    expect(result.runs[1]).toMatchObject({ id: "a002", attempt: 2, status: "completed" });
+    expect(result.runs[0]).toMatchObject({
+      id: "a001",
+      attempt: 1,
+      status: "completed",
+      message: "Carry this follow-up into retry prompts.",
+    });
+    expect(result.runs[1]).toMatchObject({
+      id: "a002",
+      attempt: 2,
+      status: "completed",
+      message: "Carry this follow-up into retry prompts.",
+    });
+    expect(result.runs[0].stdout).toContain("Follow-up message:");
+    expect(result.runs[0].stdout).toContain("Carry this follow-up into retry prompts.");
     expect(result.runs[1].stdout).toContain("Previous attempt 1 did not finish the pack.");
+    expect(result.runs[1].stdout).toContain("Follow-up message:");
+    expect(result.runs[1].stdout).toContain("Carry this follow-up into retry prompts.");
     expect(result.runs[1].stdout).toContain("- t001 [pending] Finish {config} on retry");
     expect(result.pack.taskCounts).toMatchObject({ completed: 1, pending: 0 });
   });

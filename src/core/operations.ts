@@ -5,7 +5,7 @@ import path from "node:path";
 import fg from "fast-glob";
 import { loadAgents } from "./agents/load.js";
 import type { AgentInput } from "./agents/load.js";
-import { agentPrompt, runAgentProcess } from "./agents/run.js";
+import { agentPrompt, messageLines, normalizeMessage, runAgentProcess } from "./agents/run.js";
 import { renderBrief, renderSummary } from "./brief/render.js";
 import { listCatalogEntries, readCatalogEntry, resolveCatalogPath } from "./catalog.js";
 import { AgentPackError } from "./errors.js";
@@ -663,6 +663,7 @@ export interface RunPackInput {
   packId?: string;
   init?: InitInput;
   runAgent?: string;
+  message?: string;
   interactive?: boolean;
   stateDir?: string;
 }
@@ -682,11 +683,13 @@ export interface RunPackOutcome {
 export async function runPack(input: RunPackInput): Promise<RunPackResult> {
   const store = new StateStore({ stateDir: input.init?.stateDir ?? input.stateDir });
   const pack = input.init ? await buildPack(input.init, store) : await store.loadPack(input.packId);
+  const message = runMessage(input);
   await validateCachePaths(pack, store.paths);
   const agent = selectAgent(pack, input.runAgent);
   const mode = input.interactive ? "interactive" : "captured";
   const maxAttempts = agentMaxAttempts(agent);
   validateRunAttempts(agent, mode, maxAttempts);
+  validateRunMessage(agent, message);
   let currentPack = pack;
   if (input.init) {
     currentPack = await commitNewPack(store, pack);
@@ -702,13 +705,15 @@ export async function runPack(input: RunPackInput): Promise<RunPackResult> {
       packId: currentPack.id,
       stateDir: store.paths.stateDir,
       mode,
-      prompt: attempt === 1 ? agentPrompt() : agentRetryPrompt(currentPack, attempt),
+      prompt:
+        attempt === 1 ? agentPrompt(message) : agentRetryPrompt(currentPack, attempt, message),
     });
     lastResult = result;
     const endedAt = new Date().toISOString();
     const run: PackAgentRun = {
       id: runId,
       agent: agent.name,
+      message,
       attempt,
       mode,
       status: agentRunStatus(result),
@@ -736,6 +741,7 @@ export async function runPack(input: RunPackInput): Promise<RunPackResult> {
         exitCode: run.exitCode,
         signal: run.signal,
         timedOut: run.timedOut,
+        message,
       },
     );
     const outcome = runAttemptOutcome(currentPack, run, attempt, maxAttempts);
@@ -761,6 +767,13 @@ export async function runPack(input: RunPackInput): Promise<RunPackResult> {
     outcome,
     exitCode: runPackExitCode(lastRun, lastResult, mode, outcome),
   };
+}
+
+function runMessage(input: RunPackInput): string | undefined {
+  if (input.init) {
+    return undefined;
+  }
+  return normalizeMessage(input.message);
 }
 
 function runPackExitCode(
@@ -806,6 +819,17 @@ function validateRunAttempts(
   }
 }
 
+function validateRunMessage(agent: PackAgent, message: string | undefined): void {
+  if (!message) {
+    return;
+  }
+  if (!agent.args.some((arg) => arg.includes("{prompt}"))) {
+    throw new AgentPackError(
+      `agent ${agent.name} args must include {prompt} to receive a follow-up message`,
+    );
+  }
+}
+
 function runAttemptOutcome(
   pack: PackState,
   run: PackAgentRun,
@@ -833,13 +857,14 @@ function runAttemptOutcome(
   return { status: "exhausted", attempts: attempt };
 }
 
-function agentRetryPrompt(pack: PackState, attempt: number): string {
+function agentRetryPrompt(pack: PackState, attempt: number, message: string | undefined): string {
   const commandName = process.env.AGENT_PACK_CMD ?? "agent-pack";
   const remaining = activeTasks(pack.tasks).filter((task) => task.status !== "completed");
   const lines = [
     `Previous attempt ${attempt - 1} did not finish the pack.`,
     "",
     `Run ${commandName} brief and continue working through the remaining tasks.`,
+    ...messageLines(message),
     "",
     "Remaining tasks:",
   ];
