@@ -14,19 +14,11 @@
 
 ## [0.2.2] - 2026-06-01
 
-### Breaking Changes
-
 ### Added
 
 - Added positional follow-up messages for `agent-pack run --id <pack>`, with the
   message passed to the agent and recorded on the agent run
   ([#12](https://github.com/kcosr/agent-pack/pull/12)).
-
-### Changed
-
-### Fixed
-
-### Removed
 
 ## [0.2.1] - 2026-05-30
 
@@ -56,8 +48,6 @@
 - Fixed `agent-pack run` failures for invalid new-pack run agent selection so
   they do not leave a newly created pack behind
   ([#10](https://github.com/kcosr/agent-pack/pull/10)).
-
-### Removed
 
 ## [0.2.0] - 2026-05-29
 
@@ -99,21 +89,11 @@
   rejected instead of being coerced to `0`
   ([#6](https://github.com/kcosr/agent-pack/pull/6)).
 
-### Removed
-
 ## [0.1.2] - 2026-05-09
-
-### Breaking Changes
-
-### Added
-
-### Changed
 
 ### Fixed
 
 - Fixed zsh completion at the top-level command position ([#4](https://github.com/kcosr/agent-pack/pull/4)).
-
-### Removed
 
 ## [0.1.1] - 2026-05-09
 
@@ -137,10 +117,6 @@
   completion file for permanent shell startup setup ([#3](https://github.com/kcosr/agent-pack/pull/3)).
 - Changed shell completion to suggest active command options when no app-known
   positional completions are available ([#3](https://github.com/kcosr/agent-pack/pull/3)).
-
-### Fixed
-
-### Removed
 
 ## [0.1.0] - 2026-05-08
 
