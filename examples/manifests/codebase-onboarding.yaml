@@ -1,0 +1,280 @@
+schemaVersion: 1
+name: codebase-onboarding
+instructions: |
+  Produce a grounded onboarding guide for an unfamiliar codebase. The reader is
+  a competent engineer who is new to THIS codebase: assume general engineering
+  skill, but explain everything project-specific. This is a generative pack — it
+  assembles a coherent guide from the task notes — not a find-and-rank audit and
+  not a code review.
+
+  The pack prompt may scope the guide to a subsystem, service, or path. If it
+  does not, the scope is the whole project; resolve and record that in the first
+  task. If the optional `scope` input is set, use it as the focus unless the
+  prompt clearly names a different one.
+
+  Every explanation must be grounded in the actual current code. Use read-only
+  commands to inspect the repository, including rg, grep, cat, git log, git
+  show, build manifests, and source reads. Do not modify files. Read the code
+  before trusting the docs: where a README, comment, or design doc disagrees
+  with what the code does, the code wins and the disagreement is itself worth
+  recording. Prefer the few flows, types, and entry points that unlock the most
+  understanding over an exhaustive file-by-file tour.
+
+  For each discovery task, record explanations in this format in task notes:
+
+      [STATUS] <topic or flow> - short title
+        What it is: the plain explanation a newcomer needs, in your own words.
+        Where in code: the concrete grounding — path:line, type, function,
+          module, command, or config key that proves the explanation.
+        Why it matters: how this fits the mental model — what it unlocks, what it
+          connects to, or the trap it helps avoid.
+
+  Status guide:
+
+      GROUNDED: explained and verified against current code with a citation.
+      PARTIAL: mostly understood, but one claim is still unverified; name the
+        gap and the check that would close it.
+      UNCLEAR: the code's intent could not be determined from inspection; state
+        the open question rather than guessing.
+      STALE-DOC: the docs claim something the code does not do; record both the
+        doc claim and the actual code behavior with citations.
+
+  Be honest. A dimension with nothing real to say should say "Nothing notable in
+  this dimension." Do not pad the guide with filler, restated file names with no
+  explanation, or generic advice that would be true of any codebase.
+
+inputs:
+  scope:
+    type: string
+    description: Optional subsystem, service, or path to focus the guide on. The prompt can name the scope instead; default is the whole project.
+
+tasks:
+  - id: orient-purpose
+    title: Purpose, audience, and scope
+    category: discover
+    body: |
+      Establish what the project is before explaining how it works.
+
+      Read the high-signal entry points first:
+        - README files, AGENTS.md, CLAUDE.md, CONTRIBUTING.md
+        - docs/, doc/, documentation/, or guides/ directories
+        - Build manifests such as package.json, Cargo.toml, go.mod, pyproject.toml
+        - The top-level directory layout
+
+      Capture in notes:
+        - what the project is and the problem it solves, in two or three sentences
+        - who uses it (end users, other services, operators, agents) and how
+        - the boundaries: what the project is explicitly NOT, and what it leaves
+          to other systems
+        - the top-level layout — the major directories and what each one owns
+
+      Resolve the guide scope from the pack prompt or the optional `scope` input.
+      If neither names a scope, the scope is the whole project; record that
+      explicitly. Cite the README, AGENTS.md, or docs that ground each claim.
+    doneWhen:
+      - Notes state the project purpose, its users, and its non-goals with citations.
+      - Notes describe the top-level layout and what each major directory owns.
+      - Notes record the resolved scope, defaulting to the whole project.
+
+  - id: architecture-map
+    title: Architecture and components
+    category: discover
+    body: |
+      Build the structural map a newcomer needs to place any file in context.
+
+      Capture in notes:
+        - the components/modules and what each one owns
+        - the runtime topology — processes, services, jobs, data stores, queues,
+          caches, and external integrations the system talks to
+        - the dependency shape at module/package level (from build manifests and
+          imports): what depends on what, and the direction
+        - the dominant patterns and conventions the code leans on (layering,
+          event-driven flow, dependency injection, a plugin system, and so on)
+        - the intended architecture as the docs describe it, AND whether the code
+          actually follows it or has drifted — cite both sides when they differ
+
+      Ground each component in a real directory, module, or type. This map is the
+      backbone the later flow and glossary tasks cite back to.
+    doneWhen:
+      - Notes contain a component map grounded in real directories, modules, or types.
+      - Notes describe the runtime topology and the module-level dependency shape.
+      - Notes state the intended architecture and whether the code follows it.
+
+  - id: key-flows
+    title: Key end-to-end flows
+    category: discover
+    body: |
+      Trace three to five of the most important flows end to end so a newcomer
+      can follow control and data through the system.
+
+      Choose the flows that unlock the most understanding, typically including:
+        - startup / initialization: how the program boots, wires dependencies,
+          loads config, and reaches a ready state
+        - the core use case: the single most important thing the system does
+        - a representative request or job lifecycle from entry to response or
+          side effect
+
+      For each flow, walk it step by step and name the file and function at every
+      hop, so the reader can open each file and see the next step. Note where the
+      flow branches on error or important conditions. Cite path:line at each hop.
+    doneWhen:
+      - Notes trace three to five flows step by step, including startup and the core use case.
+      - Each flow names the files and functions at each hop with citations.
+
+  - id: domain-glossary
+    title: Domain glossary and core types
+    category: discover
+    body: |
+      Capture the vocabulary and the core data shapes a newcomer must learn to
+      read the code without getting lost.
+
+      Capture in notes:
+        - the domain terms and project-specific jargon, each defined plainly
+        - the core entities and types the system is built around, and how they
+          relate
+        - the important status enums or state values and what each one means
+        - the naming conventions a reader should internalize (suffixes, prefixes,
+          module-naming, file-naming patterns)
+
+      Map every term, type, and enum to where it is defined in code (path:line or
+      the declaring type/module). A term without a code anchor is a guess, not a
+      glossary entry — mark it UNCLEAR if you cannot find where it lives.
+    doneWhen:
+      - Notes define the domain terms, core types, and status enums a newcomer must learn.
+      - Each glossary entry cites where the term or type is defined in code.
+      - Notes record the naming conventions a reader should internalize.
+
+  - id: conventions-workflow
+    title: Conventions and developer workflow
+    category: discover
+    body: |
+      Document how to actually work in this repository so a newcomer can make a
+      change safely on day one.
+
+      Capture in notes:
+        - the exact build, test, lint, format, and run commands — copy them
+          verbatim from AGENTS.md, CONTRIBUTING, README, or the build manifest
+        - how to make a change safely: the check sequence to run before committing
+          and any required validation steps
+        - code-style and contribution conventions the project enforces
+        - CI: what runs on a pull request and what must pass
+        - the release process at a high level, and where it is documented
+
+      Cite AGENTS.md, CONTRIBUTING, and the build manifests for each command and
+      convention. Where a documented command disagrees with the manifest, verify
+      against the manifest and mark the discrepancy STALE-DOC.
+    doneWhen:
+      - Notes record the exact build, test, lint, format, and run commands with citations.
+      - Notes describe the safe-change check sequence, CI expectations, and release process.
+      - Documented commands that disagree with the build manifest are flagged STALE-DOC.
+
+  - id: where-to-start
+    title: Where to start and reading order
+    category: discover
+    body: |
+      Lay out a guided first-contribution path for the newcomer.
+
+      Capture in notes:
+        - the spine files to read first, in order — the smallest set that builds
+          an accurate mental model fastest, each with one line on why it is on
+          the list
+        - the best entry points to start reading from (the main, the root module,
+          the primary handler, the config loader)
+        - a few starter-task shapes a newcomer could safely take on early, each
+          grounded in a real area of the code and sized to be approachable
+
+      Keep the reading order short and ordered by leverage, not by directory
+      walk. Cite each spine file and starter-task area by path.
+    doneWhen:
+      - Notes give an ordered spine-file reading list, each with a reason and a path.
+      - Notes name good entry points and a few grounded starter-task shapes.
+
+  - id: gotchas
+    title: Gotchas and non-obvious traps
+    category: discover
+    body: |
+      Surface the surprises that bite newcomers — the things you only learn by
+      getting burned.
+
+      Look for and record:
+        - non-obvious couplings: a change here silently requires a change there
+        - footguns: easy-to-misuse APIs, ordering requirements, or config that
+          fails quietly
+        - load-bearing code that looks removable but is not, and why
+        - generated, vendored, or fixture code that must not be hand-edited
+        - places where the docs or comments are stale or wrong versus the code
+
+      Ground each trap in a concrete location (path:line) and state both the
+      surprise and the consequence of getting it wrong. Stale or wrong docs are
+      higher value here than missing docs because they actively mislead.
+    doneWhen:
+      - Notes list non-obvious traps, each grounded in a concrete path:line.
+      - Each trap states the surprise and the consequence of getting it wrong.
+      - Stale or wrong docs found here are recorded with both the doc claim and the code reality.
+
+  - id: assemble-guide
+    title: Assemble the onboarding guide
+    category: synthesis
+    body: |
+      Combine the discovery notes into one coherent onboarding guide that stands
+      on its own, written for a competent engineer new to this codebase.
+
+      Open with a one-paragraph "the mental model in 60 seconds": what the system
+      is, the shape of it, and the one idea that makes everything else click.
+
+      Then assemble the guide from the recorded notes in a logical order:
+      purpose and scope, architecture and components, the key flows, the domain
+      glossary and core types, conventions and workflow, gotchas, and finally an
+      explicit suggested reading order pulled from the where-to-start task.
+
+      Keep every claim grounded in citations already recorded in earlier task
+      notes; do not introduce new unverified claims here. Carry forward any
+      PARTIAL, UNCLEAR, or STALE-DOC markers so the reader knows what is solid
+      and what is still open.
+    doneWhen:
+      - Notes contain a single assembled guide opening with a 60-second mental model.
+      - The guide covers purpose, architecture, flows, glossary, workflow, gotchas, and reading order.
+      - The guide carries forward citations and any PARTIAL, UNCLEAR, or STALE-DOC markers.
+
+  - id: accuracy-gate
+    title: Accuracy and completeness gate
+    category: gate
+    body: |
+      Make the final call on whether the guide is trustworthy enough to hand to a
+      newcomer.
+
+      Re-check the assembled guide against the code. Verify that every claim is
+      grounded in real, current code with a citation that holds, and that no
+      critical flow or core concept is missing. Choose HAS GAPS if any load-
+      bearing claim is unverified or wrong, if the citations do not hold, or if a
+      newcomer following this guide would hit an unexplained wall — a flow that
+      dead-ends, a concept used but never defined, or a command that does not
+      work as written. Choose ACCURATE only if you would personally hand this
+      guide to a new engineer and stand behind it.
+
+      Write one of these records in Notes:
+
+          ACCURATE.
+          Rationale: <one to three sentences.>
+          Open items: <PARTIAL or UNCLEAR notes the reader should know about, or "none".>
+
+          HAS GAPS.
+          Gaps: <the specific unverified claims, missing flows, or concepts, with citations.>
+          Path to accurate: <the concrete checks or additions needed to close each gap.>
+    doneWhen:
+      - Notes contain either an ACCURATE or HAS GAPS decision record.
+      - A HAS GAPS record names each gap and the concrete check or addition that would close it.
+
+contract:
+  do:
+    - Ground every explanation in actual current code and cite the path, type, or command.
+    - Write for a competent engineer who is new to THIS repository, explaining the project-specific parts.
+    - Prefer the few flows and concepts that unlock the most understanding.
+    - Give an explicit, leverage-ordered reading order a newcomer can follow.
+    - Read the code before trusting the docs, and record where they disagree.
+  dont:
+    - Modify files in the repository.
+    - Invent structure, layers, or patterns the code does not actually have.
+    - Copy stale docs forward without verifying each claim against the code.
+    - Produce an exhaustive file-by-file dump instead of a usable mental model.
+    - Assume project-specific knowledge without explaining it for the newcomer.

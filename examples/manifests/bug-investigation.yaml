@@ -1,0 +1,267 @@
+schemaVersion: 1
+name: bug-investigation
+instructions: |
+  Drive ONE bug from symptom to verified root cause and a proposed fix. This is
+  a durable investigation packet, not a find-and-rank audit. The pack prompt
+  should describe the bug or symptom. If the optional `bug_report` input is set,
+  use it for additional detail such as logs, stack traces, environment, or
+  reproduction steps, unless the prompt clearly supersedes it.
+
+  Investigate one bug per pack. By default this work is read-mostly: you
+  diagnose the failure and PROPOSE the fix and regression test, but you do not
+  implement them. Implement the fix and test only if the pack prompt explicitly
+  asks you to.
+
+  You are recording investigation state, not a ranked list of findings. Each
+  task note should capture evidence and reasoning with concrete code citations
+  (path:line, commit, log line, or test name), and clearly separate hypothesis
+  from confirmed fact. Use read-only commands to inspect the repository,
+  including grep, rg, cat, git diff, git show, git log, git blame, and source
+  reads. Do not run destructive commands or apply changes unless the prompt asks
+  you to implement the fix.
+
+  For each investigation task, use this format in task notes:
+
+      [STATUS] <area or step> - short title
+        Observation: what you actually saw (symptom, log, code, trace, history)
+          with a concrete citation (path:line, commit, or log line).
+        Reasoning: the inference you draw from it, marked HYPOTHESIS or CONFIRMED.
+        Next: the specific check that would confirm or disconfirm the hypothesis,
+          or "n/a" once confirmed.
+
+  Status guide:
+
+      REPRODUCED: the symptom was observed under a known, repeatable trigger.
+      LOCALIZED: the failure is narrowed to a specific subsystem, file, or
+        function with citations.
+      CONFIRMED: the claim is proven against the code or a live observation.
+      HYPOTHESIS: a plausible but unproven explanation; state what would
+        disconfirm it.
+      BLOCKED: the investigation cannot proceed without an answer from the
+        caller; state the precise question.
+
+  Be honest. A task with no real evidence yet should say "No confirmed evidence
+  in this step." and carry an explicit hypothesis or open question. Do not pad
+  the investigation with speculation dressed up as fact, and do not declare a
+  root cause you have not proven against the code.
+
+inputs:
+  bug_report:
+    type: string
+    description: Optional bug report detail (symptom, logs, stack trace, environment, steps). The prompt can describe the bug instead.
+
+tasks:
+  - id: intake-and-repro
+    title: Capture the report and reproduce
+    category: investigate
+    body: |
+      Establish exactly what is broken before theorizing about why.
+
+      Capture from the pack prompt and the optional `bug_report` input:
+        - the exact symptom in the reporter's terms
+        - expected behavior versus actual behavior
+        - environment (OS, runtime/version, build, config, data) where it occurs
+        - the trigger or steps that lead to the symptom
+        - any logs, stack traces, error messages, or failing test names provided
+
+      Then establish the most reliable, deterministic reproduction you can. Prefer
+      a single command, failing test, or minimal input that produces the symptom
+      every time. Record the exact reproduction steps and what you observed,
+      including whether it reproduces intermittently.
+
+      If you cannot reproduce the symptom, or the report is ambiguous about the
+      symptom, trigger, or environment, mark this task blocked with a precise
+      question naming exactly what you need (for example a specific log, version,
+      input, or step).
+    doneWhen:
+      - Notes record the exact symptom, expected versus actual, and environment.
+      - Notes record a concrete reproduction with the command, test, or input used.
+      - A failure to reproduce or an ambiguous report is blocked with a specific question.
+
+  - id: localize
+    title: Localize the failure
+    category: investigate
+    body: |
+      Narrow from the symptom to the responsible code.
+
+      Work from evidence to location using stack traces, log lines, targeted
+      reads, and history. Useful moves include grepping for the error string,
+      following a stack trace frame by frame, reading the failing path top to
+      bottom, and using git log, git blame, and git bisect to find when the
+      behavior changed.
+
+      Record the search that narrowed it: what you looked at, what you ruled out,
+      and why. End with the suspected region cited as path:line (and the relevant
+      commit if history pointed you there). Mark each step HYPOTHESIS or CONFIRMED.
+    doneWhen:
+      - Notes record the search that narrowed symptom to a suspected region.
+      - Notes cite the suspected subsystem, file, or function as path:line.
+
+  - id: root-cause
+    title: Identify the root cause
+    category: investigate
+    body: |
+      Pin the TRUE root cause, the causal chain from trigger to failure, and
+      prove it against the code.
+
+      Distinguish the root cause from the visible symptom and from contributing
+      factors that make the bug worse but are not the originating defect. State
+      the causal chain step by step, citing path:line at each link, so a reader
+      can follow trigger to failure without guessing.
+
+      State your confidence as CONFIRMED or HYPOTHESIS, and state explicitly what
+      observation would disconfirm the root cause. If the cause is still a
+      hypothesis, name the exact check needed to confirm it rather than asserting
+      it as fact.
+    doneWhen:
+      - Notes state the causal chain from trigger to failure with path:line citations.
+      - Notes separate the root cause from symptoms and contributing factors.
+      - Notes record a confidence level and what would disconfirm the root cause.
+
+  - id: blast-radius
+    title: Blast radius and regression window
+    category: investigate
+    body: |
+      Determine how far the same root cause reaches.
+
+      Find every place the same defect manifests or could: sibling call sites,
+      other inputs that hit the same path, symmetric code that was written the
+      same way, and shared helpers that carry the same flawed assumption. Decide
+      whether this is a one-off or a class of bug, and say which.
+
+      Identify the regression window when possible: the commit or change that
+      introduced the defect, found via git log, git blame, or git bisect, and the
+      releases or versions affected. Cite each affected location as path:line and
+      each history finding by commit.
+    doneWhen:
+      - Notes list other affected locations as path:line, or state the bug is isolated.
+      - Notes state whether this is a class of bug.
+      - Notes identify the introducing commit or change, or state it could not be found.
+
+  - id: fix-design
+    title: Design the fix
+    category: investigate
+    body: |
+      Propose the minimal correct fix that addresses the root cause, not a
+      symptom band-aid.
+
+      Describe the fix concretely: which file and function change, what the new
+      behavior is, and why it resolves the proven root cause rather than masking
+      the symptom. Propose at least one alternative approach and compare them,
+      then choose one with explicit rationale.
+
+      Note implications: data or schema migration, backward or forward
+      compatibility, configuration changes, and any cleanup or dead code the fix
+      enables or requires. Keep the fix scoped to this one bug.
+    doneWhen:
+      - Notes describe a concrete fix that targets the root cause, cited to path:line.
+      - Notes record at least one alternative and the rationale for the chosen approach.
+      - Notes record migration, compatibility, and cleanup implications, or state none apply.
+
+  - id: regression-test
+    title: Design the regression test
+    category: investigate
+    body: |
+      Specify a test that fails before the fix and passes after it.
+
+      State exactly what the test asserts, the input or precondition it sets up,
+      and why it would have caught this specific bug had it existed. Tie the
+      assertion back to the root cause so the test guards the actual defect, not
+      an incidental detail.
+
+      Identify where the test belongs in the existing suite (file, module, or
+      fixture style) and name the project command that would run it. If the bug is
+      a class affecting several locations, note which cases the test should cover.
+    doneWhen:
+      - Notes specify a test that would fail before the fix and pass after it.
+      - Notes state what the test asserts and why it would have caught this bug.
+      - Notes identify where the test belongs and the command that runs it.
+
+  - id: verify
+    title: Verify resolution
+    category: investigate
+    body: |
+      Confirm the proposed fix actually resolves the reproduction without
+      regressing related behavior.
+
+      Reason the proposed fix through the reproduction from intake-and-repro step
+      by step and confirm it eliminates the symptom. Check related and symmetric
+      behavior identified in the blast-radius step for regressions the fix could
+      introduce. List residual risks and anything you could not verify by
+      inspection alone.
+
+      If the pack prompt asked you to implement the fix and test, apply them here,
+      then run the project's build, lint, and test checks and record the exact
+      commands and their results, including the regression test failing on the old
+      code and passing on the new code where you can demonstrate it.
+    doneWhen:
+      - Notes confirm the fix resolves the reproduction, by reasoning or by running checks.
+      - Notes list residual risks and anything still unverified.
+      - When implementation was requested, Notes record the exact check commands and results.
+
+  - id: root-cause-writeup
+    title: Root-cause synthesis
+    category: synthesis
+    body: |
+      Read back through the investigation notes and write a single concise
+      writeup that stands on its own.
+
+      Include:
+        - the symptom in one or two sentences
+        - the root cause with a path:line citation
+        - the proposed fix and why it addresses the cause rather than the symptom
+        - the regression test and what it asserts
+        - the blast radius, including whether this is a class of bug and the
+          introducing commit if known
+        - a confidence level for the root cause and the fix
+
+      Keep it grounded in evidence already recorded in earlier task notes. Do not
+      introduce new claims here that were not investigated above.
+    doneWhen:
+      - Notes contain a writeup covering symptom, root cause, fix, test, and blast radius.
+      - The writeup cites the root cause as path:line and states a confidence level.
+
+  - id: resolution-gate
+    title: Resolution gate
+    category: gate
+    body: |
+      Make the final investigation decision.
+
+      Choose exactly one outcome. Choose UNRESOLVED if you could not reproduce
+      the symptom or could not confirm the root cause. Choose FIX PROPOSED -- NOT
+      VERIFIED when the root cause is confirmed and a fix is designed but the fix
+      has not been verified end to end. Choose ROOT CAUSE CONFIRMED only when the
+      root cause is proven and the fix and regression test are designed and
+      verified to your satisfaction.
+
+      Write one of these records in Notes:
+
+          ROOT CAUSE CONFIRMED.
+          Root cause: <one to three sentences with a path:line citation.>
+          Next step: <apply the proposed fix and test, or the concrete handoff.>
+
+          FIX PROPOSED -- NOT VERIFIED.
+          Root cause: <one to three sentences with a path:line citation.>
+          Next step: <the specific verification still required.>
+
+          UNRESOLVED.
+          Reason: <could not reproduce, or root cause unconfirmed, with evidence.>
+          Next step: <the precise information or check needed to proceed.>
+    doneWhen:
+      - Notes contain exactly one of the three decision records.
+      - The record cites the root cause or the open question as path:line where applicable.
+      - The record names a concrete next step.
+
+contract:
+  do:
+    - Reproduce the symptom before theorizing about the cause.
+    - Confirm the true root cause before proposing any fix.
+    - Cite concrete evidence (path:line, commit, log line) for every claim.
+    - Keep the investigation to one bug per pack.
+    - Mark each claim as HYPOTHESIS or CONFIRMED and never blur the two.
+  dont:
+    - Propose a fix that only masks the symptom instead of the root cause.
+    - Run destructive commands or apply changes the prompt did not request.
+    - Implement the fix or regression test unless the prompt explicitly asks.
+    - Declare the bug resolved while the root cause is unconfirmed.
+    - Expand scope into unrelated bugs discovered along the way.

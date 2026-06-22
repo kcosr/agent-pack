@@ -1,0 +1,277 @@
+schemaVersion: 1
+name: security-review
+instructions: |
+  Perform a deep, standalone security audit of an existing codebase. This is the
+  full security pass that the code-review pack's single security dimension only
+  samples. Judge the real, reachable exposure of the system as it exists in the
+  code, and call out the exploitable weaknesses, the missing controls, and the
+  highest-leverage fixes.
+
+  This is an AUTHORIZED DEFENSIVE review. You are reading and reasoning about the
+  code to find and fix weaknesses, not to exploit them. Use read-only commands:
+  rg, grep, cat, git show, git log, build manifests, lockfiles, and source reads.
+  Do not modify files. Do not run attacks, send traffic at live systems, or run
+  networked or destructive tooling unless the user explicitly asks. The user may
+  name a scope in the prompt (whole system, a named subsystem or service, an
+  entry point, or a path); if none is given, audit the whole system and say so.
+
+  Ground every finding in concrete code. Trace each issue from the source of
+  untrusted input to the dangerous sink it reaches, and rate it by real
+  exploitability, not theoretical badness. A weakness with no reachable path to a
+  sink is not a finding; note it as defense-in-depth at most. Prefer fixes at a
+  chokepoint — one enforced boundary — over scattered per-call-site patches.
+
+  For every finding, use this format in task notes:
+
+      [SEVERITY] path:line - short title
+        Observation: the security-relevant fact in the code — the source of
+          untrusted input or the weakness itself.
+        Attack scenario: how an attacker reaches and abuses it, and the impact —
+          the sink that is hit and the damage that follows.
+        Suggested fix: the concrete mitigation, ideally at a chokepoint.
+
+  Severity guide:
+
+      CRITICAL: directly exploitable — remote code execution, authentication
+      bypass, secret or credential exposure, data exfiltration, or write/delete
+      of other users' data.
+      HIGH: exploitable with a precondition — missing authorization on a
+      sensitive action, injection into a dangerous sink, or weak crypto on
+      protected data.
+      MEDIUM: a defense-in-depth gap, an information leak, or missing hardening
+      that eases another attack.
+      LOW: minor exposure or a best-practice deviation with limited impact.
+      NIT: cosmetic or security-style preference; use sparingly.
+
+  Be honest. A dimension with no real issues should say "No issues found in this
+  dimension." Do not pad the audit with theoretical or unreachable findings.
+
+inputs:
+  scope:
+    type: string
+    description: Optional scope for the audit — whole system, a subsystem or service, an entry point, or a path. The prompt can name the scope instead.
+
+tasks:
+  - id: orient-threat-model
+    title: Threat model and attack surface
+    category: review
+    body: |
+      Build the threat model before hunting for specific bugs.
+
+      Resolve the audit scope from the pack prompt; if the optional `scope` input
+      is set, use it unless the prompt clearly names a different scope. If neither
+      is given, default to the whole system and record that you did.
+
+      Read enough to map the security shape of the system:
+        - assets worth protecting: credentials, secrets, customer data, money,
+          compute, and the trust the system is granted upstream
+        - trust boundaries: where untrusted input crosses into trusted code
+        - entry points: CLI args, HTTP/RPC handlers, files written by another
+          process or agent, environment variables, message queues, and webhooks
+        - the authentication and authorization scheme, and where it is enforced
+        - data sensitivity and any multi-tenant or per-user isolation model
+        - the realistic attacker: unauthenticated remote, authenticated tenant,
+          a malicious upstream, a local user, or a supply-chain actor
+
+      Read the high-signal entry points: AGENTS.md, CLAUDE.md, README files,
+      build manifests, docs that describe the security or auth model, and the
+      primary handlers, middleware, and config loaders.
+    doneWhen:
+      - Notes record the resolved scope, or state that the whole system was audited by default.
+      - Notes map assets, trust boundaries, entry points, the authn/authz scheme, data sensitivity, tenancy, and the realistic attacker.
+
+  - id: authn-authz
+    title: Authentication and authorization
+    category: review
+    body: |
+      Audit who is allowed to do what, and where that is enforced.
+
+      Look for missing checks where the default is allow rather than deny,
+      broken access control, insecure direct object references where one user
+      can name another user's resource by id, privilege escalation paths, and
+      sensitive actions that ship without an authorization check.
+
+      Examine token, session, and credential handling: generation, storage,
+      expiry, rotation, and revocation; replay of tokens, requests, or nonces;
+      and whether scope and permission enforcement happens at one chokepoint or
+      is scattered across handlers where one path can forget it.
+
+      For each sensitive action, trace it from the entry point to the place that
+      decides the caller is allowed, and confirm that decision cannot be skipped.
+    doneWhen:
+      - Notes list authentication and authorization findings or explicitly say none were found.
+
+  - id: input-and-injection
+    title: Untrusted input and injection
+    category: review
+    body: |
+      Trace untrusted input from each entry point to the dangerous sinks it can
+      reach.
+
+      Hunt for command injection into a shell or subprocess, SQL or NoSQL
+      injection, path traversal and symlink following into the filesystem,
+      template injection, header and response-splitting injection, unsafe
+      deserialization, server-side request forgery, XML external entity
+      expansion, regular-expression denial of service, and open redirect.
+
+      For every candidate, name the source where the input enters and the sink
+      where it does damage, and confirm the input actually reaches that sink
+      without being neutralized in between. An input that is escaped, parameterized,
+      or validated before the sink is not a finding.
+    doneWhen:
+      - Notes list input and injection findings or explicitly say none were found.
+
+  - id: secrets-and-crypto
+    title: Secrets and cryptography
+    category: review
+    body: |
+      Audit how secrets are kept and how cryptography is used.
+
+      Look for hardcoded or committed secrets, API keys, and private keys; weak
+      key and credential management; and secrets that live in source, config
+      checked into git, or build artifacts.
+
+      Examine crypto use for misuse: weak or broken algorithms, ECB mode, a
+      static or reused IV or nonce, missing constant-time comparison on secrets
+      or MACs, predictable or non-cryptographic randomness used for security, and
+      home-grown crypto. Check TLS and certificate validation — disabled
+      verification, pinned-then-ignored certs, and accepted self-signed chains.
+
+      Inspect git history for secrets that were committed and later removed but
+      remain reachable.
+    doneWhen:
+      - Notes list secrets and cryptography findings or explicitly say none were found.
+
+  - id: data-exposure
+    title: Sensitive data exposure
+    category: review
+    body: |
+      Audit where sensitive data leaks out of the system.
+
+      Look for secrets or PII written to logs, error messages, or responses;
+      API responses that are broader than the caller should see; verbose error
+      and stack-trace leakage that reveals internals; missing redaction of
+      tokens, passwords, and personal data; and insecure storage of sensitive
+      data at rest.
+
+      For each candidate, identify the data, the channel that exposes it, and who
+      can read that channel. A redacted or access-controlled channel is not a
+      finding.
+    doneWhen:
+      - Notes list data-exposure findings or explicitly say none were found.
+
+  - id: dependencies-supply-chain
+    title: Dependency and supply-chain risk
+    category: review
+    body: |
+      Audit third-party dependencies and the build supply chain.
+
+      Look for known-vulnerable or abandoned dependencies on code paths that are
+      actually used, lockfile integrity gaps, install and build scripts that run
+      arbitrary code, unpinned or floating version ranges, and dependency names
+      shaped like typosquats of popular packages.
+
+      Note any audit tooling the project exposes — for example a package-manager
+      audit command or an advisory database check — but only run it if it is safe
+      and offline. Do not fetch from the network or install anything unless the
+      user explicitly asks.
+    doneWhen:
+      - Notes identify the relevant dependency-audit tooling if any exists.
+      - Notes list dependency and supply-chain findings or explicitly say none were found.
+
+  - id: boundary-and-dos
+    title: Network boundary, isolation, and abuse
+    category: review
+    body: |
+      Audit the network boundary and the system's resistance to abuse.
+
+      Look for missing egress and SSRF controls, permissive CORS, missing or
+      weak cookie flags such as HttpOnly, Secure, and SameSite, request-smuggling
+      exposure, and absent rate limiting that allows brute force or
+      resource-exhaustion denial of service. Check multi-tenant isolation for
+      paths where one tenant can reach another's data or compute, and look for
+      default-open ports or endpoints that bind broadly.
+
+      Name the boundary, the control that is missing or weak, and the concrete
+      abuse it enables.
+    doneWhen:
+      - Notes list network boundary, isolation, and abuse findings or explicitly say none were found.
+
+  - id: secure-defaults
+    title: Insecure defaults and configuration
+    category: review
+    body: |
+      Audit the defaults the system ships with and the configuration it accepts.
+
+      Look for dangerous default values, debug or admin endpoints exposed in
+      production builds, permissive configuration that trades safety for
+      convenience, risky feature flags that default on, and missing hardening
+      such as security headers, sandbox flags, or least-privilege process
+      settings.
+
+      Favor findings where an operator running the defaults, or copying the
+      sample config, is exposed without doing anything wrong.
+    doneWhen:
+      - Notes list insecure-default and configuration findings or explicitly say none were found.
+
+  - id: synthesis
+    title: Top security findings and exploit chains
+    category: synthesis
+    body: |
+      Read back through all audit task notes and build a single ranked list of
+      the top 10 findings. Order by severity and then by exploitability. Each
+      entry must cite the original path:line from the finding.
+
+      Call out any exploit chain where lower-severity issues combine into a
+      critical path — for example an information leak that supplies the id an
+      IDOR needs, or a verbose error that reveals the route an injection hits.
+
+      If fewer than 10 real issues exist, list only the real issues and stop.
+      Include one sentence on the overall security posture and the single
+      highest-leverage fix.
+    doneWhen:
+      - Notes contain a ranked findings list or state that no real issues were found.
+      - Notes note any exploit chain, the overall security posture, and the highest-leverage fix.
+
+  - id: security-verdict
+    title: Security gate
+    category: gate
+    body: |
+      Make the final security decision.
+
+      Choose VULNERABLE if any exploitable CRITICAL or HIGH finding is
+      unresolved, or if you could not trace a suspected issue deeply enough to
+      rule out a reachable exploit. Choose SECURE WITH FINDINGS when only
+      MEDIUM/LOW/NIT issues remain and the caller accepts them. Choose SECURE
+      only when you found no real exposure and would stand behind this code
+      being exposed to its realistic attacker as-is.
+
+      Write one of these records in Notes:
+
+          SECURE.
+          Rationale: <one to three sentences.>
+          Must fix before release: none
+
+          SECURE WITH FINDINGS.
+          Rationale: <one to three sentences.>
+          Must fix before release: <accepted MEDIUM/LOW items with path:line, or "none".>
+
+          VULNERABLE.
+          Rationale: <one to three sentences.>
+          Must fix before release: <each unresolved CRITICAL/HIGH with path:line.>
+    doneWhen:
+      - Notes contain one of the SECURE / SECURE WITH FINDINGS / VULNERABLE records.
+
+contract:
+  do:
+    - Treat this as an authorized defensive review whose goal is to find and fix weaknesses.
+    - Ground every finding in concrete code and cite both the source of untrusted input and the sink it reaches.
+    - Rate findings by real, reachable exploitability rather than theoretical badness.
+    - Prefer mitigations at a chokepoint — one enforced boundary — over scattered per-call-site patches.
+    - Record findings in the task notes for the dimension where they were found.
+  dont:
+    - Exploit, exfiltrate, or run attacks against live systems.
+    - Modify files in the audited repository.
+    - Run networked or destructive tooling unless the user explicitly asks.
+    - Inflate severity or pad the audit with style nits.
+    - Report a finding you have not traced to a reachable sink.

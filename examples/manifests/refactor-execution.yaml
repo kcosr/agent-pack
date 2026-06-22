@@ -1,0 +1,292 @@
+schemaVersion: 1
+name: refactor-execution
+instructions: |
+  Execute ONE behavior-preserving structural refactor across the target
+  repository. The pack prompt names the refactor, for example "rename the
+  Broker::dispatch method to Broker::route", "extract the envelope codec into
+  its own module", "invert the dependency between the policy and provider
+  layers", or "replace the hand-rolled retry loop with the backoff crate". If
+  the optional `target` input is set, use it as the refactor to perform unless
+  the prompt clearly names a different one.
+
+  This pack MODIFIES code. It is an execution pack, not an audit. Your job is to
+  carry out exactly one logical refactor and leave the project building, linted,
+  and green at every step. The contract is behavior preservation: the observable
+  behavior of the system -- public APIs, CLI surface, HTTP routes, output shapes,
+  exit codes, persisted/serialized forms, and error semantics -- must not change
+  unless the prompt explicitly authorizes a specific change.
+
+  You are recording a change plan and its progress, not a ranked findings list.
+  Each task note captures the plan, the concrete sites touched, and the
+  verification state, with citations (path:line, component, dependency, or step
+  number). Keep purely-mechanical edits separate from any unavoidable behavior
+  change, and call the latter out explicitly as out of contract.
+
+  For each task, use this format in task notes:
+
+      [STATUS] <site, step, or area> - short title
+        Plan: what this step changes and the end-state shape it moves toward.
+        Sites: the concrete locations touched or to touch (path:line, component,
+          dependency, or step number).
+        Verification: the build/lint/test/grep evidence that the step is green
+          and behavior-preserving, or "pending" until run.
+
+  Status guide:
+
+      PLANNED: the change is specified and sequenced but not yet applied.
+      IN-PROGRESS: the step is partially applied; the tree may be mid-transition
+        but each committed sub-step still builds.
+      APPLIED: the step is complete and the project builds, lints, and passes its
+        checks at this point.
+      PRESERVED: observable behavior was confirmed unchanged for this site, by
+        reasoning or by a check, with the evidence cited.
+      OUT-OF-CONTRACT: an observable behavior change was required; it is flagged
+        here with justification rather than hidden inside a mechanical edit.
+      BLOCKED: the work cannot proceed without an answer from the caller; state
+        the precise question.
+
+  Be honest. A task with nothing real to report should say "No issues found in
+  this dimension." and carry an explicit open question or next step. Do not pad
+  the change plan with speculative edits, do not mark a step APPLIED while a
+  check is failing, and do not smuggle a behavior change in as a mechanical
+  rename.
+
+inputs:
+  target:
+    type: string
+    description: Optional refactor to perform (the rename, extraction, dependency inversion, or library swap). The prompt can name the refactor instead.
+
+tasks:
+  - id: define-refactor
+    title: Define the refactor and its contract
+    category: plan
+    body: |
+      Restate the refactor precisely before touching any code.
+
+      Resolution order for the target:
+        1. A refactor clearly named in the pack prompt.
+        2. The optional `target` input, if set.
+        3. A single obvious refactor implied by the prompt and repository state.
+
+      Capture in notes:
+        - the refactor in one or two sentences, naming the end-state shape
+          (the new name, module boundary, dependency direction, or library)
+        - the behavior-preservation contract: the observable behavior that must
+          NOT change (public APIs, CLI surface, HTTP routes, output shapes, exit
+          codes, serialized/persisted forms, error semantics)
+        - any observable change the prompt explicitly authorizes, stated as the
+          one exception to the contract
+        - in-scope files, modules, or subsystems versus out-of-scope ones
+        - the success criteria that define "done" for this refactor
+
+      If the target is ambiguous, missing, or names more than one logical
+      refactor, mark this task blocked with a concise question naming exactly
+      what you need (for example which symbol, which module boundary, or which
+      of two candidate refactors).
+    doneWhen:
+      - Notes restate the refactor and its end-state shape in one or two sentences.
+      - Notes record the behavior-preservation contract and any authorized exception.
+      - Notes record in-scope versus out-of-scope files and the success criteria.
+      - An ambiguous or missing target is blocked with a specific question.
+
+  - id: inventory-sites
+    title: Inventory all affected sites
+    category: plan
+    body: |
+      Find every site that must change so the refactor is complete, not partial.
+
+      Search with grep, rg, and targeted reads across the whole repository, not
+      only the obvious module. Cover:
+        - definitions and declarations of the symbol, type, module, or dependency
+        - call sites, imports, and re-exports
+        - tests, fixtures, and snapshots that name the old shape
+        - docs, examples, README sections, and changelog references
+        - config keys, manifest entries, and build files
+        - serialized or persisted forms: schemas, on-disk formats, wire payloads,
+          and migration code that encode the old name or shape
+        - references by old name anywhere, including comments and strings
+
+      Produce the complete change list with each site cited as path:line (or
+      component, dependency, or config key). Flag risky or ambiguous sites: ones
+      where the old name is overloaded, where a string/serialized form is hard to
+      change safely, or where a site might be a false match.
+    doneWhen:
+      - Notes list the affected sites as path:line, component, dependency, or config key.
+      - Notes cover definitions, call sites, tests, docs, config, and serialized forms, or say a category has none.
+      - Notes flag risky or ambiguous sites, or explicitly say none were found.
+
+  - id: safety-net
+    title: Establish the behavior-preservation safety net
+    category: plan
+    body: |
+      Identify what proves behavior is preserved before you change anything.
+
+      Find the existing tests and checks that exercise the code under refactor:
+      unit tests, integration/smoke tests, the build, the linter, and any config
+      validation the repository exposes. Name the exact commands that run them.
+
+      Assess coverage around the change. Where the behavior that must be
+      preserved is thinly covered or uncovered, note the characterization test
+      needed to pin current behavior BEFORE refactoring, so a regression would be
+      caught. Distinguish coverage that already exists from coverage that must be
+      added first.
+    doneWhen:
+      - Notes name the existing tests and the exact build, lint, and test commands.
+      - Notes assess coverage around the change and identify thin or missing spots.
+      - Notes list any characterization tests needed before refactoring, or say coverage is sufficient.
+
+  - id: sequence
+    title: Sequence into safe steps
+    category: plan
+    body: |
+      Order the refactor into individually-valid steps where a single big-bang
+      swap would be unsafe.
+
+      Choose a strategy that keeps the tree green throughout: expand/contract
+      (add the new shape, migrate callers, then remove the old shape) or
+      parallel-change where producers and consumers cannot flip atomically. For a
+      small mechanical rename a single step may be enough; say so explicitly.
+
+      Write the ordered step list. Each step must, on its own, compile and keep
+      the project's checks green, and each must map to specific sites from the
+      inventory. Note which steps are purely mechanical and which carry any risk
+      of observable change so they can be verified more carefully.
+    doneWhen:
+      - Notes record an ordered list of steps, each mapped to inventory sites.
+      - Notes state that each step independently compiles and keeps checks green.
+      - Notes name the strategy (single step, expand/contract, or parallel-change) and why.
+
+  - id: execute
+    title: Apply the transformation
+    category: execute
+    body: |
+      Perform the refactor across all inventoried sites, following the sequence.
+
+      Work step by step. After each step, the project must build and its checks
+      must pass before you move on; do not stack a second step on a broken tree.
+      Update every site from the inventory, including tests, docs, config, and
+      serialized forms, so no reference to the old shape is left behind.
+
+      Keep each step behavior-preserving. Isolate purely-mechanical edits
+      (renames, moves, import rewrites) from any unavoidable behavior change. If a
+      site cannot be migrated without changing observable behavior, do NOT bury it
+      in a mechanical edit: record it as OUT-OF-CONTRACT with its justification,
+      and stop to ask if the prompt did not authorize that change.
+    doneWhen:
+      - Notes record each applied step with its touched sites cited as path:line.
+      - Notes confirm the tree builds and checks pass after each step, not only at the end.
+      - Any unavoidable observable change is recorded OUT-OF-CONTRACT with justification, or none occurred.
+
+  - id: verify
+    title: Verify behavior preserved and completeness
+    category: execute
+    body: |
+      Prove the refactor is complete and behavior is unchanged.
+
+      Run the project's real checks -- build, lint, and the test/check suite --
+      using the commands recorded in the safety-net step, and record the exact
+      commands and their results. Run any characterization tests added earlier and
+      confirm they still pass.
+
+      Grep for the old names and shapes across the whole repository to confirm no
+      site was missed and no dead old path remains (no orphaned definitions,
+      aliases, bridge shims, or compatibility readers left behind unless the
+      prompt asked for them). Confirm observable behavior is unchanged: public
+      APIs, CLI surface, HTTP routes, output shapes, exit codes, and
+      serialized/persisted forms match pre-refactor behavior.
+    doneWhen:
+      - Notes record the exact build, lint, and test commands run and their results.
+      - Notes record a grep for old names/shapes showing no missed site and no dead old path.
+      - Notes confirm observable behavior is unchanged, or flag any OUT-OF-CONTRACT change.
+
+  - id: docs-and-changelog
+    title: Update docs and changelog
+    category: execute
+    body: |
+      Bring documentation in line with the refactored code.
+
+      Update the docs, examples, and migration notes that the refactor touches so
+      they describe the new shape and never the old one: README sections, design
+      and reference docs, inline comments that name the old shape, and any sample
+      config or fixtures shown to users.
+
+      Add a changelog entry consistent with the repository's conventions (for this
+      repo, under `## [Unreleased]` in CHANGELOG.md, appended to the right
+      subsection). A behavior-preserving structural refactor usually belongs under
+      Changed; if the refactor authorized an observable change, record it under
+      the appropriate breaking/changed section instead.
+    doneWhen:
+      - Notes list the docs, examples, and migration notes updated as path references, or say none applied.
+      - Notes record the changelog entry added and the section it landed in.
+      - Notes confirm no doc or example still describes the old shape.
+
+  - id: synthesis
+    title: Refactor summary
+    category: synthesis
+    body: |
+      Read back through the task notes and write a single concise summary that
+      stands on its own.
+
+      Include:
+        - what changed, stated as the before and after shape
+        - the sites touched, grouped or counted, with the key ones cited as
+          path:line
+        - the verification evidence that behavior was preserved (the checks run
+          and the grep result)
+        - any OUT-OF-CONTRACT change that was made and why
+        - residual risk and any follow-ups deliberately left out of scope
+
+      Keep it grounded in evidence already recorded above. Do not introduce new
+      claims that were not part of the executed work.
+    doneWhen:
+      - Notes summarize the before and after shape and the sites touched with citations.
+      - Notes record the verification evidence and any OUT-OF-CONTRACT change.
+      - Notes list residual risk and any deliberately deferred follow-ups, or say none.
+
+  - id: completion-gate
+    title: Completion gate
+    category: gate
+    body: |
+      Make the final decision on the refactor.
+
+      Choose exactly one outcome. Choose COMPLETE only if observable behavior is
+      preserved (or every change is an authorized, recorded exception), every
+      inventoried site is updated with no dead old path remaining, and the
+      project's build, lint, and test/check commands all pass. Choose INCOMPLETE
+      if sites remain unchanged, checks fail, or a dead old path lingers. Choose
+      NEEDS DECISION if finishing requires an answer from the caller, for example
+      an unavoidable observable change the prompt did not authorize.
+
+      Write one of these records in Notes:
+
+          COMPLETE.
+          Refactor: <one to three sentences naming the before and after shape.>
+          Evidence: <the checks that passed and the grep confirming no missed site.>
+          Residual: <accepted follow-ups left out of scope, or "none".>
+
+          INCOMPLETE.
+          Done: <what was applied and verified.>
+          Remaining: <specific sites or checks still failing, cited.>
+          Next step: <the concrete work needed to reach COMPLETE.>
+
+          NEEDS DECISION.
+          Blocker: <the unavoidable change or ambiguity, cited.>
+          Question: <the precise decision required from the caller.>
+    doneWhen:
+      - Notes contain exactly one of the three decision records.
+      - A COMPLETE record cites the passing checks and the grep confirming no missed site.
+      - An INCOMPLETE or NEEDS DECISION record names the remaining work or the precise question.
+
+contract:
+  do:
+    - Preserve the system's observable behavior across the whole refactor.
+    - Keep each step independently green so the tree always builds and checks pass.
+    - Update every reference to the old name or shape, including tests, docs, and serialized forms.
+    - Run the project's real build, lint, and test commands and record the results.
+    - Record every site changed with a concrete citation (path:line, component, dependency, or config key).
+  dont:
+    - Mix in unrelated changes or opportunistic rewrites beyond the named refactor.
+    - Change observable behavior without flagging it as out of contract.
+    - Leave dead old code paths, aliases, or bridge shims behind.
+    - Skip the build, lint, and test verification before declaring a step done.
+    - Mark COMPLETE while any project check is failing.
