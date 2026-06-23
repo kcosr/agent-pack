@@ -8,7 +8,21 @@
 
 ### Changed
 
+- Restructured the documentation from a single monolithic `README.md` into an
+  audience-organized `docs/` set: a short landing `README.md` plus
+  `docs/concepts.md`, `docs/cli.md`, `docs/authoring.md`, `docs/configuration.md`,
+  `docs/brief-format.md`, a `docs/README.md` index, and a trimmed `docs/usage.md`
+  cheat sheet. `README.md` and `docs/usage.md` keep their paths so the
+  `agent-pack --help` resource links and `package.json` `files` continue to work.
+
 ### Fixed
+
+- Corrected documentation against the implementation: the brief renders the
+  Inputs section first; `--git-refresh`/`--state-dir` apply to `run` (not just
+  `init`/`sync`); `run` exit codes pass through the child code (and `exhausted`
+  returns `1`); the full event-log type list; the `agent` catalog type; the
+  non-universal `--json` availability; and a "task file" example that was
+  actually a full manifest.
 
 ### Removed
 

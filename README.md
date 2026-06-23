@@ -74,7 +74,7 @@ export AGENT_PACK_ID=demo-a1b2c3
 agent-pack brief
 ```
 
-The brief is the agent-facing document. It renders sections in a fixed order — when the pack declares inputs, the Inputs section renders first, followed by prompt, instructions, contract, commands, references, skills, and tasks. The demo manifest has no inputs, so its brief opens with the prompt. The brief shows active tasks only:
+The brief is the agent-facing document, rendered in a fixed section order (inputs first when the pack declares any). The demo manifest has no inputs, so its brief opens with the prompt and shows active tasks only:
 
 ```text
 You are working from pack demo-a1b2c3.
@@ -154,16 +154,16 @@ See [docs/cli.md](docs/cli.md) for the full `run` surface and [docs/concepts.md]
 
 Each concept is explained in full in [docs/concepts.md](docs/concepts.md).
 
-- **Pack** — The durable unit of work. A pack stores a prompt, instructions, inputs, tasks, references, skills, agents, optional contract rules, task status, notes, and agent run records. An append-only event log records every state change. See [docs/concepts.md](docs/concepts.md).
-- **Brief** — The text document rendered by `agent-pack brief`, meant to be pasted into or read by an agent. It lists reference paths rather than pasting file contents and shows active tasks only. See [docs/concepts.md](docs/concepts.md).
-- **Inputs** — First-class, caller-provided context declared in a manifest `inputs` map. They are resolved at `init`, rendered first in the brief, and drive conditional task activation through a task's `when` clause. Types are `string`, `enum`, `boolean`, and `number`. See [docs/concepts.md](docs/concepts.md).
-- **Manifest** — A reusable YAML file that contributes instructions, inputs, tasks, references, skills, agents, and contract rules to a pack. Parsing is strict: unknown fields fail fast. See [docs/concepts.md](docs/concepts.md).
-- **Prompt & Instructions** — The optional positional prompt is a one-off instruction for this pack instance; instructions are durable, reusable guidance from a manifest or a raw file. Both render near the top of the brief. See [docs/concepts.md](docs/concepts.md).
-- **Tasks** — Mutable work items with auto-generated runtime IDs (`t001`, `t002`, ...) that move through `pending`, `in_progress`, `completed`, and `blocked`. Agents update task state as they work. See [docs/concepts.md](docs/concepts.md).
-- **References** — Named pointers to read-only context: local files, directories, globs, HTTP/HTTPS URLs, git paths, or whole git repo snapshots. See [docs/concepts.md](docs/concepts.md).
-- **Skills** — Supplemental `SKILL.md` files. `agent-pack` extracts the name, description, and readable path so the brief can tell the agent when a skill is relevant. See [docs/concepts.md](docs/concepts.md).
-- **Agents** — Named subprocess launch profiles used by `agent-pack run`. An agent is a single executable plus an `args` array; `{prompt}` is the only template placeholder. They are optional — packs can be used passively. See [docs/concepts.md](docs/concepts.md).
-- **Contract** — Manifest-only `do` and `dont` guidance rendered in the brief for the agent to follow. See [docs/concepts.md](docs/concepts.md).
+- **Pack** — The durable unit of work. A pack stores a prompt, instructions, inputs, tasks, references, skills, agents, optional contract rules, task status, notes, and agent run records. An append-only event log records every state change.
+- **Brief** — The text document rendered by `agent-pack brief`, meant to be pasted into or read by an agent. It lists reference paths rather than pasting file contents and shows active tasks only.
+- **Inputs** — First-class, caller-provided context declared in a manifest `inputs` map. They are resolved at `init`, rendered first in the brief, and drive conditional task activation through a task's `when` clause. Types are `string`, `enum`, `boolean`, and `number`.
+- **Manifest** — A reusable YAML file that contributes instructions, inputs, tasks, references, skills, agents, and contract rules to a pack. Parsing is strict: unknown fields fail fast.
+- **Prompt & Instructions** — The optional positional prompt is a one-off instruction for this pack instance; instructions are durable, reusable guidance from a manifest or a raw file. Both render near the top of the brief.
+- **Tasks** — Mutable work items with auto-generated runtime IDs (`t001`, `t002`, ...) that move through `pending`, `in_progress`, `completed`, and `blocked`. Agents update task state as they work.
+- **References** — Named pointers to read-only context: local files, directories, globs, HTTP/HTTPS URLs, git paths, or whole git repo snapshots.
+- **Skills** — Supplemental `SKILL.md` files. `agent-pack` extracts the name, description, and readable path so the brief can tell the agent when a skill is relevant.
+- **Agents** — Named subprocess launch profiles used by `agent-pack run`. An agent is a single executable plus an `args` array; `{prompt}` is the only template placeholder. They are optional — packs can be used passively.
+- **Contract** — Manifest-only `do` and `dont` guidance rendered in the brief for the agent to follow.
 
 ## Documentation
 

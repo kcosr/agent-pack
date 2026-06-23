@@ -2,7 +2,7 @@
 
 This is the schema reference for the files you write to compose a pack: manifests, standalone task files, standalone agent files, and inputs. Manifest parsing is strict: unknown fields are rejected instead of being ignored.
 
-For how an agent consumes a pack and how runs execute, see [concepts.md](./concepts.md). For commands and flags, see [cli.md](./cli.md). For paths, the catalog, and git sources, see [configuration.md](./configuration.md). For the rendered brief, see [brief-format.md](./brief-format.md).
+For how an agent consumes a pack and how runs execute, see [concepts.md](concepts.md). For commands and flags, see [cli.md](cli.md). For paths, the catalog, and git sources, see [configuration.md](configuration.md). For the rendered brief, see [brief-format.md](brief-format.md).
 
 ## Manifest schema
 
@@ -27,7 +27,7 @@ A manifest is a reusable YAML file that can contribute instructions, inputs, tas
 - A string entry in `references` is equivalent to `--reference <ref>`.
 - A string entry in `skills` is equivalent to `--skill <ref>`.
 - A string entry in `agents` is equivalent to `--agent <ref>`.
-- Bare string refs are catalog refs. Local paths must start with `./`, `../`, `~/`, or `/`. See [configuration.md](./configuration.md) for the catalog and ref syntax.
+- Bare string refs are catalog refs. Local paths must start with `./`, `../`, `~/`, or `/`. See [configuration.md](configuration.md) for the catalog and ref syntax.
 - Each inline task object must have `id` or `title`.
 - Input names must start with a letter or underscore and may contain letters, numbers, underscores, and dashes.
 - Input `type` defaults to `string`; supported types are `string`, `enum`, `boolean`, and `number`.
@@ -42,7 +42,7 @@ A manifest is a reusable YAML file that can contribute instructions, inputs, tas
 
 ## Inputs and conditional tasks
 
-Manifest inputs capture caller-provided context and simple workflow state at `init` time. Declare them in an `inputs` map; values are resolved at `init` and render first in the brief when the pack has a non-empty input schema (see [brief-format.md](./brief-format.md)).
+Manifest inputs capture caller-provided context and simple workflow state at `init` time. Declare them in an `inputs` map; values are resolved at `init` and render first in the brief when the pack has a non-empty input schema (see [brief-format.md](brief-format.md)).
 
 ```yaml
 inputs:
@@ -192,7 +192,7 @@ command: claude
 args: ["--print", "--model", "claude-opus-4-7", "--effort", "high", "{prompt}"]
 ```
 
-This file documents only the agent file fields. For the execution model (no shell, no cwd override, the `AGENT_PACK_ID` and `AGENT_PACK_STATE_DIR` environment passed to the child, captured vs interactive behavior), see [concepts.md](./concepts.md).
+This file documents only the agent file fields. For the execution model (no shell, no cwd override, the `AGENT_PACK_ID` and `AGENT_PACK_STATE_DIR` environment passed to the child, captured vs interactive behavior), see [concepts.md](concepts.md).
 
 ## Complete manifest example
 
@@ -330,8 +330,8 @@ Manifest parsing is shallow: unsupported fields, wrong types, and malformed YAML
 
 ## See also
 
-- [concepts.md](./concepts.md) — what a pack is and the agent execution model
-- [cli.md](./cli.md) — command and flag reference
-- [configuration.md](./configuration.md) — catalog, paths, environment, and git ref syntax
-- [brief-format.md](./brief-format.md) — the rendered brief and report contract
+- [concepts.md](concepts.md) — what a pack is and the agent execution model
+- [cli.md](cli.md) — command and flag reference
+- [configuration.md](configuration.md) — catalog, paths, environment, and git ref syntax
+- [brief-format.md](brief-format.md) — the rendered brief and report contract
 - [../README.md](../README.md) — landing page and quick start

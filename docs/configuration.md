@@ -2,7 +2,7 @@
 
 How `agent-pack` resolves directories, reads git sources, finds catalog entries, and persists pack state on disk. This page is the canonical home for environment variables, path resolution, git source syntax, the catalog layout, and the on-disk state model.
 
-For command and flag syntax (including `catalog`, `sync`, and `clean`), see [./cli.md](./cli.md). For manifest, task, and agent schema, see [./authoring.md](./authoring.md).
+For command and flag syntax (including `catalog`, `sync`, and `clean`), see [cli.md](cli.md). For manifest, task, and agent schema, see [authoring.md](authoring.md).
 
 ## Environment Variables
 
@@ -264,7 +264,7 @@ Pack state lock filenames are prefixed with a 16-character hash of the state dir
 
 ## See also
 
-- [./cli.md](./cli.md) — command and flag reference, including `catalog`, `sync`, and `clean`
-- [./authoring.md](./authoring.md) — manifest, task, and agent schema
-- [./concepts.md](./concepts.md) — how packs, sources, and the brief fit together
+- [cli.md](cli.md) — command and flag reference, including `catalog`, `sync`, and `clean`
+- [authoring.md](authoring.md) — manifest, task, and agent schema
+- [concepts.md](concepts.md) — how packs, sources, and the brief fit together
 - [../README.md](../README.md) — project overview and quick start

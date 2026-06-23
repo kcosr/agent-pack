@@ -1,6 +1,6 @@
 # Concepts & How It Works
 
-This page is the mental model for `agent-pack`. It explains what a pack is, the pieces that make one up, how the brief is assembled, and what happens when you run an agent against a pack. For exact command flags see [./cli.md](./cli.md); for manifest, task, and agent schema see [./authoring.md](./authoring.md); for paths, environment variables, and git sources see [./configuration.md](./configuration.md); for the exact brief, summary, and report output see [./brief-format.md](./brief-format.md).
+This page is the mental model for `agent-pack`. It explains what a pack is, the pieces that make one up, how the brief is assembled, and what happens when you run an agent against a pack. For exact command flags see [cli.md](cli.md); for manifest, task, and agent schema see [authoring.md](authoring.md); for paths, environment variables, and git sources see [configuration.md](configuration.md); for the exact brief, summary, and report output see [brief-format.md](brief-format.md).
 
 ## Passive vs active workflows
 
@@ -17,15 +17,15 @@ The same pack supports both modes. Active runs are a convenience wrapper around 
 
 A pack is the durable unit of work. A pack stores a prompt, instructions, inputs, tasks, references, skills, agents, optional contract rules, task status, notes, and agent run records. Alongside the pack file, `agent-pack` writes an append-only event log for state changes.
 
-Pack state is stored under a state directory (by default `.agent-pack/state/` in the current working directory). Commit it when you want a pack to travel with the repo so another checkout, host, or agent can resume it. Git-backed source material is cached separately and can always be rebuilt with `agent-pack sync`. For state vs cache locations, what to commit, and how to relocate either, see [./configuration.md](./configuration.md).
+Pack state is stored under a state directory (by default `.agent-pack/state/` in the current working directory). Commit it when you want a pack to travel with the repo so another checkout, host, or agent can resume it. Git-backed source material is cached separately and can always be rebuilt with `agent-pack sync`. For state vs cache locations, what to commit, and how to relocate either, see [configuration.md](configuration.md).
 
-The append-only event log records every state change. The event types are `pack.created`, `task.added`, `task.in_progress`, `task.completed`, `task.blocked`, `task.note`, `input.set`, `input.unset`, `reference.added`, `skill.added`, and `agent.run`. The task lifecycle verbs map onto these: `task start` records `task.in_progress`, `task done` records `task.completed`, `task block` records `task.blocked`, and `task note` records `task.note`.
+The append-only event log records every state change — pack creation, task additions, each task status change and note, input set/unset, reference and skill additions, and agent runs. For the exact event-type names and the JSONL format, see [configuration.md](configuration.md).
 
 ## Brief
 
 The brief is the text document rendered by `agent-pack brief`. It is meant to be pasted into an agent or read by an agent from the shell. `agent-pack` lists reference paths in the brief; it does not paste referenced file contents into the brief.
 
-The brief shows **active tasks only** — locked conditional tasks are omitted until their conditions are satisfied. (The report, by contrast, shows all tasks with locked ones marked.) The brief renders sections in a fixed order, with the Inputs section appearing first whenever the pack declares a non-empty input schema. For the exact section order, the per-section layout, and the summary and report formats, see [./brief-format.md](./brief-format.md).
+The brief shows **active tasks only** — locked conditional tasks are omitted until their conditions are satisfied. (The report, by contrast, shows all tasks with locked ones marked.) The brief renders sections in a fixed order, with the Inputs section appearing first whenever the pack declares a non-empty input schema. For the exact section order, the per-section layout, and the summary and report formats, see [brief-format.md](brief-format.md).
 
 By default, task entries include the task body and `doneWhen` checklist. For very large task lists, set `AGENT_PACK_BRIEF_TASK_CONTENT=false` when rendering the brief to show only task status, ID, and title; the brief then tells the agent to run `agent-pack task show <task-id>` before working a task.
 
@@ -33,7 +33,7 @@ By default, task entries include the task body and `doneWhen` checklist. For ver
 
 A manifest is a reusable YAML file that can contribute inputs, instructions, tasks, references, skills, agents, and contract rules to a pack. Manifest parsing is strict: unknown fields fail fast instead of being ignored.
 
-Manifests are the reusable, version-controllable definition; a pack is a concrete instance created from one or more manifests plus any one-off options. For the full manifest field schema and a complete example, see [./authoring.md](./authoring.md).
+Manifests are the reusable, version-controllable definition; a pack is a concrete instance created from one or more manifests plus any one-off options. For the full manifest field schema and a complete example, see [authoring.md](authoring.md).
 
 ## Prompt
 
@@ -67,7 +67,7 @@ Inputs are resolved at init from CLI assignments first, then declared defaults, 
 - `input set` coerces and stores a value, then unlocks any tasks whose conditions are now satisfied.
 - `input unset` clears an input that is optional and has no default, reverts to the default when one exists, and rejects an attempt to unset a required input that has no default.
 
-Tasks never relock: once a task is unlocked it stays active even if its input later changes. For the input declaration schema and CLI surface, see [./authoring.md](./authoring.md) and [./cli.md](./cli.md).
+Tasks never relock: once a task is unlocked it stays active even if its input later changes. For the input declaration schema and CLI surface, see [authoring.md](authoring.md) and [cli.md](cli.md).
 
 ### Conditional tasks
 
@@ -102,7 +102,7 @@ A task moves through `pending`, `in_progress`, `completed`, and `blocked`. A blo
 
 References are named pointers to read-only context the agent should inspect. They can be local files, local directories, globs, HTTP/HTTPS URLs, git paths, or whole git repo snapshots.
 
-Directory and whole-repo references stay as one logical reference in the brief. Glob references list the matched files. Globs match files, include dotfiles, and do not follow symlinks. For the full set of accepted reference forms (including the git URL syntax) and how git sources are cached and refreshed, see [./configuration.md](./configuration.md).
+Directory and whole-repo references stay as one logical reference in the brief. Glob references list the matched files. Globs match files, include dotfiles, and do not follow symlinks. For the full set of accepted reference forms (including the git URL syntax) and how git sources are cached and refreshed, see [configuration.md](configuration.md).
 
 ## Skills
 
@@ -135,7 +135,7 @@ command: claude
 args: ["--print", "{prompt}"]
 ```
 
-Backend-specific flags such as model or effort belong in `args`; `agent-pack` does not validate them. (Names like `claude-opus-4-7`, `gpt-5.5`, or flags like `--effort` shown in examples are illustrative only.) For the full agent schema, see [./authoring.md](./authoring.md).
+Backend-specific flags such as model or effort belong in `args`; `agent-pack` does not validate them. (Names like `claude-opus-4-7`, `gpt-5.5`, or flags like `--effort` shown in examples are illustrative only.) For the full agent schema, see [authoring.md](authoring.md).
 
 ## Contract
 
@@ -177,7 +177,7 @@ Each run produces one of four outcomes:
 - The `exhausted` outcome returns `1` even when the last process exited `0`.
 - An **interactive** run passes through the child agent's exit code (for example `2` or `130`), or `128 + signal` when the child was terminated by a signal.
 
-For the full per-command exit-code and `--json` behavior, see [./cli.md](./cli.md).
+For the full per-command exit-code and `--json` behavior, see [cli.md](cli.md).
 
 ## Agent execution model / contract
 
@@ -193,8 +193,8 @@ This is the contract the agent operates under: read the brief, work the active t
 
 ## See also
 
-- [./brief-format.md](./brief-format.md) — exact brief, summary, and report output (the agent contract)
-- [./authoring.md](./authoring.md) — manifest, task, and agent schema, inputs, and conditional tasks
-- [./cli.md](./cli.md) — every command, flag, exit code, and `--json` support
-- [./configuration.md](./configuration.md) — paths, environment variables, git sources, catalog, and portability
+- [brief-format.md](brief-format.md) — exact brief, summary, and report output (the agent contract)
+- [authoring.md](authoring.md) — manifest, task, and agent schema, inputs, and conditional tasks
+- [cli.md](cli.md) — every command, flag, exit code, and `--json` support
+- [configuration.md](configuration.md) — paths, environment variables, git sources, catalog, and portability
 - [../README.md](../README.md) — landing page, install, and quick start

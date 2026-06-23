@@ -2,23 +2,23 @@
 
 Every `agent-pack` command and subcommand, with options, exit codes, and JSON
 output shapes. For concepts and the overall workflow, see
-[./concepts.md](./concepts.md). For manifest, task, and agent file schemas, see
-[./authoring.md](./authoring.md). For paths, environment variables, git sources,
-and the catalog directory, see [./configuration.md](./configuration.md). For the
+[concepts.md](concepts.md). For manifest, task, and agent file schemas, see
+[authoring.md](authoring.md). For paths, environment variables, git sources,
+and the catalog directory, see [configuration.md](configuration.md). For the
 brief, summary, and report output specification, see
-[./brief-format.md](./brief-format.md).
+[brief-format.md](brief-format.md).
 
 ## Conventions
 
 - Bare refs (such as `review/security`) are catalog refs loaded from the
   agent-pack config directory. Local filesystem paths must start with `./`,
-  `../`, `~/`, or `/`. See [./configuration.md](./configuration.md) for the git
+  `../`, `~/`, or `/`. See [configuration.md](configuration.md) for the git
   ref syntax and supported URL forms.
 - Most commands target a pack with `--id <id>`; when omitted, `AGENT_PACK_ID` is
   used. Commands that create packs use `--create-id <id>`, falling back to
   `AGENT_PACK_CREATE_ID`.
 - The child agent invoked by `run` always receives `AGENT_PACK_ID`, and
-  `AGENT_PACK_STATE_DIR` when it is set. See [./configuration.md](./configuration.md)
+  `AGENT_PACK_STATE_DIR` when it is set. See [configuration.md](configuration.md)
   for the full environment table.
 
 ### `--json` availability
@@ -63,7 +63,7 @@ The positional `[prompt]` is a one-off prompt rendered at the top of the brief.
 | `--skills <ref>` | Alias for `--skill`; useful when passing several skills |
 | `--agent <ref>` | Add one catalog, local, or git agent definition |
 | `--agents <ref>` | Alias for `--agent`; useful when passing several agent definitions |
-| `--git-refresh <auto\|always\|never>` | Control git fetching for this command. Default: `AGENT_PACK_GIT_REFRESH`, else `auto`. See [git-refresh policy](./configuration.md) |
+| `--git-refresh <auto\|always\|never>` | Control git fetching for this command. Default: `AGENT_PACK_GIT_REFRESH`, else `auto`. See [git-refresh policy](configuration.md) |
 | `--state-dir <path>` | Override the state directory for this command |
 | `--json` | Emit machine-readable output |
 
@@ -91,7 +91,7 @@ instructions, tasks, references, skills, agents, and contract rules; task flags
 add more tasks; reference flags add git, URL, and local reading material; skill
 flags add supplemental `SKILL.md` files; agent flags add launch profiles for
 `agent-pack run`. The same content can be expressed as a single manifest YAML —
-see [./authoring.md](./authoring.md).
+see [authoring.md](authoring.md).
 
 ## `run`
 
@@ -159,7 +159,7 @@ brief` and follow the brief. For existing packs, a positional follow-up message
 is included in that generated prompt and recorded on the `agentRuns` entry;
 agents must include `{prompt}` in `args` to receive a follow-up message.
 Backend-specific flags such as model or effort belong in `args`; the parser does
-not validate them. For the agent file schema, see [./authoring.md](./authoring.md).
+not validate them. For the agent file schema, see [authoring.md](authoring.md).
 
 By default, `run` captures the subprocess stdout, stores it in the pack's
 `agentRuns`, and prints the final `agent-pack report` output. Backend stderr is
@@ -197,9 +197,9 @@ agent-pack brief --id reviewer-001
 
 The brief shows active tasks only; locked conditional tasks are omitted until
 their conditions are satisfied. For the full render order and output spec, see
-[./brief-format.md](./brief-format.md). Set `AGENT_PACK_BRIEF_TASK_CONTENT=false`
+[brief-format.md](brief-format.md). Set `AGENT_PACK_BRIEF_TASK_CONTENT=false`
 to render a compact task section (status, ID, title only); see
-[./configuration.md](./configuration.md).
+[configuration.md](configuration.md).
 
 ## `sync`
 
@@ -222,7 +222,7 @@ also resolve git refs when adding new material. Other commands do not fetch or
 clone git sources. If a pack is resumed on a new host, run `sync` before
 `brief`. Local references and skills are not affected by `sync`; they are read
 from their paths when the agent uses them. See
-[./configuration.md](./configuration.md) for the `--git-refresh` policy table and
+[configuration.md](configuration.md) for the `--git-refresh` policy table and
 git ref syntax.
 
 ## `clean`
@@ -246,7 +246,7 @@ cache root. `--id` limits cleanup to one pack. Pack state, event logs, local
 references, HTTP/HTTPS references, and locks are not removed. After cleaning, run
 `agent-pack sync --id <pack>` before rendering briefs for packs with git-backed
 material. For cache layout and sharing behavior, see
-[./configuration.md](./configuration.md).
+[configuration.md](configuration.md).
 
 ## `list`
 
@@ -360,7 +360,7 @@ agent-pack input unset severity --id reviewer-001
 
 Once a task unlocks, it stays active even if a later input change would no longer
 satisfy its condition. For input types, coercion rules, and `when` matching, see
-[./authoring.md](./authoring.md).
+[authoring.md](authoring.md).
 
 ## `reference add`
 
@@ -418,7 +418,7 @@ agent-pack status --json
 
 Inspect resolved directories and defaults such as the config/catalog dir, state
 dir, cache dir, current `AGENT_PACK_ID`, and current `AGENT_PACK_CREATE_ID`. See
-[./configuration.md](./configuration.md) for path resolution rules.
+[configuration.md](configuration.md) for path resolution rules.
 
 ## `summary`
 
@@ -434,7 +434,7 @@ agent-pack summary --id reviewer-001 --json
 | `--id <id>` | Pack ID |
 | `--json` | Emit a compact pack progress object |
 
-For the summary output spec, see [./brief-format.md](./brief-format.md).
+For the summary output spec, see [brief-format.md](brief-format.md).
 
 ## `report`
 
@@ -452,13 +452,13 @@ agent-pack report --id reviewer-001 --json
 | `--json` | Emit the full saved pack state |
 
 `report` shows all tasks, with locked ones marked. For the report output spec,
-see [./brief-format.md](./brief-format.md).
+see [brief-format.md](brief-format.md).
 
 ## `catalog`
 
 List and inspect catalog entries. This section documents the catalog command;
 for catalog directory layout, config resolution, and how refs are resolved, see
-[./configuration.md](./configuration.md).
+[configuration.md](configuration.md).
 
 ```bash
 agent-pack catalog list
@@ -608,8 +608,8 @@ failures), printed to stderr as `agent-pack: <message>`.
 
 ## See also
 
-- [./concepts.md](./concepts.md) — concepts and how packs work
-- [./authoring.md](./authoring.md) — manifest, task, and agent file schemas; inputs and conditional tasks
-- [./configuration.md](./configuration.md) — paths, environment variables, git sources, catalog, state
-- [./brief-format.md](./brief-format.md) — brief, summary, and report output spec
+- [concepts.md](concepts.md) — concepts and how packs work
+- [authoring.md](authoring.md) — manifest, task, and agent file schemas; inputs and conditional tasks
+- [configuration.md](configuration.md) — paths, environment variables, git sources, catalog, state
+- [brief-format.md](brief-format.md) — brief, summary, and report output spec
 - [../README.md](../README.md) — project overview and quick start

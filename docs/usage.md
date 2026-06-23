@@ -1,6 +1,6 @@
 # agent-pack Usage
 
-Compact reference. See the project [README](../README.md) for the full tour and [docs/](./README.md) for complete reference.
+Compact reference. See the project [README](../README.md) for the full tour and [docs/](README.md) for complete reference.
 
 Run commands from the repository or workspace that contains the files you want the agent to inspect.
 
@@ -35,7 +35,7 @@ agent-pack brief
 
 ## Most-used commands
 
-`--json` is not universal. The table below marks each command. For the full availability matrix, JSON shapes, every flag, and exit codes, see [./cli.md](./cli.md).
+`--json` is not universal. The table below marks each command. For the full availability matrix, JSON shapes, every flag, and exit codes, see [cli.md](cli.md).
 
 | Command | What it does | `--json` |
 |---|---|---|
@@ -89,11 +89,11 @@ The compact brief tells the agent to run `agent-pack task show <task-id>` before
 
 These topics each have one canonical home:
 
-- Composition flags (`--manifest`, `--task`, `--reference`, `--skill`, `--agent`, `--input`, `--instructions`), every command, all flags, JSON shapes, derived statuses, exit codes, and mutual-exclusion errors: [./cli.md](./cli.md).
-- Manifest, task, and agent file schema, inputs, coercion, and the `when` grammar for conditional tasks: [./authoring.md](./authoring.md).
-- Paths, environment variables, git source syntax, the `--git-refresh` policy, the catalog layout, the event log, and state portability: [./configuration.md](./configuration.md).
-- Brief, summary, and report output specification (the agent contract): [./brief-format.md](./brief-format.md).
-- Concepts and how packs fit together: [./concepts.md](./concepts.md).
+- Composition flags (`--manifest`, `--task`, `--reference`, `--skill`, `--agent`, `--input`, `--instructions`), every command, all flags, JSON shapes, derived statuses, exit codes, and mutual-exclusion errors: [cli.md](cli.md).
+- Manifest, task, and agent file schema, inputs, coercion, and the `when` grammar for conditional tasks: [authoring.md](authoring.md).
+- Paths, environment variables, git source syntax, the `--git-refresh` policy, the catalog layout, the event log, and state portability: [configuration.md](configuration.md).
+- Brief, summary, and report output specification (the agent contract): [brief-format.md](brief-format.md).
+- Concepts and how packs fit together: [concepts.md](concepts.md).
 
 ## Shipped examples
 
@@ -152,15 +152,15 @@ EXAMPLES_DIR="$(agent-pack --help | sed -n 's/^[[:space:]]*Examples[[:space:]][[
 AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR" agent-pack init --manifest code-review "Review scope: unstaged changes."
 ```
 
-On a standalone Bun executable the help examples path is empty, so point `AGENT_PACK_CONFIG_DIR` at a real `examples/` checkout or another catalog directory instead. See [./configuration.md](./configuration.md) for the catalog layout.
+On a standalone Bun executable the help examples path is empty, so point `AGENT_PACK_CONFIG_DIR` at a real `examples/` checkout or another catalog directory instead. See [configuration.md](configuration.md) for the catalog layout.
 
-Example agent model names (such as `claude-opus-4-7` or `gpt-5.5`) and backend flags (such as `--effort`) shown in the shipped agent files are illustrative only; the parser does not validate them. Backend-specific flags (model, effort, and so on) go in an agent's `args`. See [./authoring.md](./authoring.md) for the agent file schema.
+Example agent model names (such as `claude-opus-4-7` or `gpt-5.5`) and backend flags (such as `--effort`) shown in the shipped agent files are illustrative only; the parser does not validate them. Backend-specific flags (model, effort, and so on) go in an agent's `args`. See [authoring.md](authoring.md) for the agent file schema.
 
 ## See also
 
-- [./cli.md](./cli.md) — command and flag reference, JSON shapes, exit codes
-- [./authoring.md](./authoring.md) — manifest, task, and agent schema; inputs and conditional tasks
-- [./configuration.md](./configuration.md) — paths, environment variables, git sources, catalog, state
-- [./brief-format.md](./brief-format.md) — brief, summary, and report output spec
-- [./concepts.md](./concepts.md) — concepts and how packs work
+- [cli.md](cli.md) — command and flag reference, JSON shapes, exit codes
+- [authoring.md](authoring.md) — manifest, task, and agent schema; inputs and conditional tasks
+- [configuration.md](configuration.md) — paths, environment variables, git sources, catalog, state
+- [brief-format.md](brief-format.md) — brief, summary, and report output spec
+- [concepts.md](concepts.md) — concepts and how packs work
 - [../README.md](../README.md) — project overview and full quick start

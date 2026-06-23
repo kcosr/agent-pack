@@ -4,9 +4,9 @@ This file is the authoritative spec for what `agent-pack` renders for agents. It
 the single source of truth for the brief's section order and contents, the compact
 brief mode, and the `summary`, `report`, and `task show` output.
 
-For the command flags that produce these documents, see [cli.md](./cli.md). For the
+For the command flags that produce these documents, see [cli.md](cli.md). For the
 `AGENT_PACK_BRIEF_TASK_CONTENT` environment variable, see
-[configuration.md](./configuration.md).
+[configuration.md](configuration.md).
 
 ## Brief
 
@@ -42,7 +42,7 @@ line, before the first section.
 
 The brief shows **active tasks only**. Locked conditional tasks are omitted until
 their `when` conditions are satisfied; see conditional tasks in
-[authoring.md](./authoring.md). The `report` command, by contrast, shows all tasks
+[authoring.md](authoring.md). The `report` command, by contrast, shows all tasks
 including locked ones (marked `locked`).
 
 Each active task renders as `- [<status>] <id> - <title>`. By default, task entries
@@ -66,8 +66,8 @@ this pack.`
 When the pack has active tasks, the brief lists the task verbs the agent should use
 (`task list`, `task show`, `task start`, `task note`, `task done`, `task block`),
 each with `--id <pack-id>` included when the brief was rendered with an explicit id.
-It instructs: `Use \`task list\` to see task status and \`task show\` before working
-a task.` and shows a heredoc pattern for multi-line notes.
+It instructs the agent to use `task list` to see task status and `task show` before
+working a task, and shows a heredoc pattern for multi-line notes.
 
 The command name in these lines is `agent-pack` by default, or the value of
 `AGENT_PACK_CMD` when invoking through a wrapper.
@@ -113,7 +113,7 @@ That `task show` line includes `--id <pack-id>` when the brief was rendered with
 explicit id, matching how the Commands section is rendered.
 
 The variable defaults to `true`; an invalid value is a hard error. See
-[configuration.md](./configuration.md) for the canonical entry.
+[configuration.md](configuration.md) for the canonical entry.
 
 ## Summary
 
@@ -169,8 +169,8 @@ status and notes. The report begins with the same summary block, then adds:
 
 ## See also
 
-- [cli.md](./cli.md) — the `brief`, `summary`, `report`, and `task show` commands and their flags
-- [configuration.md](./configuration.md) — `AGENT_PACK_BRIEF_TASK_CONTENT`, `AGENT_PACK_CMD`, and other environment variables
-- [authoring.md](./authoring.md) — inputs, conditional tasks, and the manifest/task schema
-- [concepts.md](./concepts.md) — what a brief is and how packs work
+- [cli.md](cli.md) — the `brief`, `summary`, `report`, and `task show` commands and their flags
+- [configuration.md](configuration.md) — `AGENT_PACK_BRIEF_TASK_CONTENT`, `AGENT_PACK_CMD`, and other environment variables
+- [authoring.md](authoring.md) — inputs, conditional tasks, and the manifest/task schema
+- [concepts.md](concepts.md) — what a brief is and how packs work
 - [../README.md](../README.md) — project landing page
