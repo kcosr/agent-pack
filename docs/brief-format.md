@@ -173,4 +173,4 @@ status and notes. The report begins with the same summary block, then adds:
 - [configuration.md](configuration.md) — `AGENT_PACK_BRIEF_TASK_CONTENT`, `AGENT_PACK_CMD`, and other environment variables
 - [authoring.md](authoring.md) — inputs, conditional tasks, and the manifest/task schema
 - [concepts.md](concepts.md) — what a brief is and how packs work
-- [../README.md](../README.md) — project landing page
+- [README.md](../README.md) — project landing page

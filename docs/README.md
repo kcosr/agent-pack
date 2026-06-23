@@ -1,6 +1,6 @@
 # agent-pack Documentation
 
-This directory is the reference documentation for `agent-pack`. Start with [concepts.md](concepts.md) for the mental model, or jump to the page for your task below. For the project landing page, install instructions, and quick start, see [../README.md](../README.md).
+This directory is the reference documentation for `agent-pack`. Start with [concepts.md](concepts.md) for the mental model, or jump to the page for your task below. For the project landing page, install instructions, and quick start, see [README.md](../README.md).
 
 ## Documentation map
 
@@ -13,4 +13,4 @@ This directory is the reference documentation for `agent-pack`. Start with [conc
 | [brief-format.md](brief-format.md) | The exact brief, summary, report, and `task show` output — the agent contract | Agents and authors who need the rendered output spec |
 | [usage.md](usage.md) | Compact installed cheat sheet linking into the canonical docs | Installed users who want a quick reference |
 
-The [../examples/](../examples/) directory is a ready-made catalog root (12 manifests, 4 agent files, 2 task files). Point `AGENT_PACK_CONFIG_DIR` at it to use the packaged workflows by bare catalog name; see [configuration.md](configuration.md).
+The [examples/](../examples/) directory is a ready-made catalog root (12 manifests, 4 agent files, 2 task files). Point `AGENT_PACK_CONFIG_DIR` at it to use the packaged workflows by bare catalog name; see [configuration.md](configuration.md).

@@ -163,4 +163,4 @@ Example agent model names (such as `claude-opus-4-7` or `gpt-5.5`) and backend f
 - [configuration.md](configuration.md) — paths, environment variables, git sources, catalog, state
 - [brief-format.md](brief-format.md) — brief, summary, and report output spec
 - [concepts.md](concepts.md) — concepts and how packs work
-- [../README.md](../README.md) — project overview and full quick start
+- [README.md](../README.md) — project overview and full quick start

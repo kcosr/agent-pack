@@ -334,4 +334,4 @@ Manifest parsing is shallow: unsupported fields, wrong types, and malformed YAML
 - [cli.md](cli.md) — command and flag reference
 - [configuration.md](configuration.md) — catalog, paths, environment, and git ref syntax
 - [brief-format.md](brief-format.md) — the rendered brief and report contract
-- [../README.md](../README.md) — landing page and quick start
+- [README.md](../README.md) — landing page and quick start

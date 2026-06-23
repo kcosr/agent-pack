@@ -267,4 +267,4 @@ Pack state lock filenames are prefixed with a 16-character hash of the state dir
 - [cli.md](cli.md) — command and flag reference, including `catalog`, `sync`, and `clean`
 - [authoring.md](authoring.md) — manifest, task, and agent schema
 - [concepts.md](concepts.md) — how packs, sources, and the brief fit together
-- [../README.md](../README.md) — project overview and quick start
+- [README.md](../README.md) — project overview and quick start

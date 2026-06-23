@@ -197,4 +197,4 @@ This is the contract the agent operates under: read the brief, work the active t
 - [authoring.md](authoring.md) — manifest, task, and agent schema, inputs, and conditional tasks
 - [cli.md](cli.md) — every command, flag, exit code, and `--json` support
 - [configuration.md](configuration.md) — paths, environment variables, git sources, catalog, and portability
-- [../README.md](../README.md) — landing page, install, and quick start
+- [README.md](../README.md) — landing page, install, and quick start

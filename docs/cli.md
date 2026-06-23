@@ -612,4 +612,4 @@ failures), printed to stderr as `agent-pack: <message>`.
 - [authoring.md](authoring.md) — manifest, task, and agent file schemas; inputs and conditional tasks
 - [configuration.md](configuration.md) — paths, environment variables, git sources, catalog, state
 - [brief-format.md](brief-format.md) — brief, summary, and report output spec
-- [../README.md](../README.md) — project overview and quick start
+- [README.md](../README.md) — project overview and quick start
