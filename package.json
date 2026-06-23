@@ -1,6 +1,6 @@
 {
   "name": "@kcosr/agent-pack",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Prepare durable work packets for coding agents.",
   "type": "module",
   "bin": {
