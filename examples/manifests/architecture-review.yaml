@@ -1,0 +1,320 @@
+schemaVersion: 1
+name: architecture-review
+instructions: |
+  Audit the architecture and system design of an existing application. Judge
+  the structure and the design choices as they actually exist in the code, and
+  call out the gaps, bad choices, and the highest-leverage refactors. This is
+  not a line-level bug hunt (that is the code-review pack), and not a review of
+  a proposed design document (that is the design-review pack). It is a review of
+  the system that is already built.
+
+  Work two altitudes and keep them distinct:
+    - System design: component and service boundaries, data ownership,
+      dependency direction, control and data flow, scalability, reliability and
+      failure domains, security posture, and operability.
+    - Code structure for refactoring: module cohesion, abstractions, duplication
+      whose invariants must stay in sync, rigidity and fragility, and the
+      concrete seams where a refactor would pay off most.
+
+  Use read-only commands: rg, grep, cat, git show, git log, build manifests,
+  dependency graphs, and source reads. Do not modify files. Do not run tests
+  unless the user explicitly asks. The user may name a scope in the prompt
+  (whole system, a named subsystem or service, or a path); if none is given,
+  audit the whole system and say so.
+
+  Ground every finding in concrete code — name the modules, files, types, or
+  call paths involved. A structural finding asserted only from principle, with
+  no place in the code that demonstrates the cost, is not a finding. Weight by
+  leverage: prefer the few structural changes that unlock the most, over a long
+  list of cosmetic boundary nits.
+
+  For every finding, use this format in task notes:
+
+      [SEVERITY] component or path:line - short title
+        Observation: the structural fact — the boundary, dependency, abstraction,
+          data-ownership, or design choice as it exists in the code.
+        Why it matters: the concrete cost — what it makes hard to change, the
+          scale or failure limit it imposes, the bug class or maintenance tax it
+          creates. Name who pays and when.
+        Suggested fix: the target structure or refactor — where to draw the seam,
+          which dependency to invert, what to split or merge, or which design
+          choice to change — and a rough sense of the migration path.
+
+  Severity guide:
+
+      CRITICAL: a structural choice that causes or will cause data loss, a
+        boundary-level security hole, an unrecoverable failure domain, or a
+        design that blocks a core requirement (for example cannot scale past one
+        node when it must, or two components silently own the same source of
+        truth).
+      HIGH: a major coupling or boundary failure, a wrong load-bearing
+        abstraction, a single point of failure, or a scaling/reliability limit
+        that will force a painful rewrite if left in place.
+      MEDIUM: a real design smell that raises change cost or bug risk — a leaky
+        abstraction, inconsistent handling of a cross-cutting concern, logic
+        duplicated across modules, or fragile data ownership.
+      LOW: localized structural inconsistency, a minor layering or placement
+        issue, naming that mildly obscures the design.
+      NIT: pure preference; use sparingly.
+
+  Be honest. A dimension with no real issues should say "No issues found in this
+  dimension." Do not pad the audit with weak findings, and do not flag a design
+  as wrong before confirming the code actually works the way you claim.
+
+inputs:
+  scope:
+    type: string
+    description: Optional subsystem, service, or path to focus on. The prompt can name the scope instead; default is the whole system.
+
+tasks:
+  - id: orient-system
+    title: Map the system and resolve scope
+    category: review
+    body: |
+      Build the architecture map before judging it. Resolve scope from the
+      prompt or the optional `scope` input; if neither is given, audit the whole
+      system and record that.
+
+      Capture in notes:
+        - The components/modules/services, what each owns, and the runtime
+          topology (processes, deployables, jobs, external dependencies, data
+          stores, queues, caches).
+        - Entry points and the primary request/data flows end to end.
+        - The dependency graph at module/package level (build manifests,
+          imports) and where data lives and who writes it.
+        - The intended architectural style (layered, hexagonal, event-driven,
+          microservices, modular monolith) and whether the code actually follows
+          it or only claims to.
+        - Build, run, and deploy commands; configuration and secret sources.
+
+      This map is the backbone of the audit; later dimensions cite back to it.
+    doneWhen:
+      - Notes contain a component/data/dependency map and the resolved scope.
+      - Notes state the intended architecture style and whether the code follows it.
+
+  - id: boundaries-cohesion
+    title: Module boundaries, responsibilities, and cohesion
+    category: review
+    body: |
+      Review how responsibilities are divided across modules and components.
+
+      Look for god modules/services doing many unrelated things, low cohesion
+      (unrelated logic bundled together), feature logic smeared across many
+      modules so one change touches everything (shotgun surgery), inappropriate
+      intimacy where modules reach into each other's internals, missing seams
+      where a clear boundary should exist, and boundaries drawn by technical
+      layer where they should follow the domain (or vice versa).
+
+      For each, name what the bad boundary makes hard: testing in isolation,
+      independent change, ownership, or reuse.
+    doneWhen:
+      - Notes list boundary/cohesion findings or explicitly say none were found.
+
+  - id: dependencies-layering
+    title: Dependency direction, layering, and cycles
+    category: review
+    body: |
+      Examine the shape and direction of dependencies.
+
+      Look for circular dependencies between modules or packages, layer
+      violations (UI or transport reaching into persistence, domain logic
+      depending on infrastructure or a framework), dependencies pointing toward
+      volatile concrete details instead of stable abstractions, missing
+      dependency inversion at the points that actually change, vendor/framework
+      lock-in bleeding into core domain logic, and stable code that depends on
+      unstable code.
+
+      Prefer findings where the dependency shape forces unwanted change
+      propagation or blocks swapping an implementation.
+    doneWhen:
+      - Notes list dependency/layering findings or explicitly say none were found.
+
+  - id: abstractions-design-choices
+    title: Abstraction quality and design choices
+    category: review
+    body: |
+      Judge whether the abstractions and major design choices carry their
+      weight.
+
+      Look for missing abstractions where sibling code duplicates a concept,
+      wrong or leaky abstractions that force callers to know internals,
+      premature generalization and speculative flexibility (plugin systems,
+      config knobs, or extension points nobody uses), inheritance where
+      composition fits, anemic models with logic scattered into services,
+      primitive obsession, and over- or under-engineering relative to the
+      problem. Call out specific bad design choices, not just smells.
+    doneWhen:
+      - Notes list abstraction/design-choice findings or explicitly say none were found.
+
+  - id: data-state-architecture
+    title: Data model, ownership, and state management
+    category: review
+    body: |
+      Review the data and state architecture at system scale.
+
+      Look for ambiguous or duplicated source of truth (two components that can
+      each write the same data), derived state that can drift from its source,
+      schema choices that fight the access patterns, unclear transactional
+      boundaries and consistency model, shared mutable stores coupling otherwise
+      independent components, global or hidden mutable state, cache designs with
+      no clear invalidation owner, and a data model that is hard to evolve
+      (migrations that require downtime, columns overloaded with multiple
+      meanings).
+    doneWhen:
+      - Notes list data/state architecture findings or explicitly say none were found.
+
+  - id: scalability-performance
+    title: Scalability and performance architecture
+    category: review
+    body: |
+      Find structural limits on scale and throughput — not micro-optimizations.
+
+      Look for design-level N+1 and chatty cross-component/cross-service calls,
+      synchronous chains that should be asynchronous, unbounded data handled
+      without pagination or streaming, single points of contention (a global
+      lock, a hot table, a singleton coordinator), state that blocks horizontal
+      scaling, missing backpressure or queueing, and caching strategy that is
+      absent or placed where it cannot help.
+
+      For each, name the load or data size at which it becomes a problem.
+    doneWhen:
+      - Notes list scalability/performance findings or explicitly say none were found.
+
+  - id: reliability-failure
+    title: Reliability, failure domains, and resilience
+    category: review
+    body: |
+      Review how the system behaves when parts of it fail. This is design-level
+      resilience, distinct from line-level error handling.
+
+      Look for single points of failure, integration points with no timeout,
+      retry, or circuit breaker, retried operations that are not idempotent,
+      failure paths that cascade across components with no bulkhead, no graceful
+      degradation for a downed dependency, unclear blast radius, data-loss
+      windows on crash or partial write, and missing or unsound recovery and
+      rollback paths.
+    doneWhen:
+      - Notes list reliability/failure findings or explicitly say none were found.
+
+  - id: cross-cutting-consistency
+    title: Cross-cutting concerns and pattern consistency
+    category: review
+    body: |
+      Check how cross-cutting concerns are handled across the codebase:
+      logging, error translation, authentication/authorization, input
+      validation, configuration, observability/metrics/tracing, transactions,
+      and serialization.
+
+      Flag concerns handled inconsistently (several patterns for the same job),
+      copy-pasted infrastructure that should live behind one seam, a concern
+      that is everyone's job and therefore no one's (so it is applied unevenly),
+      and the opposite failure: an over-centralized god utility that every module
+      must depend on. Inconsistency here is a steady tax and a recurring source
+      of bugs.
+    doneWhen:
+      - Notes list cross-cutting/consistency findings or explicitly say none were found.
+
+  - id: evolvability-refactoring
+    title: Evolvability, tech debt, and refactoring targets
+    category: review
+    body: |
+      Identify where the system resists change, and the refactors with the best
+      payoff. Use the classic lenses: rigidity (a small change forces a cascade
+      of edits), fragility (a change breaks unrelated things), immobility
+      (useful parts cannot be reused without dragging dependencies),
+      and viscosity (the easy way to make a change is the wrong way).
+
+      Look for hardcoded assumptions that block a stated or likely direction,
+      missing extension points where variation clearly recurs, and large
+      duplicated structures whose invariants must stay in sync.
+
+      For each high-value target, name the concrete seam, the target shape, and a
+      safe migration path (including the preservation tests that would make the
+      refactor safe). Be specific enough that a maintainer could start.
+    doneWhen:
+      - Notes list refactoring targets with concrete seams, or explicitly say none were found.
+
+  - id: security-operability
+    title: Architectural security posture and operability
+    category: review
+    body: |
+      Review the system-level security and operability design.
+
+      Security at architecture scale: where untrusted input enters and how far it
+      flows before validation, trust boundaries between components, authn/authz
+      enforced at a chokepoint versus scattered and skippable, secret and
+      credential management, and tenant or data isolation. Operability: can the
+      system be debugged in production (logs, metrics, traces, correlation ids),
+      are configuration and deployment topology sane, and are failure and
+      degradation observable.
+
+      Keep this at the design level; specific injection or crypto bugs belong in
+      a code or security review.
+    doneWhen:
+      - Notes list security-posture and operability findings or explicitly say none were found.
+
+  - id: synthesis
+    title: Top findings and refactoring roadmap
+    category: synthesis
+    body: |
+      Read back through all audit task notes and produce two things.
+
+      1. A single ranked list of the top 10 highest-leverage findings, ordered by
+         severity then by real architectural impact. Each entry cites the
+         component or path:line it came from. If fewer than 10 real issues exist,
+         list only the real ones and stop.
+
+      2. A prioritized refactoring roadmap: an ordered sequence of the structural
+         changes that would most improve the system, with the single
+         highest-leverage change first. For each step note its dependency on
+         earlier steps, the rough size (small / medium / large), and the risk it
+         retires.
+
+      Include one sentence on overall architectural health and the one
+      cross-cutting theme that explains the most findings, if there is one.
+    doneWhen:
+      - Notes contain a ranked findings list or state that no real issues were found.
+      - Notes contain a prioritized, sequenced refactoring roadmap and an overall-health sentence.
+
+  - id: architecture-verdict
+    title: Architectural health decision
+    category: gate
+    body: |
+      Make the final call on the system's architectural health.
+
+      Choose "AT RISK" if any CRITICAL structural finding is unresolved, if the
+      system cannot meet a stated core requirement as built, or if you could not
+      determine whether a suspected critical issue is real. Otherwise weigh the
+      HIGH findings to choose between "SOUND WITH DEBT" and "SOUND".
+
+      Write one of these records in Notes:
+
+          SOUND.
+          Rationale: <one to three sentences.>
+          Watch items: <MEDIUM/LOW structural debt to track, or "none".>
+
+          SOUND WITH DEBT.
+          Rationale: <one to three sentences.>
+          Priority refactors: <the HIGH-leverage items from the roadmap with citations.>
+
+          AT RISK.
+          Rationale: <one to three sentences.>
+          Must address: <CRITICAL/HIGH structural findings with component/path citations.>
+    doneWhen:
+      - Notes contain one of the SOUND / SOUND WITH DEBT / AT RISK records.
+
+contract:
+  do:
+    - Ground every structural finding in concrete code — name modules, files, types, or call paths.
+    - Cite component and path:line for findings, and the dependency or data path when it sharpens the point.
+    - Separate system-design findings from code-structure/refactoring findings.
+    - Name the concrete cost of each structural problem — what it makes hard to change, or how it fails at scale or under fault.
+    - Give refactoring targets a concrete seam, target shape, and migration path.
+    - Weight findings by leverage; prefer the few changes that unlock the most.
+  dont:
+    - Modify files in the audited repository.
+    - Run tests unless the user explicitly asks.
+    - Report line-level bugs as architecture findings; route those to a code review.
+    - Flag a design as wrong before confirming the code actually behaves as you claim.
+    - Recommend a rewrite when a sequence of safe refactors would reach the same end state.
+    - Pad the audit with cosmetic boundary or naming nits.

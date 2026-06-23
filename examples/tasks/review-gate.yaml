@@ -1,0 +1,27 @@
+# Reusable, domain-neutral approve/block gate task.
+# Compose into any pack at init time, e.g.:
+#   agent-pack init --manifest <some-manifest> --task review-gate
+# Domain-specific packs may prefer their own specialized verdict vocabulary.
+tasks:
+  - id: gate
+    title: Ship-or-block decision
+    category: gate
+    body: |
+      Make the final go/no-go decision for what was reviewed.
+
+      Block if any HIGH or CRITICAL finding is unresolved, if synthesis
+      recommends anything other than a clean pass, or if you could not trace a
+      suspected issue deeply enough to judge whether it is real. Pass only if you
+      would personally stand behind the reviewed work proceeding as-is.
+
+      Write one of these records in Notes:
+
+          APPROVED.
+          Rationale: <one to three sentences.>
+          Residual items: <open MEDIUM/LOW items accepted by the caller, or "none".>
+
+          BLOCKED.
+          Unresolved: <specific blocking findings with source citations.>
+          Path to approval: <concrete fixes or decisions needed to clear the block.>
+    doneWhen:
+      - Notes contain either an APPROVED or BLOCKED decision record.

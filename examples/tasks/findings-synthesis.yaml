@@ -1,0 +1,24 @@
+# Reusable, domain-neutral synthesis task.
+# Compose into any pack at init time, e.g.:
+#   agent-pack init --manifest <some-manifest> --task findings-synthesis
+# Domain-specific packs may prefer their own specialized synthesis instead.
+tasks:
+  - id: synthesis
+    title: Top findings synthesis
+    category: synthesis
+    body: |
+      Read back through all review/audit task notes and build a single ranked
+      list of the top 10 highest-leverage findings. Order by severity and then by
+      real-world impact. Each entry must cite the original source location
+      (path:line, component, or document section) recorded in the finding.
+
+      If fewer than 10 real issues exist, list only the real ones and stop. Do
+      not invent findings or restate weak ones to reach ten.
+
+      Include:
+        - one sentence on the overall health of what was reviewed,
+        - the single highest-leverage fix if one stands out,
+        - any cross-cutting theme that several findings share.
+    doneWhen:
+      - Notes contain a ranked findings list or state that no real issues were found.
+      - Notes include an overall-health sentence and the highest-leverage fix if any.

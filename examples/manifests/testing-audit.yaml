@@ -1,0 +1,315 @@
+schemaVersion: 1
+name: testing-audit
+instructions: |
+  Audit the test suite of the target repository. You are reviewing the tests
+  as the artifact under audit: judge whether they actually protect the code,
+  not whether they exist. You are not writing or modifying tests.
+
+  A passing suite is necessary but not sufficient. Your job is to find what a
+  green run hides. Ground every finding in the actual test code and the
+  production code it is supposed to exercise. Use read-only commands: rg, grep,
+  cat, git show, git log, build manifests, and source reads.
+
+  You MAY run the project's test command once, and a coverage tool if one is
+  configured, ONLY when doing so is safe, local, fast, and non-destructive
+  (no real network, no shared/production resources, no data mutation outside a
+  sandbox). Treat any result as evidence, never as proof: a green suite does
+  not mean a behavior is covered, and a coverage percentage does not mean the
+  covered lines are actually asserted. If running is unsafe or unclear, inspect
+  statically and say so.
+
+  Distinguish these failure modes precisely and never conflate them:
+    1. No test exists for a behavior.
+    2. A test exists but cannot fail (false confidence).
+    3. A test exists but is coupled to implementation details, so it breaks on
+       safe refactors without catching real bugs (cost without protection).
+  They are different problems with different fixes; label which one each
+  finding is.
+
+  For every finding, use this format in task notes:
+
+      [SEVERITY] path:line - short title
+        Observation: what the test does, or the specific gap (name the behavior).
+        Risk: the regression or real defect this lets through, the false
+          confidence it creates, or the flake/maintenance cost it imposes.
+        Suggested fix: the concrete test to add, the assertion to strengthen,
+          the isolation to add, or the test to delete.
+
+  Severity guide:
+
+      CRITICAL: false confidence on a critical path (a test that passes whether
+        or not the code is correct), or no tests at all around data loss,
+        security, auth, money/quantities, or another correctness-critical
+        behavior.
+      HIGH: a real risky path with no test; a flaky or non-deterministic test
+        that will intermittently fail CI or mask real failures; or an assertion
+        too weak to catch the regression it implies it guards.
+      MEDIUM: happy-path-only coverage of a fallible operation, over-mocking
+        that hides integration bugs, brittle coupling that breaks on safe
+        refactors, or an isolation leak that can cause order-dependent failures.
+      LOW: maintainability, naming, small duplication, a slow-but-correct test,
+        or a single skipped test with a tracked reason.
+      NIT: pure style preference; use sparingly.
+
+  Be honest. A dimension with no real issues should say "No issues found in
+  this dimension." Do not pad the audit with weak findings, and do not treat
+  raw test count or coverage percentage as quality.
+
+tasks:
+  - id: inventory
+    title: Inventory the test suite and the surface it must protect
+    category: review
+    body: |
+      Map the test surface before judging it:
+        - Test frameworks, runners, and the canonical test command(s); how CI
+          invokes them (workflow/pipeline files).
+        - Test kinds present: unit, integration, end-to-end, contract, property,
+          fuzz, snapshot/golden, smoke, benchmark.
+        - Test layout, fixtures, factories, builders, mocks/stubs/fakes, shared
+          helpers, and any coverage tooling or thresholds.
+
+      Map the code surface so you know what the tests SHOULD protect:
+        - Entry points and public APIs (CLI, HTTP/RPC, library exports).
+        - The risky logic a reviewer would worry about: error handling,
+          concurrency, state machines, security/authorization boundaries, data
+          integrity and migrations, money/quantities, retries and idempotency.
+
+      Establish the empirical baseline if it is safe to do so: run the suite
+      once and a coverage tool if configured, and record pass/fail, rough
+      timing, and coverage. If running is unsafe, slow, networked, or
+      destructive, do not run it; record the command and that you inspected
+      statically.
+    doneWhen:
+      - Notes list the test kinds, frameworks, and canonical test command(s).
+      - Notes list the risky code surface the audit will compare tests against.
+      - Notes record suite pass/fail and coverage if measured, or why not.
+
+  - id: false-confidence
+    title: Tests that pass regardless of correctness
+    category: review
+    body: |
+      The headline dimension. Find tests that look like they guard behavior but
+      cannot actually fail when the code is wrong.
+
+      Look for: tests with no assertions; assertions that cannot fail
+      (assertTrue(true), x == x, asserting a value against itself); tests that
+      assert only on a mock's return value or call count rather than real
+      behavior; an `expect(...)` with no matcher; assertions inside a branch or
+      loop that never executes; swallowed exceptions or bare try/except that
+      hide failures; tests that capture the code's current (possibly buggy)
+      output as the expected value and rubber-stamp it; goldens/snapshots
+      regenerated on every change without review.
+
+      For each, name the regression or wrong-code mutation that would still let
+      the test pass. A test that cannot fail on a critical path is CRITICAL.
+    doneWhen:
+      - Notes list false-confidence findings or explicitly say none were found.
+
+  - id: critical-path-coverage
+    title: Untested critical and risky paths
+    category: review
+    body: |
+      Compare the risky code surface from inventory against the tests and find
+      behaviors with NO meaningful test at all.
+
+      Prioritize: data integrity and persistence, migrations, security and
+      authorization decisions, money/quantity arithmetic, concurrency and
+      ordering, state-machine transitions, retries/idempotency, and the primary
+      user-facing operations. Verify against the actual tests, not test names or
+      file names that merely look related.
+
+      Missing tests for a real risky path are usually HIGH; missing tests for
+      data-loss, security, or correctness-critical behavior are CRITICAL.
+    doneWhen:
+      - Notes list critical-path coverage gaps or explicitly say none were found.
+
+  - id: negative-and-edge-cases
+    title: Failure paths, edge cases, and boundaries
+    category: review
+    body: |
+      Within areas that ARE tested, check whether anything beyond the happy
+      path is exercised.
+
+      Walk: empty/null/missing inputs, malformed input, boundary values
+      (zero, one, max, off-by-one), large inputs, unicode/encoding, duplicate
+      and out-of-order events, timeouts and partial failure, permission and disk
+      and network errors, and the specific error types and messages a caller
+      relies on. Flag suites that assert success but never assert that the right
+      failure happens for the right reason.
+    doneWhen:
+      - Notes list edge/failure-path findings or explicitly say none were found.
+
+  - id: determinism-and-flakiness
+    title: Determinism and flakiness
+    category: review
+    body: |
+      Find tests whose outcome depends on something other than the code under
+      test.
+
+      Look for reliance on wall-clock time or now(), real sleeps, real network
+      or DNS, real external services, randomness without a fixed seed,
+      hash/map/set iteration order, filesystem races, fixed port binding,
+      timezone or locale assumptions, parallel-execution races on shared
+      resources, and retry wrappers or long timeouts that mask intermittent
+      failures rather than fixing them.
+
+      A test that will intermittently fail CI or intermittently hide a real
+      failure is HIGH.
+    doneWhen:
+      - Notes list flakiness/determinism findings or explicitly say none were found.
+
+  - id: isolation-and-state
+    title: Isolation, ordering, and cleanup
+    category: review
+    body: |
+      Check that each test stands alone and leaves no residue.
+
+      Look for shared mutable global or module state, databases/caches not
+      reset between tests, leaked environment variables, working directory or
+      temp files, mutated singletons, tests that only pass in a specific order
+      or only when run alone, missing setup/teardown, and fixtures whose state
+      bleeds across cases. Order-dependent or polluting tests are MEDIUM, or
+      HIGH if they can produce false greens.
+    doneWhen:
+      - Notes list isolation/state findings or explicitly say none were found.
+
+  - id: test-doubles
+    title: Mocking and test-double discipline
+    category: review
+    body: |
+      Audit how mocks, stubs, and fakes are used.
+
+      Look for over-mocking that asserts on the double instead of behavior,
+      mocking the system under test, doubles whose interface has drifted from
+      the real dependency with no contract or integration test to catch it,
+      stubs that paper over real integration bugs, and fakes that behave
+      differently from production. Also flag under-mocking that reaches real
+      external services from a "unit" test.
+
+      Where a double replaces a critical dependency, check that something
+      somewhere still exercises the real one.
+    doneWhen:
+      - Notes list test-double findings or explicitly say none were found.
+
+  - id: brittleness-coupling
+    title: Brittleness and coupling to implementation
+    category: review
+    body: |
+      Find tests that impose cost without adding protection: over-coupled to
+      internals so they break on safe refactors yet would not catch a real bug.
+
+      Look for assertions on private state or internal call sequences, exact
+      log-string or whitespace matching, dependence on incidental ordering,
+      large opaque snapshots accepted on update without review, and mock
+      interaction assertions that over-specify argument shape or call order.
+
+      This is the opposite failure mode from weak assertions; label findings
+      clearly so the fix (loosen/retarget the assertion) is not confused with
+      strengthening it.
+    doneWhen:
+      - Notes list brittleness/coupling findings or explicitly say none were found.
+
+  - id: fixtures-and-data
+    title: Fixtures, factories, and test data
+    category: review
+    body: |
+      Review the test data layer.
+
+      Look for fragile or shared mutable fixtures, data that does not resemble
+      production (so passing tests prove little), stale golden/snapshot files,
+      hidden coupling through shared fixtures, hardcoded magic values with no
+      meaning, fixtures so large they obscure intent, and any secrets or real
+      PII committed as test data.
+    doneWhen:
+      - Notes list fixture/data findings or explicitly say none were found.
+
+  - id: structure-maintainability
+    title: Test structure, naming, and maintainability
+    category: review
+    body: |
+      Read the tests as code a maintainer must keep working.
+
+      Look for names that describe behavior versus test_1/foo, clear
+      arrange-act-assert structure, one behavior per test versus mega-tests
+      asserting many unrelated things, helper duplication versus over-abstracted
+      indirection that hides what is tested, unclear failure messages, and dead
+      or duplicated tests. This is a lower-severity dimension; skip pure
+      preference.
+    doneWhen:
+      - Notes list structure/maintainability findings or explicitly say none were found.
+
+  - id: suite-health-ci
+    title: Skipped tests, CI wiring, and feedback speed
+    category: review
+    body: |
+      Audit the suite at the operational level.
+
+      Look for skipped/ignored/xfail/quarantined tests with no tracked reason,
+      commented-out tests, focused tests left in (.only, fit, fdescribe),
+      tests excluded from the default run, the full suite not actually run in
+      CI, coverage thresholds that are absent or set so low they are
+      meaningless, slow tests with no separation from the fast feedback loop,
+      and a test command that is undocumented or does not work as written.
+    doneWhen:
+      - Notes list suite-health/CI findings or explicitly say none were found.
+
+  - id: synthesis
+    title: Top testing-audit findings synthesis
+    category: synthesis
+    body: |
+      Read back through all audit task notes and build a single ranked list of
+      the top 10 highest-leverage findings. Order by severity and then by the
+      real risk each one lets through. Each entry must cite the original
+      path:line.
+
+      If fewer than 10 real issues exist, list the real issues and stop.
+      Include one sentence on the suite's overall health, the single
+      highest-leverage fix if one exists (the one test or change that would
+      remove the most hidden risk), and a short list of the critical paths that
+      currently have no real protection.
+    doneWhen:
+      - Notes contain a ranked findings list or state that no real issues were found.
+      - Notes include overall health, highest-leverage fix if any, and the unprotected critical paths.
+
+  - id: trust-verdict
+    title: Suite trustworthiness decision
+    category: gate
+    body: |
+      Make the final call on whether the suite can be trusted to catch
+      regressions.
+
+      Decide "not trustworthy" if any CRITICAL false-confidence finding or any
+      untested correctness-critical path remains, or if you could not determine
+      whether a critical behavior is actually protected. Otherwise weigh the
+      HIGH findings to choose between "trustworthy with gaps" and "trustworthy".
+
+      Write one of these records in Notes:
+
+          TRUSTWORTHY.
+          Rationale: <one to three sentences.>
+          Accepted gaps: <open MEDIUM/LOW items the caller accepts, or "none".>
+
+          TRUSTWORTHY WITH GAPS.
+          Rationale: <one to three sentences.>
+          Must-fix before relying on it: <specific HIGH findings with path:line.>
+
+          NOT TRUSTWORTHY.
+          Rationale: <one to three sentences.>
+          Blocking gaps: <CRITICAL findings and unprotected critical paths with path:line.>
+    doneWhen:
+      - Notes contain one of the TRUSTWORTHY / TRUSTWORTHY WITH GAPS / NOT TRUSTWORTHY records.
+
+contract:
+  do:
+    - Ground every finding in the actual test code and the production code it exercises.
+    - Cite path:line for the test, and for the covered code when it sharpens the finding.
+    - Label each finding as no-test, cannot-fail, or coupled-to-implementation.
+    - Demonstrate a gap by naming the regression or mutation that would slip through.
+    - Verify coverage claims against the tests themselves, not test or file names.
+  dont:
+    - Modify, add, or delete tests in the audited repository.
+    - Treat a passing suite or a coverage percentage as proof that behavior is covered.
+    - Run destructive, networked, or long-running test commands.
+    - Count test quantity or coverage percentage as quality, or pad with style nits.
+    - Conflate weak assertions with implementation-coupled brittleness; they are opposite problems.
+    - Demand tests for trivial code where a bug would be obvious and harmless.

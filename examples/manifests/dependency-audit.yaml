@@ -1,0 +1,250 @@
+schemaVersion: 1
+name: dependency-audit
+instructions: |
+  Audit the third-party dependency surface of the target project. You are
+  reviewing the dependencies as the artifact under audit: judge what the project
+  pulls in, how exposed it is, and what each dependency costs in security,
+  maintenance, legal, and bloat terms. You are not modifying dependency files,
+  upgrading anything, or running installs.
+
+  Ground every finding in the actual manifests and lockfiles, not in reputation
+  or memory. A dependency is only a real risk if this project actually declares
+  it, and a vulnerability is only critical if the code actually reaches the
+  vulnerable path. Use read-only commands: rg, grep, cat, git show, git log,
+  manifest and lockfile reads, and source reads to confirm whether a dependency
+  is used and how.
+
+  You MAY enumerate available audit tooling (for example npm audit, cargo
+  audit, cargo deny, pip-audit, govulncheck, bundler-audit). Only RUN such a
+  tool when doing so is safe, local, and does not fetch from the network: prefer
+  offline modes against a local advisory database or a committed lockfile. If a
+  tool would reach the network, or it is unclear whether it does, do not run it
+  and say so; inventory the dependencies statically and reason from versions
+  instead. Treat any tool output as evidence to verify, never as proof.
+
+  Always separate reachable from merely installed risk, and runtime exposure
+  from build-time-only exposure. A high-severity advisory in a transitive
+  package that the code never calls, or that only runs at build time, is not
+  the same as one on a hot runtime path.
+
+  For every finding, use this format in task notes:
+
+      [SEVERITY] package@version (manifest:line) - short title
+        Observation: the dependency fact (vulnerability, staleness, license,
+          duplication, unused/phantom, integrity gap, etc.).
+        Risk: the concrete exposure -- the exploit path if the code uses it,
+          or the maintenance, legal, or bloat cost it imposes.
+        Suggested action: upgrade to <version>, remove, replace with <package>,
+          pin, or relicense -- be specific about the target.
+
+  Severity guide:
+
+      CRITICAL: a known-exploitable vulnerability on a path the code actually
+        uses, or a license that legally blocks distribution of this project.
+      HIGH: a high-severity advisory in a used dependency, an abandoned
+        dependency on a critical path, or an unpinned or integrity-broken
+        supply chain that an attacker could exploit.
+      MEDIUM: outdated major versions, unused-but-installed risk, duplicate
+        versions of one library, or a questionable license that needs review.
+      LOW: minor staleness, a dev-only or build-only advisory, or cosmetic
+        dependency hygiene.
+      NIT: pure preference; use sparingly.
+
+  Be honest. A dimension with no real issues should say "No issues found in
+  this dimension." Do not pad the audit with weak findings, do not flag a
+  transitive advisory as critical without checking reachability, and do not
+  count raw dependency volume as risk on its own.
+
+tasks:
+  - id: inventory-deps
+    title: Inventory dependencies and tooling
+    category: review
+    body: |
+      Map the dependency surface before judging it. If you cannot locate any
+      dependency manifest, mark this task blocked with a concise question asking
+      where the project's dependencies are declared.
+
+      Enumerate from the manifests and lockfiles actually present:
+        - Direct dependencies and notable transitive dependencies, with their
+          resolved versions and the manifest:line where each is declared.
+        - The ecosystem(s) in play (npm, Cargo, pip/Poetry, Go modules, Bundler,
+          Maven/Gradle, etc.) and which lockfiles exist for each.
+        - The dependency tree depth and the heaviest subtrees, so later tasks
+          can weight findings by how load-bearing each dependency is.
+        - The split between runtime, dev/test, build, and optional dependencies.
+
+      Identify the available audit tooling (npm audit, cargo audit, cargo deny,
+      pip-audit, govulncheck, bundler-audit, license scanners, etc.). Record the
+      exact commands. Only run a tool here if it is safe, local, and offline as
+      described in the instructions; otherwise record the command and that you
+      will reason statically.
+    doneWhen:
+      - Notes list the ecosystems, manifests, and lockfiles found, or block asking where dependencies are declared.
+      - Notes list direct and notable transitive dependencies with versions and manifest citations.
+      - Notes record the available audit tooling and whether any tool was safely run or only recorded.
+
+  - id: vulnerabilities
+    title: Known vulnerabilities
+    category: review
+    body: |
+      Map known CVEs and advisories to the direct and transitive dependencies
+      from the inventory.
+
+      For each advisory, establish three things before assigning severity:
+        - Whether this project's pinned/resolved version is actually affected.
+        - Whether the vulnerable function or feature is on a code path the
+          project reaches at runtime, only at build/dev time, or not at all.
+        - The fixed version and the smallest safe upgrade that clears it.
+
+      Confirm reachability by grepping for the import and the specific API where
+      it is practical; do not assume a transitive advisory is exploitable here.
+      A reachable, exploitable vuln on a used runtime path is CRITICAL; a
+      high-severity advisory in a used dependency is HIGH; an advisory in an
+      unused or build-only dependency drops accordingly.
+    doneWhen:
+      - Notes list vulnerability findings with affected version, reachability judgment, and fixed version, or explicitly say none were found.
+
+  - id: freshness-maintenance
+    title: Freshness and maintenance health
+    category: review
+    body: |
+      Assess how alive and current each dependency is, weighted by how
+      load-bearing it is.
+
+      Look for outdated, deprecated, archived, abandoned, or single-maintainer
+      packages, packages with no release in a long time, and major-version drift
+      between the pinned version and the current upstream release. Flag
+      dependencies that have been renamed or superseded by a maintained
+      successor.
+
+      Weight every finding by reachability and centrality: a stale package deep
+      on a critical runtime path matters more than a stale dev-only helper. Name
+      the concrete successor or target version where one exists.
+    doneWhen:
+      - Notes list freshness and maintenance findings with the affected version and a target or successor, or explicitly say none were found.
+
+  - id: unused-and-duplicate
+    title: Unused, phantom, and duplicate dependencies
+    category: review
+    body: |
+      Find the gaps between what is declared, what is installed, and what is
+      actually used.
+
+      Look for:
+        - Declared-but-unused dependencies (in a manifest but never imported).
+        - Used-but-undeclared (phantom) dependencies (imported in source but
+          relied on transitively, not declared), which break when a transitive
+          version moves.
+        - Multiple versions of the same library resolved in the tree (duplicate
+          versions), and the bloat or behavior-skew they cause.
+        - Heavy dependencies pulled in for one trivial function that a small
+          local helper or a lighter package could replace.
+
+      Confirm usage by grepping the source for the import, not by name
+      similarity. Cite both the declaration (manifest:line) and a representative
+      use or absence of use.
+    doneWhen:
+      - Notes list unused, phantom, duplicate, or trivially-used dependency findings, or explicitly say none were found.
+
+  - id: licenses
+    title: License compliance
+    category: review
+    body: |
+      Review the license of each dependency against the project's own license
+      and distribution model.
+
+      Determine the project's own license first. Then check each dependency for:
+        - Incompatibility with the project's license.
+        - Copyleft (GPL/AGPL/LGPL and similar) reaching code the project
+          distributes, including transitively.
+        - Missing, unknown, dual, or custom licenses that need a human decision.
+        - License changes between the pinned version and newer versions.
+
+      A license that legally blocks distribution of this project is CRITICAL.
+      Cite the dependency and where its license is recorded; flag anything you
+      cannot determine as needing review rather than guessing.
+    doneWhen:
+      - Notes list license findings with the dependency, its license, and the compatibility concern, or explicitly say none were found.
+
+  - id: supply-chain-integrity
+    title: Supply-chain integrity
+    category: review
+    body: |
+      Audit how dependencies are resolved and fetched, separating build-time
+      from runtime exposure.
+
+      Look for:
+        - Missing or incomplete lockfiles, and lockfiles not committed.
+        - Unpinned or floating versions (wildcards, ranges, latest, git refs
+          without a commit, branch tags) that let resolution drift.
+        - Missing or broken integrity hashes where the ecosystem supports them.
+        - Install, postinstall, and build scripts that run arbitrary code, and
+          which packages bring them in.
+        - Non-default or private registries, direct git/URL/tarball sources, and
+          vendored copies, with their trust implications.
+        - Typosquat-shaped or look-alike package names near a popular package.
+
+      For each, state whether the exposure is at install/build time or at
+      runtime, and how an attacker would leverage it.
+    doneWhen:
+      - Notes list supply-chain integrity findings with the package or lockfile and the build-time vs runtime exposure, or explicitly say none were found.
+
+  - id: synthesis
+    title: Top dependency risks and upgrade plan
+    category: synthesis
+    body: |
+      Read back through all audit task notes and build a single ranked list of
+      the top 10 highest-leverage findings. Order by severity, then by
+      exploitability (reachable runtime risk above installed-but-unused or
+      build-only risk). Each entry must cite package@version and the
+      manifest:line where it is declared.
+
+      If fewer than 10 real issues exist, list the real issues and stop. Then
+      give a concrete, ordered upgrade/removal/replacement plan: the specific
+      bumps, removals, pins, or replacements to make and the order to make them
+      in, calling out which single change removes the most risk and any change
+      that requires a major-version migration.
+    doneWhen:
+      - Notes contain a ranked findings list citing package@version and manifest:line, or state that no real issues were found.
+      - Notes include an ordered upgrade, removal, or replacement plan, or state that none is needed.
+
+  - id: dependency-gate
+    title: Dependency health gate
+    category: gate
+    body: |
+      Make the final call on the project's dependency health.
+
+      Decide AT RISK if any known vulnerability is exploitable on a path the
+      code actually uses, if any license legally blocks distribution, or if you
+      could not determine whether a critical-severity issue is real. Otherwise
+      weigh the HIGH findings to choose between HEALTHY WITH ACTIONS and HEALTHY.
+
+      Write one of these records in Notes:
+
+          HEALTHY.
+          Rationale: <one to three sentences.>
+          Accepted items: <open MEDIUM/LOW items the caller accepts, or "none".>
+
+          HEALTHY WITH ACTIONS.
+          Rationale: <one to three sentences.>
+          Must-do actions: <specific HIGH findings with package@version and manifest:line.>
+
+          AT RISK.
+          Rationale: <one to three sentences.>
+          Blocking issues: <exploitable vulns and distribution-blocking licenses with package@version and manifest:line.>
+    doneWhen:
+      - Notes contain one of the HEALTHY / HEALTHY WITH ACTIONS / AT RISK records with its required actions or issues.
+
+contract:
+  do:
+    - Ground every finding in the actual manifests and lockfiles present in the project.
+    - Distinguish reachable runtime paths from installed-but-unused or build-only ones before assigning severity.
+    - Recommend a specific target version, replacement package, or removal for each finding.
+    - Cite package@version and the declaring manifest:line for every finding.
+    - Confirm a dependency is used by grepping the source, not by name similarity.
+  dont:
+    - Run network-fetching audit tools or installs unless it is explicitly allowed and safe.
+    - Modify manifests, lockfiles, or any other dependency file.
+    - Flag a transitive advisory as critical without checking whether the code reaches it.
+    - Treat raw dependency count as risk, or pad the audit with dev-only noise.
+    - Mark the gate HEALTHY while an exploitable vuln on a used path or a distribution-blocking license remains.
