@@ -133,7 +133,11 @@ EXAMPLES_DIR="$(agent-pack --help | sed -n 's/^[[:space:]]*Examples[[:space:]][[
 AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR" agent-pack init --manifest code-review "Review scope: unstaged changes."
 ```
 
-Standalone Bun executables do not include these package resource paths, so the `agent-pack --help` examples path is empty there. To use the examples with a copied executable, point `AGENT_PACK_CONFIG_DIR` at a real `examples/` checkout or another catalog directory.
+Standalone Bun executables only print package resource paths when the resources
+are present beside the executable. The release archive includes them; a copied
+single executable does not. To use the examples by bare catalog name, point
+`AGENT_PACK_CONFIG_DIR` at the printed `examples/` path, a real `examples/`
+checkout, or another catalog directory.
 
 ## State & Portability
 

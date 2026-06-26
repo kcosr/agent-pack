@@ -939,7 +939,7 @@ function packageHelpText(): string {
 
 function packageResourceRoot(): string | undefined {
   if (isCompiledBun()) {
-    return undefined;
+    return path.dirname(process.execPath);
   }
   return packageRoot();
 }

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const args = process.argv.slice(2);
 let outfile = path.join("dist-bin", "agent-pack");
+let target;
 
 for (let index = 0; index < args.length; index += 1) {
   const arg = args[index];
@@ -15,6 +16,15 @@ for (let index = 0; index < args.length; index += 1) {
       throw new Error("--outfile requires a path");
     }
     outfile = value;
+    index += 1;
+    continue;
+  }
+  if (arg === "--target") {
+    const value = args[index + 1];
+    if (!value) {
+      throw new Error("--target requires a Bun compile target");
+    }
+    target = value;
     index += 1;
     continue;
   }
@@ -43,6 +53,7 @@ execFileSync(
     "--compile",
     "--define",
     `__AGENT_PACK_VERSION__=${JSON.stringify(pkg.version)}`,
+    ...(target ? [`--target=${target}`] : []),
     "--outfile",
     absoluteOutfile,
     "src/cli/main.ts",

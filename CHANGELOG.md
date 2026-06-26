@@ -6,7 +6,16 @@
 
 ### Added
 
+- Added `npm run package:bun` for building standalone Bun release archives that
+  include the executable, README, docs, and examples.
+- Added a packaged `agent-pack` skill that teaches agents how to run catalog
+  packs, follow briefs, and update task state.
+
 ### Changed
+
+- Changed standalone Bun help to print adjacent packaged resource paths when
+  README, docs, and examples are distributed beside the executable.
+- Changed npm and standalone release packaging to include top-level `skills/`.
 
 ### Fixed
 

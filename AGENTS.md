@@ -46,3 +46,4 @@ This file is a lightweight internal onboarding note for agents working in this r
 - Run `npm run check`.
 - Run `node scripts/release.mjs patch`, `minor`, or `major` from `main`.
 - The release script bumps versions, promotes changelog entries, tags, pushes, creates a standard GitHub release, and opens a fresh `## [Unreleased]` section.
+- Standalone Bun archives are not built by `scripts/release.mjs`; build and upload them after the GitHub release exists with `npm run package:bun -- --all` and `gh release upload "v${VERSION}" dist-release/agent-pack-"${VERSION}"-*.tar.gz`.

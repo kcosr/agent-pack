@@ -6,10 +6,11 @@
   "bin": {
     "agent-pack": "dist/cli/main.js"
   },
-  "files": ["dist", "README.md", "docs", "examples"],
+  "files": ["dist", "README.md", "docs", "examples", "skills"],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/chmod-bin.mjs",
     "build:bun": "node scripts/build-bun.mjs",
+    "package:bun": "node scripts/package-bun.mjs",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run test/unit test/integration",
     "test:smoke": "npm run build && vitest run test/smoke",
