@@ -62,7 +62,6 @@ If packaged examples are configured as the catalog, these manifests may be avail
 - `bug-investigation`
 - `code-review`
 - `codebase-onboarding`
-- `demo`
 - `dependency-audit`
 - `design-review`
 - `docs-review`
