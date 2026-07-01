@@ -40,7 +40,28 @@ npm run build:bun
 ./dist-bin/agent-pack --help
 ```
 
-The Bun build is not part of the npm release flow. It writes a local executable to `dist-bin/agent-pack` for manual copying. Because the executable is a single file, top-level help omits npm package resource paths such as README, usage docs, and examples.
+The Bun build is not part of the npm release flow. It writes a local executable
+to `dist-bin/agent-pack` for manual copying. To create a standalone release
+archive that includes the executable, README, usage docs, and examples:
+
+```bash
+npm run package:bun -- --platform linux-x64
+```
+
+The archive is written to `dist-release/agent-pack-VERSION-PLATFORM.tar.gz`.
+Use `--platform macos-arm64`, `--platform macos-x64`, `--platform linux-arm64`,
+or `--all` to build additional assets. Packaged standalone help prints resource
+paths when `README.md`, `docs/usage.md`, and `examples/` are beside the
+executable. Release archives also include `skills/`.
+
+After `node scripts/release.mjs patch` creates the GitHub release, upload
+standalone archives with:
+
+```bash
+VERSION="$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")"
+npm run package:bun -- --all
+gh release upload "v${VERSION}" dist-release/agent-pack-"${VERSION}"-*.tar.gz
+```
 
 `agent-pack` works with any agent CLI or editor agent that can read a text prompt and run shell commands in your workspace. The examples use POSIX shell syntax; on Windows PowerShell, use backticks for line continuations or write commands on one line, and prefer double-quoted globs such as `"./docs/**/*.md"`.
 
@@ -56,7 +77,9 @@ agent-pack init \
   "Run the demo task and record evidence."
 ```
 
-> On a standalone Bun executable, top-level help omits resource paths, so `EXAMPLES_DIR` resolves empty. Use a real checkout instead and pass `--manifest ./examples/manifests/demo.yaml`.
+> On a standalone Bun executable copied by itself, top-level help omits resource
+> paths, so `EXAMPLES_DIR` resolves empty. Use a packaged standalone archive or
+> a real checkout and pass `--manifest ./examples/manifests/demo.yaml`.
 
 Expected output:
 
@@ -176,5 +199,6 @@ Each concept is explained in full in [docs/concepts.md](docs/concepts.md).
 | [docs/brief-format.md](docs/brief-format.md) | The exact brief, summary, report, and `task show` output — the agent contract | Agents and authors who need the rendered output spec |
 | [docs/usage.md](docs/usage.md) | Compact installed cheat sheet linking into the canonical docs | Installed users who want a quick reference |
 | [examples/](examples/) | Ready-made catalog: 12 manifests, 4 agent files, and 2 task files | Anyone trying packaged workflows by bare catalog name |
+| [skills/](skills/) | Packaged skills, including an explicit-invocation `agent-pack` skill | Agent environments that can install bundled skills |
 
 The [examples/](examples/) directory is laid out as a catalog root. Point `AGENT_PACK_CONFIG_DIR` at it (or at a real checkout) to use the packaged manifests, agents, and tasks by bare name; see [docs/configuration.md](docs/configuration.md).

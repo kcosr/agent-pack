@@ -8,7 +8,8 @@ Run commands from the repository or workspace that contains the files you want t
 
 - Node.js 20 or newer (a packaging requirement; the CLI does not verify the Node version)
 - Git and `tar` on `PATH` for git-backed inputs
-- Bun when manually building a standalone executable with `npm run build:bun`
+- Bun when manually building or packaging a standalone executable with
+  `npm run build:bun` or `npm run package:bun`
 
 ## Quick start
 
@@ -22,7 +23,10 @@ agent-pack init \
   "Run the demo task and record the result."
 ```
 
-On a standalone executable the `EXAMPLES_DIR` trick yields an empty value, because compiled-Bun help omits resource paths. Use a real checkout instead, for example `./examples/manifests/demo.yaml`.
+On a standalone executable copied by itself, the `EXAMPLES_DIR` trick yields an
+empty value because compiled-Bun help only prints adjacent packaged resources.
+Use a packaged standalone archive or a real checkout, for example
+`./examples/manifests/demo.yaml`.
 
 Set the generated pack id, then read the brief:
 
@@ -102,6 +106,8 @@ The npm package includes an `examples/` directory with reusable files for common
 - 12 manifests under `examples/manifests/`, including `demo`, `code-review`, `docs-review`, `design-review`, `feature-design-summary`, `architecture-review`, `bug-investigation`, `codebase-onboarding`, `dependency-audit`, `refactor-execution`, `security-review`, and `testing-audit`.
 - 4 agent files under `examples/agents/`: `claude.yaml`, `claude-exec.yaml`, `codex.yaml`, `codex-exec.yaml`.
 - 2 task files under `examples/tasks/`: `findings-synthesis.yaml`, `review-gate.yaml`.
+- 1 skill under `skills/agent-pack/`: an explicit-invocation skill for agents
+  that need to run catalog packs, follow briefs, and work through tasks.
 
 Create a code-review pack:
 
@@ -152,7 +158,10 @@ EXAMPLES_DIR="$(agent-pack --help | sed -n 's/^[[:space:]]*Examples[[:space:]][[
 AGENT_PACK_CONFIG_DIR="$EXAMPLES_DIR" agent-pack init --manifest code-review "Review scope: unstaged changes."
 ```
 
-On a standalone Bun executable the help examples path is empty, so point `AGENT_PACK_CONFIG_DIR` at a real `examples/` checkout or another catalog directory instead. See [configuration.md](configuration.md) for the catalog layout.
+On a standalone Bun executable copied by itself the help examples path is empty.
+Use a packaged standalone archive, point `AGENT_PACK_CONFIG_DIR` at a real
+`examples/` checkout, or use another catalog directory instead. See
+[configuration.md](configuration.md) for the catalog layout.
 
 Example agent model names (such as `claude-opus-4-7` or `gpt-5.5`) and backend flags (such as `--effort`) shown in the shipped agent files are illustrative only; the parser does not validate them. Backend-specific flags (model, effort, and so on) go in an agent's `args`. See [authoring.md](authoring.md) for the agent file schema.
 

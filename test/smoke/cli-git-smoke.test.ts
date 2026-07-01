@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -116,6 +116,40 @@ describe("agent-pack CLI git smoke", () => {
     });
     expect(report).toContain("Pack: bun-pack");
     expect(report).toContain("- t001 [pending] Inspect Bun binary");
+  });
+
+  bunIt("prints adjacent package resources from a standalone Bun executable", async () => {
+    const scratchRoot = path.resolve(".agent-pack", "smoke");
+    await mkdir(scratchRoot, { recursive: true });
+    const workspace = await mkdtemp(path.join(scratchRoot, "bun-bin-resources-"));
+    const binPath = path.join(workspace, "agent-pack");
+
+    execFileSync(process.execPath, ["scripts/build-bun.mjs", "--outfile", binPath], {
+      cwd: path.resolve("."),
+      stdio: "pipe",
+    });
+    await cp(path.resolve("README.md"), path.join(workspace, "README.md"));
+    await mkdir(path.join(workspace, "docs"), { recursive: true });
+    await cp(path.resolve("docs/usage.md"), path.join(workspace, "docs/usage.md"));
+    await cp(path.resolve("examples"), path.join(workspace, "examples"), { recursive: true });
+
+    const help = execFileSync(binPath, ["--help"], {
+      cwd: workspace,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        AGENT_PACK_CACHE_DIR: path.join(workspace, ".agent-pack/cache"),
+        AGENT_PACK_CONFIG_DIR: undefined,
+        AGENT_PACK_GIT_REFRESH: undefined,
+        AGENT_PACK_ID: undefined,
+        AGENT_PACK_STATE_DIR: undefined,
+      },
+    });
+
+    expect(help).toContain("Resources:");
+    expect(help).toContain(path.join(workspace, "README.md"));
+    expect(help).toContain(path.join(workspace, "docs/usage.md"));
+    expect(help).toContain(path.join(workspace, "examples"));
   });
 
   it("uses packaged examples as a catalog root", async () => {

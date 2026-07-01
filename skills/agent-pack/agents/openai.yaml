@@ -1,0 +1,7 @@
+interface:
+  display_name: "Agent Pack"
+  short_description: "Run agent-pack catalog workflows"
+  default_prompt: "Use $agent-pack to run the specified catalog pack and follow its brief."
+
+policy:
+  allow_implicit_invocation: false
